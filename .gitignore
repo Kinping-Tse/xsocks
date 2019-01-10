@@ -2,5 +2,5 @@
 *.a
 *.pc
 .make-*
-xs-client
+xs-local
 xs-server

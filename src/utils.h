@@ -11,4 +11,8 @@ void usage(int module);
     exit(EXIT_FAILURE); \
 } while (0)
 
+#define LOG_STRERROR(err) do { \
+    LOGE("%s: %s", err, strerror(errno)); \
+} while (0)
+
 #endif /* __UTILS_H */

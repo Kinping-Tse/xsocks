@@ -35,10 +35,10 @@ EXT_LIBS = $(BUILD_DEPS_PATH)/libev/.libs/libev.a \
 
 XSOCKS_SERVER_NAME = xs-server
 XSOCKS_SERVER_OBJ = server.o
-XSOCKS_CLIENT_NAME = xs-client
-XSOCKS_CLIENT_OBJ = client.o utils.o config.o logger.o
+XSOCKS_LOCAL_NAME = xs-local
+XSOCKS_LOCAL_OBJ = local.o utils.o config.o logger.o
 
-all: $(XSOCKS_SERVER_NAME) $(XSOCKS_CLIENT_NAME)
+all: $(XSOCKS_SERVER_NAME) $(XSOCKS_LOCAL_NAME)
 
 persist-settings: distclean
 	echo STD=$(STD) >> .make-settings
@@ -68,7 +68,7 @@ $(XSOCKS_SERVER_NAME): $(XSOCKS_SERVER_OBJ)
 	$(COMMON_LD) -o $@ $^ $(FINAL_LIBS)
 	ln -fs builds/src/$@ $(ROOT)/$@
 
-$(XSOCKS_CLIENT_NAME): $(XSOCKS_CLIENT_OBJ)
+$(XSOCKS_LOCAL_NAME): $(XSOCKS_LOCAL_OBJ)
 	$(COMMON_LD) -o $@ $^ $(FINAL_LIBS)
 	ln -sf builds/src/$@ $(ROOT)/$@
 
@@ -76,8 +76,8 @@ $(XSOCKS_CLIENT_NAME): $(XSOCKS_CLIENT_OBJ)
 	$(COMMON_CC) -c $<
 
 clean:
-	rm -rf $(XSOCKS_SERVER_NAME) $(XSOCKS_CLIENT_NAME) *.o
-	rm -rf $(ROOT)/$(XSOCKS_SERVER_NAME) $(ROOT)/$(XSOCKS_CLIENT_NAME)
+	rm -rf $(XSOCKS_SERVER_NAME) $(XSOCKS_LOCAL_NAME) *.o
+	rm -rf $(ROOT)/$(XSOCKS_SERVER_NAME) $(ROOT)/$(XSOCKS_LOCAL_NAME)
 
 distclean: clean
 	cd $(BUILD_ROOT)/deps && $(MAKE) distclean

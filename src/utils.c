@@ -16,7 +16,7 @@ void usage(int module) {
 
     switch (module) {
         case MODULE_LOCAL:
-            eprintf("    xs-client\n"); break;
+            eprintf("    xs-local\n"); break;
         case MODULE_REMOTE:
             eprintf("    xs-server\n"); break;
         default:

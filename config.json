@@ -2,9 +2,18 @@
     "server": "127.0.0.1",
     "server_port": 18388,
     "local_port": 1080,
+    "local_address": null,
     "password": "barfoo!11",
+    "port_password":
+    {
+        "8381": "foobar1",
+        "8382": "foobar2",
+        "8383": "foobar3",
+        "8384": "foobar4",
+    },
     "timeout": 60,
     "method": "aes-256-cfb",
+    "fast_open": true,
     "loglevel": "debug",
     "logfile": "",
     "use_syslog": false,
