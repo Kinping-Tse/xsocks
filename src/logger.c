@@ -48,7 +48,7 @@ void loggerLogRaw(logger* log, int level, const char* file, int line, const char
         time_t t = time(NULL);
         struct tm *tm = localtime(&t);
         int off = strftime(buf_tm, sizeof(buf_tm), "%Y-%m-%d %H:%M:%S.", tm);
-        snprintf(buf_tm+off, sizeof(buf_tm)-off,"%03d", tv.tv_usec/1000);
+        snprintf(buf_tm+off, sizeof(buf_tm)-off, "%03d", (int)tv.tv_usec/1000);
 
         if (log->file_line_enabled)
             snprintf(buf_fl, sizeof(buf_fl), "%s:%d" , file, line);
