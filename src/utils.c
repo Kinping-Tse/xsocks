@@ -15,10 +15,8 @@ void usage(int module) {
     eprintf("  usage:\n\n");
 
     switch (module) {
-        case MODULE_LOCAL:
-            eprintf("    xs-local\n"); break;
-        case MODULE_REMOTE:
-            eprintf("    xs-server\n"); break;
+        case MODULE_LOCAL: eprintf("    xs-local\n"); break;
+        case MODULE_REMOTE: eprintf("    xs-server\n"); break;
         default:
             // eprintf("    ss-tunnel\n");
             // eprintf("    ss-redir\n");

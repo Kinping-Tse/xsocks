@@ -1,19 +1,19 @@
 
 #include "common.h"
-#include "utils.h"
 #include "config.h"
-
-#include <syslog.h>
+#include "event/event.h"
+#include "utils.h"
 
 #define _usage() usage(MODULE_LOCAL)
 
-struct client {
-    xsocksConfig* config;
-} client;
+struct local {
+    xsocksConfig *config;
+    eventLoop *el;
+} local;
 
 static void initLogger() {
     logger *log = getLogger();
-    xsocksConfig* config = client.config;
+    xsocksConfig *config = local.config;
 
     log->file = config->logfile;
     log->level = config->loglevel;
@@ -21,28 +21,29 @@ static void initLogger() {
     log->syslog_enabled = config->use_syslog;
     log->file_line_enabled = 1;
     log->syslog_ident = "xs-client";
-    log->syslog_facility = LOG_USER;
+    // log->syslog_facility = LOG_USER;
 }
 
-static void initClient(xsocksConfig* config) {
-    client.config = config;
+static void initLocal(xsocksConfig *config) {
+    local.config = config;
     initLogger();
+
+    local.el = eventLoopNew();
 }
 
 int main(int argc, char *argv[]) {
     setLogger(loggerNew());
 
-    xsocksConfig* config = configNew();
+    xsocksConfig *config = configNew();
 
-    if (configParse(config, argc, argv) == CONFIG_ERR)
-        FATAL("Parse config error");
+    if (configParse(config, argc, argv) == CONFIG_ERR) FATAL("Parse config error");
 
     if (config->help) {
         _usage();
         return EXIT_SUCCESS;
     }
 
-    initClient(config);
+    initLocal(config);
 
     if (config->mtu) LOGD("set MTU to %d", config->mtu);
     if (config->no_delay) LOGI("enable TCP no-delay");
@@ -70,6 +71,8 @@ int main(int argc, char *argv[]) {
         // ev_io_start(loop, &listen_ctx.io);
     }
 
+    eventLoopRun(local.el);
+    eventLoopFree(local.el);
     loggerFree(getLogger());
 
     return EXIT_SUCCESS;

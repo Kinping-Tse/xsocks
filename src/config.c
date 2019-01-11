@@ -1,6 +1,6 @@
 
-#include "common.h"
 #include "config.h"
+#include "common.h"
 #include "utils.h"
 
 #include "json.h"
@@ -43,8 +43,8 @@ enum {
     GETOPT_VAL_KEY,
 };
 
-xsocksConfig* configNew() {
-    xsocksConfig* config = xs_calloc(sizeof(*config));
+xsocksConfig *configNew() {
+    xsocksConfig *config = xs_calloc(sizeof(*config));
 
     config->remote_addr = "127.0.0.1";
     config->remote_port = 8388;
@@ -66,32 +66,31 @@ xsocksConfig* configNew() {
     return config;
 }
 
-#define INT_DIGITS 19           /* enough for 64 bit integer */
-char * xs_itoa(int i)
-{
+#define INT_DIGITS 19 /* enough for 64 bit integer */
+char *xs_itoa(int i) {
     /* Room for INT_DIGITS digits, - and '\0' */
     static char buf[INT_DIGITS + 2];
-    char *p = buf + INT_DIGITS + 1;     /* points to terminating '\0' */
+    char *p = buf + INT_DIGITS + 1; /* points to terminating '\0' */
     if (i >= 0) {
         do {
             *--p = '0' + (i % 10);
-            i   /= 10;
+            i /= 10;
         } while (i != 0);
         return p;
-    } else {                     /* i < 0 */
+    } else { /* i < 0 */
         do {
             *--p = '0' - (i % 10);
-            i   /= 10;
+            i /= 10;
         } while (i != 0);
         *--p = '-';
     }
     return p;
 }
 
-#define check_json_value_type(value, expected_type, message) do { \
-    if ((value)->type != (expected_type)) \
-        FATAL((message)); \
-} while (0)
+#define check_json_value_type(value, expected_type, message)    \
+    do {                                                        \
+        if ((value)->type != (expected_type)) FATAL((message)); \
+    } while (0)
 
 static int to_integer(const json_value *value) {
     if (value->type == json_string) {
@@ -108,7 +107,7 @@ static int to_integer(const json_value *value) {
     FATAL("Invalid config format.");
 }
 
-static char * to_string(const json_value *value) {
+static char *to_string(const json_value *value) {
     if (value->type == json_string) {
         return xs_strdup(value->u.string.ptr);
     } else if (value->type == json_integer) {
@@ -121,7 +120,7 @@ static char * to_string(const json_value *value) {
     FATAL("Invalid config format.");
 }
 
-void configLoad(xsocksConfig* config, char *filename) {
+void configLoad(xsocksConfig *config, char *filename) {
     char *err = NULL;
     json_value *obj = NULL;
     char *buf = NULL;
@@ -134,7 +133,7 @@ void configLoad(xsocksConfig* config, char *filename) {
     pos = ftell(fp);
     fseek(fp, 0, SEEK_SET);
 
-    buf = xs_calloc(pos+1);
+    buf = xs_calloc(pos + 1);
     if (fread(buf, pos, 1, fp) != 1) {
         err = "Failed to read the config file.";
         goto loaderr;
@@ -270,9 +269,7 @@ int configParse(xsocksConfig* config, int argc, char *argv[]) {
             case 'U': config->mode = MODE_UDP_ONLY; break;
             case 'v': config->loglevel = LOGLEVEL_DEBUG; break;
             case 'h':
-            case GETOPT_VAL_HELP:
-                config->help = 1;
-                break;
+            case GETOPT_VAL_HELP: config->help = 1; break;
             // case '6':
             //     ipv6first = 1;
             //     break;

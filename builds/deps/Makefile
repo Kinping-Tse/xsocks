@@ -1,7 +1,9 @@
 
-ROOT = $(realpath ../..)
-
+BUILD_ROOT = $(realpath ..)
+ROOT = $(BUILD_ROOT)/..
 JSONPARSER_ROOT = $(ROOT)/deps/json-parser
+
+include $(BUILD_ROOT)/common.mk
 
 default:
 	@echo "Explicit target required"

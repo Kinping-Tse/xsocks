@@ -4,7 +4,7 @@ ROOT = $(BUILD_ROOT)/..
 
 include $(BUILD_ROOT)/common.mk
 
-OBJ = anet.o zmalloc.o
+OBJ = anet.o zmalloc.o ae.o
 LIBNAME = libredis
 
 EXT_CFLAGS = -fPIC $(ARCH)

@@ -1,14 +1,14 @@
 #include "common.h"
 
 #include <stdarg.h>
+#include <sys/time.h>
 #include <syslog.h>
 #include <time.h>
-#include <sys/time.h>
 
 static logger *xsocks_logger;
 
-logger* loggerNew() {
-    logger* log = xs_calloc(sizeof(*log));
+logger *loggerNew() {
+    logger *log = xs_calloc(sizeof(*log));
 
     log->file = LOGGER_DEFAULT_FILE;
     log->level = LOGGER_DEFAULT_LEVEL;
@@ -48,10 +48,10 @@ void loggerLogRaw(logger* log, int level, const char* file, int line, const char
         time_t t = time(NULL);
         struct tm *tm = localtime(&t);
         int off = strftime(buf_tm, sizeof(buf_tm), "%Y-%m-%d %H:%M:%S.", tm);
-        snprintf(buf_tm+off, sizeof(buf_tm)-off, "%03d", (int)tv.tv_usec/1000);
+        snprintf(buf_tm + off, sizeof(buf_tm) - off, "%03d", (int)tv.tv_usec / 1000);
 
         if (log->file_line_enabled)
-            snprintf(buf_fl, sizeof(buf_fl), "%s:%d" , file, line);
+            snprintf(buf_fl, sizeof(buf_fl), "%s:%d", file, line);
 
         const char *loglevelMap[] = {"Debug", "Info", "Notice", "Warning", "Error"};
         const char *colorMap[] = {"\x1b[94m", "\x1b[36m", "\x1b[32m", "\x1b[33m", "\x1b[31m", "\x1b[35m"};
@@ -73,7 +73,7 @@ void loggerLogRaw(logger* log, int level, const char* file, int line, const char
     }
 }
 
-void loggerLog(logger* log, int level, const char *file, int line, const char *fmt, ...) {
+void loggerLog(logger *log, int level, const char *file, int line, const char *fmt, ...) {
     if (log == NULL) log = xsocks_logger;
 
     if ((level & 0xFF) < log->level) return;
@@ -88,10 +88,10 @@ void loggerLog(logger* log, int level, const char *file, int line, const char *f
     loggerLogRaw(log, level, file, line, msg);
 }
 
-void setLogger(logger* log) {
+void setLogger(logger *log) {
     xsocks_logger = log;
 }
 
-logger* getLogger() {
+logger *getLogger() {
     return xsocks_logger;
 }

@@ -8,7 +8,7 @@ enum {
     LOGLEVEL_NOTICE,
     LOGLEVEL_WARNING,
     LOGLEVEL_ERROR,
-    LOGLEVEL_RAW = 1<<10, /* Modifier to log without timestamp */
+    LOGLEVEL_RAW = 1 << 10, /* Modifier to log without timestamp */
 };
 
 #define LOGGER_DEFAULT_FILE ""
@@ -22,7 +22,7 @@ enum {
 #define LOG_MAX_LEN 1024 /* Default maximum length of syslog messages.*/
 
 typedef struct logger {
-    char* file;
+    char *file;
     int level;
     int syslog_enabled;
     char *syslog_ident;
@@ -31,11 +31,11 @@ typedef struct logger {
     int file_line_enabled;
 } logger;
 
-logger* loggerNew();
-void loggerFree(logger* log);
-void loggerLog(logger* log, int level, const char *file, int line, const char *fmt, ...);
-void setLogger(logger* log);
-logger* getLogger();
+logger *loggerNew();
+void loggerFree(logger *log);
+void loggerLog(logger *log, int level, const char *file, int line, const char *fmt, ...);
+void setLogger(logger *log);
+logger *getLogger();
 
 #define log(level, ...) loggerLog(NULL, level, __FILE__, __LINE__, __VA_ARGS__)
 #define logDebug(...) loggerLog(NULL, LOGLEVEL_DEBUG, __FILE__, __LINE__, __VA_ARGS__)

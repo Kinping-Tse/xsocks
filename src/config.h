@@ -31,16 +31,17 @@ typedef struct xsocksConfig {
     int mode;
     int mtu;
     int loglevel;
-    char* logfile;
+    char *logfile;
     int use_syslog;
     int help;
     // int ipv6_first;
     int no_delay;
     //
+    // int max_clients;
 } xsocksConfig;
 
-xsocksConfig* configNew();
-void configFree(xsocksConfig* config);
-int configParse(xsocksConfig* config, int argc, char *argv[]);
+xsocksConfig *configNew();
+void configFree(xsocksConfig *config);
+int configParse(xsocksConfig *config, int argc, char *argv[]);
 
 #endif /* __XS_CONFIG_H */
