@@ -10,8 +10,10 @@ AR = @AR@
 CC = @CC@
 CFLAGS = @CFLAGS@
 LDFLAGS = @LDFLAGS@
-SRCS = $(wildcard *.c)
+SRCS = json.c
 OBJS = $(SRCS:.c=.o)
+
+VPATH = @srcdir@
 
 ifeq ($(shell uname),Darwin)
 	SO_EXT := dylib
@@ -40,6 +42,9 @@ libjsonparser.dylib: $(OBJS)
 clean:
 	rm -f libjsonparser.$(SO_EXT) libjsonparser.a json.o
 
+distclean: clean
+	rm -rf config.log config.status json-parser.pc Makefile
+
 install-shared: libjsonparser.$(SO_EXT)
 	@echo Installing pkgconfig module: $(datadir)/pkgconfig/json-parser.pc
 	@install -d $(datadir)/pkgconfig/ || true
@@ -64,5 +69,5 @@ install: install-shared install-static
 	@echo Compiler flags: -I$(includedir)/json-parser
 	@echo Linker flags: -L$(libdir) -ljsonparser
 
-.PHONY: all clean install install-shared install-static
+.PHONY: all clean distclean install install-shared install-static
 

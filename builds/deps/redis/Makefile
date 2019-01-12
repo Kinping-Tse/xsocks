@@ -1,6 +1,7 @@
 
 BUILD_ROOT = ../..
 ROOT = $(BUILD_ROOT)/..
+VPATH = $(ROOT)/deps/redis
 
 include $(BUILD_ROOT)/common.mk
 
@@ -22,7 +23,7 @@ $(STLIBNAME): $(OBJ)
 dynamic: $(DYLIBNAME)
 static: $(STLIBNAME)
 
-%.o: $(ROOT)/deps/redis/%.c
+%.o: %.c
 	$(COMMON_CC) -c $<
 
 clean:

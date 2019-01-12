@@ -1,7 +1,6 @@
 
 BUILD_ROOT = $(realpath ..)
 ROOT = $(BUILD_ROOT)/..
-JSONPARSER_ROOT = $(ROOT)/deps/json-parser
 
 include $(BUILD_ROOT)/common.mk
 
@@ -10,23 +9,22 @@ default:
 
 libev:
 	$(QUIET_MAKE)
-	cd libev && $(ROOT)/deps/libev/configure
-	cd libev && $(MAKE)
+	cd $@ && $(ROOT)/deps/libev/configure
+	cd $@ && $(MAKE)
 
 redis:
 	$(QUIET_MAKE)
-	cd redis && $(MAKE) static
+	cd $@ && $(MAKE) static
 
 json-parser:
 	$(QUIET_MAKE)
-	cd $(JSONPARSER_ROOT) && ./configure
-	cd $(JSONPARSER_ROOT) && $(MAKE) libjsonparser.a
+	cd $@ && $(ROOT)/deps/json-parser/configure
+	cd $@ && $(MAKE) libjsonparser.a
 
 clean:
 	-(cd libev && $(MAKE) distclean)
 	cd redis && $(MAKE) clean
-	-(cd $(JSONPARSER_ROOT) && $(MAKE) clean)
-	cd $(JSONPARSER_ROOT) && rm -rf Makefile config.log config.status json-parser.pc
+	-(cd json-parser && $(MAKE) distclean)
 
 distclean: clean
 	rm -rf .make-*
