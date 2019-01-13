@@ -50,7 +50,7 @@
 struct method_select_request {
     unsigned char ver;
     unsigned char nmethods;
-    unsigned char methods[0];
+    unsigned char methods[];
 } __attribute__((packed, aligned(1)));
 
 struct method_select_response {

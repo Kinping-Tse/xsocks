@@ -7,6 +7,8 @@
 static void initConfig() {}
 
 int main(int argc, char const *argv[]) {
+    UNUSED(argc);
+    UNUSED(argv);
     initConfig();
     char err[256];
     int fd = anetTcpServer(err, 11888, NULL, 256);

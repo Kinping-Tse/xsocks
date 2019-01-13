@@ -1,11 +1,9 @@
 #ifndef __XS_EVENT_H
 #define __XS_EVENT_H
 
-struct eventLoop;
 struct event;
-struct eventContext;
 
-typedef void (*eventCallback)(struct eventLoop *el, struct event* e);
+typedef void (*eventHandler)(struct event* e);
 
 enum {
     EVENT_TYPE_IO = 0,
@@ -22,24 +20,28 @@ enum {
     EVENT_ERR = -1
 };
 
+typedef struct eventLoop {
+    struct eventLoopContext *ctx;
+} eventLoop;
+
 typedef struct event {
     int id;
     int type;
     int flags;
-    eventCallback fn;
+    eventHandler handler;
     void *data;
-} event;
-
-typedef struct eventLoop {
+    struct eventLoop *el;
     struct eventContext *ctx;
-} eventLoop;
+} event;
 
 eventLoop *eventLoopNew();
 void eventLoopFree(eventLoop *el);
 void eventLoopRun(eventLoop *el);
 void eventLoopStop(eventLoop *el);
 
+event *eventNew(int id, int type, int flags, eventHandler handler, void *data);
+void eventFree(event* e);
 int eventAdd(eventLoop *el, event* e);
-void eventDel(eventLoop *el, event* e);
+void eventDel(event* e);
 
 #endif /* __XS_EVENT_H */

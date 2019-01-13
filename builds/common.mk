@@ -3,7 +3,7 @@ uname_M := $(shell sh -c 'uname -m 2>/dev/null || echo not')
 OPTIMIZATION ?= -O2
 
 STD = -std=c99
-WARN = -Wall -Werror -Wpedantic
+WARN = -Wall -Wextra -Werror -Wpedantic
 OPT = $(OPTIMIZATION)
 DEBUG = -g -ggdb
 

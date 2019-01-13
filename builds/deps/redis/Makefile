@@ -5,7 +5,7 @@ VPATH = $(ROOT)/deps/redis
 
 include $(BUILD_ROOT)/common.mk
 
-OBJ = anet.o zmalloc.o ae.o
+OBJ = anet.o zmalloc.o ae.o sds.o
 LIBNAME = libredis
 
 EXT_CFLAGS = -fPIC $(ARCH)

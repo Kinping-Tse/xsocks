@@ -142,7 +142,7 @@ void configLoad(xsocksConfig *config, char *filename) {
     if ((obj = json_parse(buf, pos)) == NULL) goto loaderr;
     if (obj->type != json_object) goto loaderr;
 
-    for (int i = 0; i < obj->u.object.length; i++) {
+    for (uint64_t i = 0; i < obj->u.object.length; i++) {
         char *name        = obj->u.object.values[i].name;
         json_value *value = obj->u.object.values[i].value;
         if (strcmp(name, "server") == 0) {

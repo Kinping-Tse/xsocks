@@ -38,7 +38,7 @@ endif
 
 -include .make-settings
 
-EXT_CFLAGS = -I$(DEPS_PATH)/libev -I$(DEPS_PATH)/redis -I$(DEPS_PATH)/json-parser
+EXT_CFLAGS = -I$(DEPS_PATH)/libev -I$(DEPS_PATH)/redis -I$(DEPS_PATH)/json-parser -I$(DEPS_PATH)/shadowsocks-libev
 EXT_LDFLAGS =
 EXT_LIBS = $(BUILD_DEPS_PATH)/libev/.libs/libev.a \
 	$(BUILD_DEPS_PATH)/redis/libredis.a \

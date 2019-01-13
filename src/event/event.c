@@ -12,27 +12,47 @@
 
 eventLoop *eventLoopNew() {
     eventLoop* el = xs_calloc(sizeof(*el));
-    eventApiNew(el);
+    el->ctx = eventApiNewLoop();
     return el;
 }
 
 void eventLoopFree(eventLoop *el) {
-    eventApiFree(el);
+    eventApiFreeLoop(el->ctx);
     xs_free(el);
 }
 
 void eventLoopRun(eventLoop *el) {
-    eventApiRun(el);
+    eventApiRun(el->ctx);
 }
 
 void eventLoopStop(eventLoop *el) {
+    eventApiStop(el->ctx);
+}
+
+event *eventNew(int id, int type, int flags, eventHandler handler, void *data) {
+    event* e = xs_calloc(sizeof(*e));
+    e->id = id;
+    e->type = type;
+    e->flags = flags;
+    e->handler = handler;
+    e->data = data;
+    e->ctx = eventApiNewEvent(e);
+    return e;
+}
+
+void eventFree(event* e) {
+    eventApiFreeEvent(e->ctx);
+    xs_free(e);
 }
 
 int eventAdd(eventLoop *el, event* e) {
-    eventApiAddEvent(el, e);
-    return 0;
+    e->el = el;
+    return eventApiAddEvent(el->ctx, e->ctx);
 }
 
-void eventDel(eventLoop *el, event* e) {
-    eventApiDelEvent(el, e);
+void eventDel(event* e) {
+    if (e->el == NULL) return;
+
+    eventApiDelEvent(e->el->ctx, e->ctx);
+    e->el = NULL;
 }
