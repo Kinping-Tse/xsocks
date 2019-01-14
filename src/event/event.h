@@ -44,4 +44,6 @@ void eventFree(event* e);
 int eventAdd(eventLoop *el, event* e);
 void eventDel(event* e);
 
+char *eventGetApiName();
+
 #endif /* __XS_EVENT_H */

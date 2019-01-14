@@ -56,3 +56,7 @@ void eventDel(event* e) {
     eventApiDelEvent(e->el->ctx, e->ctx);
     e->el = NULL;
 }
+
+char *eventGetApiName() {
+    return eventApiName();
+}

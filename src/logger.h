@@ -43,6 +43,7 @@ logger *getLogger();
 #define logNotice(...) loggerLog(NULL, LOGLEVEL_NOTICE, __FILE__, __LINE__, __VA_ARGS__)
 #define logWarn(...) loggerLog(NULL, LOGLEVEL_WARNING, __FILE__, __LINE__, __VA_ARGS__)
 #define logErr(...) loggerLog(NULL, LOGLEVEL_ERROR, __FILE__, __LINE__, __VA_ARGS__)
+#define logRaw(level, ...) loggerLog(NULL, level|LOGLEVEL_RAW, __FILE__, __LINE__, __VA_ARGS__)
 
 #define LOGD logDebug
 #define LOGI logInfo
@@ -50,5 +51,12 @@ logger *getLogger();
 #define LOGW logWarn
 #define LOGE logErr
 #define LOG  log
+#define LOGR logRaw
+
+#define LOGDR(...) LOGR(LOGLEVEL_DEBUG, __VA_ARGS__)
+#define LOGIR(...) LOGR(LOGLEVEL_INFO, __VA_ARGS__)
+#define LOGNR(...) LOGR(LOGLEVEL_NOTICE, __VA_ARGS__)
+#define LOGWR(...) LOGR(LOGLEVEL_WARNING, __VA_ARGS__)
+#define LOGER(...) LOGR(LOGLEVEL_ERROR, __VA_ARGS__)
 
 #endif /* __XS_LOGGER_H */

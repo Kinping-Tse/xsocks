@@ -8,6 +8,7 @@
 #include "anet.h"
 #include "sds.h"
 #include "socks5.h"
+#include "crypto.h"
 
 #define _usage() usage(MODULE_LOCAL)
 
@@ -21,29 +22,33 @@
 struct local {
     xsocksConfig *config;
     eventLoop *el;
+    crypto_t *crypto;
 } local;
 
-typedef struct {
-    event *re;
-    sds buf;
-    int buf_off;
-} remoteServer;
+struct remoteServer;
 
-typedef struct {
+typedef struct localClient {
     int stage;
     event *re;
     sds buf;
     int buf_off;
     sds addr_buf;
-    int abuf_off;
-    remoteServer *remote;
+    struct remoteServer *remote;
 } localClient;
+
+typedef struct remoteServer {
+    event *re;
+    sds buf;
+    int buf_off;
+    localClient *client;
+} remoteServer;
 
 typedef struct method_select_request socks5AuthReq;
 typedef struct method_select_response socks5AuthResp;
 typedef struct socks5_request socks5Req;
 typedef struct socks5_response socks5Resp;
 
+void acceptHandler(event *e);
 void remoteServerReadHandler(event *e);
 void localClientReadHandler(event *e);
 
@@ -60,11 +65,11 @@ static void initLogger() {
     // log->syslog_facility = LOG_USER;
 }
 
-static void initLocal(xsocksConfig *config) {
-    local.config = config;
-    initLogger();
+static void initCrypto() {
+    crypto_t *crypto = crypto_init(local.config->password, local.config->key, local.config->method);
+    if (crypto == NULL) FATAL("Failed to initialize ciphers");
 
-    local.el = eventLoopNew();
+    local.crypto =crypto;
 }
 
 void listenForLocal(int *fd) {
@@ -87,6 +92,22 @@ void listenForLocal(int *fd) {
     anetNonBlock(NULL, *fd);
 }
 
+static void initLocal(xsocksConfig *config) {
+    local.config = config;
+    initLogger();
+    initCrypto();
+
+    local.el = eventLoopNew();
+
+    if (config->mode != MODE_UDP_ONLY) {
+        int lfd;
+        listenForLocal(&lfd);
+
+        event* e = eventNew(lfd, EVENT_TYPE_IO, EVENT_FLAG_READ, acceptHandler, NULL);
+        eventAdd(local.el, e);
+    }
+}
+
 localClient *newClient(int fd) {
     localClient *client = xs_calloc(sizeof(*client));
 
@@ -106,6 +127,7 @@ localClient *newClient(int fd) {
 
 void freeClient(localClient *client) {
     sdsfree(client->buf);
+    sdsfree(client->addr_buf);
     eventDel(client->re);
     eventFree(client->re);
     close(client->re->id);
@@ -137,7 +159,26 @@ void freeRemote(remoteServer *remote) {
 
 void remoteServerReadHandler(event *e) {
     remoteServer *remote = e->data;
-    freeRemote(remote);
+    localClient *client = remote->client;
+
+    char buf[NET_IOBUF_LEN];
+    int readlen = NET_IOBUF_LEN;
+    int rfd = e->id;
+    int nread = read(rfd, buf, readlen);
+    if (nread == -1) {
+        if (errno == EAGAIN) return;
+
+        LOG_STRERROR("Remote server read error");
+        freeClient(client);
+        freeRemote(remote);
+        return;
+    } else if (nread == 0) {
+        LOGD("Remote server closed connection");
+        freeClient(client);
+        freeRemote(remote);
+        return;
+    }
+
 }
 
 void localClientReadHandler(event *e) {
@@ -255,6 +296,8 @@ void localClientReadHandler(event *e) {
             port = ntohs(*(uint16_t *)(buf+request_len+addr_len));
             inet_ntop(AF_INET, buf+request_len, dip, NET_IP_MAX_STR_LEN);
             LOGD("Local client request addr: [%s:%d]", dip, port);
+
+            client->addr_buf = sdsnewlen(buf + request_len - 1, addr_len+2);
         } else if (addrType == SOCKS5_ATYP_DOMAIN) {
             addr_len = *(buf + request_len);
             if (nread < request_len + 1 + addr_len + 2) {
@@ -268,6 +311,8 @@ void localClientReadHandler(event *e) {
             memcpy(host, buf+request_len+1, addr_len);
             port = ntohs(*(uint16_t *)(buf+request_len+1+addr_len));
             LOGD("Local client request addr: [%s:%d]", host, port);
+
+            client->addr_buf = sdsnewlen(buf + request_len - 1, 1+addr_len+2);
         } else if (addrType == SOCKS5_ATYP_IPV6) {
             addr_len = sizeof(ipV6Addr);
             if (nread < request_len + addr_len + 2) {
@@ -280,6 +325,8 @@ void localClientReadHandler(event *e) {
             port = ntohs(*(uint16_t *)(buf+request_len+addr_len));
             inet_ntop(AF_INET6, buf+request_len, dip, NET_IP_MAX_STR_LEN);
             LOGD("Local client request addr: [%s:%d]", dip, port);
+
+            client->addr_buf = sdsnewlen(buf + request_len - 1, addr_len+2);
         } else {
             LOGW("Local client request error, unsupported addrtype: %d", addrType);
             resp.rep = SOCKS5_REP_ADDRTYPE_NOT_SUPPORTED;
@@ -288,7 +335,7 @@ void localClientReadHandler(event *e) {
             return;
         }
 
-        struct sockaddr_in sock_addr;
+        sockAddrIpV4 sock_addr;
         bzero(&sock_addr, sizeof(sock_addr));
 
         char resp_buf[NET_IOBUF_LEN];
@@ -307,8 +354,19 @@ void localClientReadHandler(event *e) {
         }
         client->stage = STAGE_STREAM;
 
+        char err[ANET_ERR_LEN];
+        int rfd  = anetTcpConnect(err, local.config->remote_addr, local.config->remote_port);
+        if (rfd == ANET_ERR) {
+            LOGW("Remote server connenct error: %s", err);
+            freeClient(client);
+            return;
+        }
+
+        remoteServer *remote = newRemote(rfd);
+        remote->client = client;
+        client->remote = remote;
+
         return;
-        // client->remote = newRemote();
     } else if (client->stage == STAGE_STREAM) {
         char buf[NET_IOBUF_LEN] = {0};
         int readlen = NET_IOBUF_LEN;
@@ -321,12 +379,38 @@ void localClientReadHandler(event *e) {
             freeClient(client);
             return;
         } else if (nread == 0) {
-            LOGD("Local client closed connection");
+            LOGW("Local client closed connection");
             freeClient(client);
             return;
         }
 
-        LOGD("%s", buf);
+        LOGDR("%s\n", buf);
+
+        remoteServer *remote = client->remote;
+        int rfd = remote->re->id;
+
+        /*
+         * Append Shadowsocks TCP Relay Header:
+         *
+         *    +------+----------+----------+
+         *    | ATYP | DST.ADDR | DST.PORT |
+         *    +------+----------+----------+
+         *    |  1   | Variable |    2     |
+         *    +------+----------+----------+
+         */
+        if (client->addr_buf) {
+
+            sdsfree(client->addr_buf);
+            client->addr_buf = NULL;
+        }
+
+        int nwrite = write(rfd, &buf, nread);
+        if (nwrite != nread) {
+            LOG_STRERROR("Remote server wrete error");
+            freeClient(client);
+            freeRemote(remote);
+            return;
+        }
 
         return;
     }
@@ -365,23 +449,19 @@ int main(int argc, char *argv[]) {
 
     initLocal(config);
 
-    if (config->mode != MODE_UDP_ONLY) {
-        int lfd;
-        listenForLocal(&lfd);
-
-        event* e = eventNew(lfd, EVENT_TYPE_IO, EVENT_FLAG_READ, acceptHandler, NULL);
-
-        eventAdd(local.el, e);
-    }
+    LOGI("Initializing ciphers... %s", config->method);
+    LOGI("Start password: %s", config->password);
+    LOGI("Start key: %s", config->key);
 
     if (config->mtu) LOGI("set MTU to %d", config->mtu);
     if (config->no_delay) LOGI("enable TCP no-delay");
+    LOGN("Start local: %s:%d", config->local_addr, config->local_port);
     LOGI("Start remote: %s:%d", config->remote_addr, config->remote_port);
-    LOGI("Start local: %s:%d", config->local_addr, config->local_port);
-    LOGN("Start password: %s", config->password);
-    LOGN("Start key: %s", config->key);
+
+    LOGN("Start event loop with: %s", eventGetApiName());
 
     eventLoopRun(local.el);
+
     eventLoopFree(local.el);
     loggerFree(getLogger());
 

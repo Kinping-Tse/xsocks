@@ -11,5 +11,7 @@
 
 typedef struct in_addr ipV4Addr;
 typedef struct in6_addr ipV6Addr;
+typedef struct sockaddr_in sockAddrIpV4;
+typedef struct sockaddr_in6 sockAddrIpV6;
 
 #endif /* __NET_H */

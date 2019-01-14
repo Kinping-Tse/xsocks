@@ -72,4 +72,8 @@ static void eventApiStop(eventLoopContext *ctx) {
     UNUSED(ctx);
 }
 
+static char *eventApiName() {
+    return "ae";
+}
+
 #endif /* __XS_EVENT_AE_H */

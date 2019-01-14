@@ -74,4 +74,8 @@ static void eventApiStop(eventLoopContext *ctx) {
     UNUSED(ctx);
 }
 
+static char *eventApiName() {
+    return "libev";
+}
+
 #endif /* __XS_EVENT_LIBEV_H */

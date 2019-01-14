@@ -11,7 +11,7 @@ PREFIX ?= /usr/local
 INSTALL_BIN = $(PREFIX)/bin
 # INSTALL = install
 
-DEPENDENCY_TARGETS = libev redis json-parser
+DEPENDENCY_TARGETS = libev redis json-parser shadowsocks-libev libbloom
 
 MALLOC = libc
 
@@ -38,11 +38,14 @@ endif
 
 -include .make-settings
 
-EXT_CFLAGS = -I$(DEPS_PATH)/libev -I$(DEPS_PATH)/redis -I$(DEPS_PATH)/json-parser -I$(DEPS_PATH)/shadowsocks-libev
-EXT_LDFLAGS =
+EXT_CFLAGS = -I$(DEPS_PATH)/libev -I$(DEPS_PATH)/redis -I$(DEPS_PATH)/json-parser -I$(DEPS_PATH)/shadowsocks-libev -I/Users/xjp/unix/include
+# EXT_LDFLAGS = -L/Users/xjp/unix/lib
 EXT_LIBS = $(BUILD_DEPS_PATH)/libev/.libs/libev.a \
 	$(BUILD_DEPS_PATH)/redis/libredis.a \
-	$(BUILD_DEPS_PATH)/json-parser/libjsonparser.a
+	$(BUILD_DEPS_PATH)/json-parser/libjsonparser.a \
+	$(BUILD_DEPS_PATH)/shadowsocks-libev/libshadowsocks-libev.a \
+	$(DEPS_PATH)/libbloom/build/libbloom.a \
+	-lsodium /Users/xjp/unix/lib/libmbedtls.a
 
 ifeq ($(EVENT), ae)
 	EXT_CFLAGS += -DUSE_AE
@@ -76,7 +79,7 @@ persist-settings: distclean
 	echo EXT_LDFLAGS=$(EXT_LDFLAGS) >> .make-settings
 	echo PREV_FINAL_CFLAGS=$(FINAL_CFLAGS) >> .make-settings
 	echo PREV_FINAL_LDFLAGS=$(FINAL_LDFLAGS) >> .make-settings
-	cd $(BUILD_ROOT)/deps && $(MAKE) $(DEPENDENCY_TARGETS)
+	cd $(BUILD_ROOT)/deps && $(MAKE) $(MFLAGS) $(DEPENDENCY_TARGETS)
 
 .make-prerequisites:
 	@touch $@
