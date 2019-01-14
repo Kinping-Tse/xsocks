@@ -10,7 +10,7 @@
 #include "socks5.h"
 #include "crypto.h"
 
-#define _usage() usage(MODULE_LOCAL)
+#define _usage() xs_usage(MODULE_LOCAL)
 
 #define STAGE_ERROR     -1  /* Error detected                   */
 #define STAGE_INIT       0  /* Initial stage                    */
@@ -34,6 +34,7 @@ typedef struct localClient {
     int buf_off;
     sds addr_buf;
     struct remoteServer *remote;
+    cipher_ctx_t *e_ctx;
 } localClient;
 
 typedef struct remoteServer {
@@ -41,6 +42,7 @@ typedef struct remoteServer {
     sds buf;
     int buf_off;
     localClient *client;
+    cipher_ctx_t *d_ctx;
 } remoteServer;
 
 typedef struct method_select_request socks5AuthReq;
@@ -122,6 +124,9 @@ localClient *newClient(int fd) {
     client->buf_off = 0;
     client->re = re;
 
+    client->e_ctx = xs_calloc(sizeof(*client->e_ctx));
+    local.crypto->ctx_init(local.crypto->cipher, client->e_ctx, 1);
+
     return client;
 }
 
@@ -131,6 +136,9 @@ void freeClient(localClient *client) {
     eventDel(client->re);
     eventFree(client->re);
     close(client->re->id);
+
+    local.crypto->ctx_release(client->e_ctx);
+    xs_free(client->e_ctx);
 
     xs_free(client);
 }
@@ -146,6 +154,9 @@ remoteServer *newRemote(int fd) {
 
     remote->re = re;
 
+    remote->d_ctx = xs_calloc(sizeof(*remote->d_ctx));
+    local.crypto->ctx_init(local.crypto->cipher, remote->d_ctx, 0);
+
     return remote;
 }
 
@@ -154,6 +165,10 @@ void freeRemote(remoteServer *remote) {
     eventDel(remote->re);
     eventFree(remote->re);
     close(remote->re->id);
+
+    local.crypto->ctx_release(remote->d_ctx);
+    xs_free(remote->d_ctx);
+
     xs_free(remote);
 }
 
@@ -297,7 +312,7 @@ void localClientReadHandler(event *e) {
             inet_ntop(AF_INET, buf+request_len, dip, NET_IP_MAX_STR_LEN);
             LOGD("Local client request addr: [%s:%d]", dip, port);
 
-            client->addr_buf = sdsnewlen(buf + request_len - 1, addr_len+2);
+            client->addr_buf = sdsnewlen(buf + request_len - 1, 1+addr_len+2);
         } else if (addrType == SOCKS5_ATYP_DOMAIN) {
             addr_len = *(buf + request_len);
             if (nread < request_len + 1 + addr_len + 2) {
@@ -312,7 +327,7 @@ void localClientReadHandler(event *e) {
             port = ntohs(*(uint16_t *)(buf+request_len+1+addr_len));
             LOGD("Local client request addr: [%s:%d]", host, port);
 
-            client->addr_buf = sdsnewlen(buf + request_len - 1, 1+addr_len+2);
+            client->addr_buf = sdsnewlen(buf + request_len - 1, 1+1+addr_len+2);
         } else if (addrType == SOCKS5_ATYP_IPV6) {
             addr_len = sizeof(ipV6Addr);
             if (nread < request_len + addr_len + 2) {
@@ -326,7 +341,7 @@ void localClientReadHandler(event *e) {
             inet_ntop(AF_INET6, buf+request_len, dip, NET_IP_MAX_STR_LEN);
             LOGD("Local client request addr: [%s:%d]", dip, port);
 
-            client->addr_buf = sdsnewlen(buf + request_len - 1, addr_len+2);
+            client->addr_buf = sdsnewlen(buf + request_len - 1, 1+addr_len+2);
         } else {
             LOGW("Local client request error, unsupported addrtype: %d", addrType);
             resp.rep = SOCKS5_REP_ADDRTYPE_NOT_SUPPORTED;
@@ -334,6 +349,7 @@ void localClientReadHandler(event *e) {
             freeClient(client);
             return;
         }
+        DUMP(client->addr_buf, sdslen(client->addr_buf));
 
         sockAddrIpV4 sock_addr;
         bzero(&sock_addr, sizeof(sock_addr));
@@ -368,6 +384,8 @@ void localClientReadHandler(event *e) {
 
         return;
     } else if (client->stage == STAGE_STREAM) {
+        remoteServer *remote = client->remote;
+
         char buf[NET_IOBUF_LEN] = {0};
         int readlen = NET_IOBUF_LEN;
         int cfd = e->id;
@@ -377,16 +395,30 @@ void localClientReadHandler(event *e) {
 
             LOG_STRERROR("Local client read error");
             freeClient(client);
+            freeRemote(remote);
             return;
         } else if (nread == 0) {
             LOGW("Local client closed connection");
             freeClient(client);
+            freeRemote(remote);
             return;
         }
 
-        LOGDR("%s\n", buf);
+        // LOGDR("%s\n", buf);
 
-        remoteServer *remote = client->remote;
+
+        buffer_t tmp_buf = {0,0,0, NULL};
+        balloc(&tmp_buf, NET_IOBUF_LEN);
+        memcpy(tmp_buf.data, buf, nread);
+        tmp_buf.len = nread;
+
+        int err = local.crypto->encrypt(&tmp_buf, client->e_ctx, NET_IOBUF_LEN);
+        if (err) {
+            bfree(&tmp_buf);
+            freeClient(client);
+            freeRemote(remote);
+            return;
+        }
         int rfd = remote->re->id;
 
         /*
@@ -399,18 +431,30 @@ void localClientReadHandler(event *e) {
          *    +------+----------+----------+
          */
         if (client->addr_buf) {
+            buffer_t tmp_abuf ={0,0,0, NULL};;
+            balloc(&tmp_abuf, NET_IOBUF_LEN);
+            memcpy(tmp_abuf.data, client->addr_buf, sdslen(client->addr_buf));
+            tmp_abuf.len = sdslen(client->addr_buf);
 
+            // DUMP(tmp_abuf.data, tmp_abuf.len);
+            bprepend(&tmp_buf, &tmp_abuf, NET_IOBUF_LEN);
+            bfree(&tmp_abuf);
+
+            // DUMP(tmp_buf.data, tmp_buf.len);
             sdsfree(client->addr_buf);
             client->addr_buf = NULL;
         }
 
-        int nwrite = write(rfd, &buf, nread);
-        if (nwrite != nread) {
-            LOG_STRERROR("Remote server wrete error");
+        int nwrite = write(rfd, tmp_buf.data, tmp_buf.len);
+
+        if (nwrite != (int)tmp_buf.len) {
+            LOG_STRERROR("Remote server write error");
+            bfree(&tmp_buf);
             freeClient(client);
             freeRemote(remote);
             return;
         }
+        bfree(&tmp_buf);
 
         return;
     }

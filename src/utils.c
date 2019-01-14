@@ -1,5 +1,6 @@
 
 #include <stdarg.h>
+#include <ctype.h>
 
 #include "common.h"
 #include "version.h"
@@ -8,7 +9,7 @@
 
 #define eprintf(...) fprintf(stderr, __VA_ARGS__)
 
-void usage(int module) {
+void xs_usage(int module) {
     eprintf("\n");
     eprintf("xsocks %s\n\n", XS_VERSION);
     eprintf("  maintained by XJP09_HK <jianping_xie@aliyun.com>\n\n");
@@ -99,4 +100,37 @@ void usage(int module) {
     eprintf("       [-v]                       Verbose mode.\n");
     eprintf("       [-h, --help]               Print this message.\n");
     eprintf("\n");
+}
+
+void hexdump(const void *memory, size_t bytes) {
+    const unsigned char * p, * q;
+    int i;
+
+    p = memory;
+    while (bytes) {
+        q = p;
+        LOGDR("%p: ", (void *) p);
+        for (i = 0; i < 16 && bytes; ++i) {
+            LOGDR("%02X %s", *p, i == 7 ? " " : "");
+            ++p;
+            --bytes;
+        }
+        bytes += i;
+        while (i < 16) {
+            LOGDR("XX %s", i == 7 ? " " : "");
+            ++i;
+        }
+        LOGDR("| ");
+        p = q;
+        for (i = 0; i < 16 && bytes; ++i) {
+            LOGDR("%c", isprint(*p) && !isspace(*p) ? *p : '.');
+            ++p;
+            --bytes;
+        }
+         while (i < 16) {
+            LOGDR(" ");
+            ++i;
+        }
+        LOGDR(" |\n");
+    }
 }

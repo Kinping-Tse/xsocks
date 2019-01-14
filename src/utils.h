@@ -6,7 +6,7 @@ enum {
     MODULE_LOCAL
 };
 
-void usage(int module);
+void xs_usage(int module);
 
 #define FATAL(...)          \
     do {                    \
@@ -18,5 +18,9 @@ void usage(int module);
     do {                                      \
         LOGE("%s: %s", err, strerror(errno)); \
     } while (0)
+
+void hexdump(const void *memory, size_t bytes);
+
+#define DUMP hexdump
 
 #endif /* __UTILS_H */

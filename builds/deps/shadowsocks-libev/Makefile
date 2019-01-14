@@ -12,7 +12,7 @@ OBJS = $(notdir $(SRCS:.c=.o))
 
 LIBNAME = libshadowsocks-libev
 
-EXT_CFLAGS = -fPIC $(ARCH) -I/Users/xjp/unix/include -I$(VPATH)/deps/libbloom
+EXT_CFLAGS = -fPIC $(ARCH) -I$(ROOT)/deps/libbloom
 EXT_LDFLAGS = $(ARCH)
 
 STLIBNAME = $(LIBNAME).$(STLIB_SUFFIX)

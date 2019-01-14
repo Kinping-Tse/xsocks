@@ -38,14 +38,14 @@ endif
 
 -include .make-settings
 
-EXT_CFLAGS = -I$(DEPS_PATH)/libev -I$(DEPS_PATH)/redis -I$(DEPS_PATH)/json-parser -I$(DEPS_PATH)/shadowsocks-libev -I/Users/xjp/unix/include
-# EXT_LDFLAGS = -L/Users/xjp/unix/lib
+EXT_CFLAGS = -I$(DEPS_PATH)/libev -I$(DEPS_PATH)/redis -I$(DEPS_PATH)/json-parser -I$(DEPS_PATH)/shadowsocks-libev
+EXT_LDFLAGS =
 EXT_LIBS = $(BUILD_DEPS_PATH)/libev/.libs/libev.a \
 	$(BUILD_DEPS_PATH)/redis/libredis.a \
 	$(BUILD_DEPS_PATH)/json-parser/libjsonparser.a \
 	$(BUILD_DEPS_PATH)/shadowsocks-libev/libshadowsocks-libev.a \
 	$(DEPS_PATH)/libbloom/build/libbloom.a \
-	-lsodium /Users/xjp/unix/lib/libmbedtls.a
+	-lsodium -lmbedcrypto
 
 ifeq ($(EVENT), ae)
 	EXT_CFLAGS += -DUSE_AE
@@ -85,11 +85,11 @@ persist-settings: distclean
 	@touch $@
 
 ifneq ($(strip $(PREV_FINAL_CFLAGS)), $(strip $(FINAL_CFLAGS)))
-.make-prerequisites: persist-settings
+# .make-prerequisites: persist-settings
 endif
 
 ifneq ($(strip $(PREV_FINAL_LDFLAGS)), $(strip $(FINAL_LDFLAGS)))
-.make-prerequisites: persist-settings
+# .make-prerequisites: persist-settings
 endif
 
 $(XSOCKS_SERVER_NAME): $(XSOCKS_SERVER_OBJ)
