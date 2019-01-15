@@ -62,7 +62,9 @@ XSOCKS_LOCAL_OBJ = local.o utils.o config.o logger.o event.o
 
 all: $(XSOCKS_SERVER_NAME) $(XSOCKS_LOCAL_NAME)
 
+ifeq (0, $(words $(findstring $(MAKECMDGOALS), "clean distclean")))
 -include Makefile.dep
+endif
 
 Makefile.dep:
 	$(COMMON_CC) -MM $(ROOT)/src/*.c $(ROOT)/src/event/*.c > Makefile.dep
@@ -85,11 +87,11 @@ persist-settings: distclean
 	@touch $@
 
 ifneq ($(strip $(PREV_FINAL_CFLAGS)), $(strip $(FINAL_CFLAGS)))
-# .make-prerequisites: persist-settings
+.make-prerequisites: persist-settings
 endif
 
 ifneq ($(strip $(PREV_FINAL_LDFLAGS)), $(strip $(FINAL_LDFLAGS)))
-# .make-prerequisites: persist-settings
+.make-prerequisites: persist-settings
 endif
 
 $(XSOCKS_SERVER_NAME): $(XSOCKS_SERVER_OBJ)

@@ -152,6 +152,8 @@ remoteServer *newRemote(int fd) {
     event* re = eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_READ, remoteServerReadHandler, remote);
     eventAdd(local.el, re);
 
+    remote->buf = sdsempty();
+    remote->buf_off = 0;
     remote->re = re;
 
     remote->d_ctx = xs_calloc(sizeof(*remote->d_ctx));
@@ -176,23 +178,319 @@ void remoteServerReadHandler(event *e) {
     remoteServer *remote = e->data;
     localClient *client = remote->client;
 
-    char buf[NET_IOBUF_LEN];
+    buffer_t tmp_buf = {0,0,0, NULL};
+    balloc(&tmp_buf, NET_IOBUF_LEN);
+
     int readlen = NET_IOBUF_LEN;
     int rfd = e->id;
-    int nread = read(rfd, buf, readlen);
+    int nread = read(rfd, tmp_buf.data, readlen);
+    tmp_buf.len = nread;
+
+    if (nread == -1) {
+        if (errno == EAGAIN) goto end;
+
+        LOG_STRERROR("Remote server read error");
+        goto error;
+    } else if (nread == 0) {
+        LOGD("Remote server closed connection");
+        goto error;
+    }
+    if (local.crypto->decrypt(&tmp_buf, remote->d_ctx, NET_IOBUF_LEN)) {
+        LOGW("Remote server decrypt stream buffer error");
+        goto error;
+    }
+
+    int cfd = client->re->id;
+
+    int nwrite = write(cfd, tmp_buf.data, tmp_buf.len);
+    if (nwrite != (int)tmp_buf.len) {
+        LOG_STRERROR("Local client write error");
+        goto error;
+    }
+
+    goto end;
+
+error:
+    freeClient(client);
+    freeRemote(remote);
+end:
+    bfree(&tmp_buf);
+}
+
+void handleSocks5Auth(localClient* client) {
+    char buf[NET_IOBUF_LEN];
+    int readlen = NET_IOBUF_LEN;
+    int cfd = client->re->id;
+    int nread;
+
+    nread = read(cfd, buf, readlen);
     if (nread == -1) {
         if (errno == EAGAIN) return;
 
-        LOG_STRERROR("Remote server read error");
+        LOG_STRERROR("Local client read error");
+        goto error;
+    } else if (nread == 0) {
+        LOGD("Local client closed connection");
+        goto error;
+    } else if (nread <= (int)sizeof(socks5AuthReq)) {
+        LOGW("Local client socks5 authenticates error");
+        goto error;
+    }
+
+    socks5AuthReq *auth_req = (socks5AuthReq *)buf;
+    int auth_len = sizeof(socks5AuthReq) + auth_req->nmethods;
+    if (nread < auth_len || auth_req->ver != SVERSION) {
+        LOGW("Local client socks5 authenticates error");
+        goto error;
+    }
+
+    // Must be noauth here
+    socks5AuthResp auth_resp = {
+        SVERSION,
+        METHOD_UNACCEPTABLE
+    };
+    for (int i = 0; i < auth_req->nmethods; i++) {
+        if (auth_req->methods[i] == METHOD_NOAUTH) {
+            auth_resp.method = METHOD_NOAUTH;
+            break;
+        }
+    }
+
+    if (auth_resp.method == METHOD_UNACCEPTABLE) goto error;
+
+    if (write(cfd, &auth_resp, sizeof(auth_resp)) != sizeof(auth_resp))
+        goto error;
+
+    client->stage = STAGE_HANDSHAKE;
+
+    return;
+
+error:
+    freeClient(client);
+}
+
+int parseSocks5Addr(char *addr_buf, int buf_len, int *atyp, char *host, int host_len, int *port) {
+    int addr_type = *addr_buf++;
+    int addr_len;
+
+    buf_len--;
+
+    if (addr_type == SOCKS5_ATYP_IPV4 || addr_type == SOCKS5_ATYP_IPV6) {
+        int is_v6 = addr_type == SOCKS5_ATYP_IPV6;
+        addr_len = !is_v6 ? sizeof(ipV4Addr) : sizeof(ipV6Addr);
+        if (buf_len < addr_len+2) return -1;
+
+        if (port)
+            *port = ntohs(*(uint16_t *)(addr_buf+addr_len));
+
+        if (*host)
+            inet_ntop(!is_v6 ? AF_INET : AF_INET6, addr_buf, host, host_len);
+
+    } else if (addr_type == SOCKS5_ATYP_DOMAIN) {
+        addr_len = *addr_buf++;
+        if (buf_len < 1+addr_len+2) return -1;
+
+        if (*host)
+            memcpy(host, addr_buf, addr_len);
+    } else {
+        return -1;
+    }
+
+    if (atyp != NULL) *atyp = addr_type;
+    if (port) *port = ntohs(*(uint16_t *)(addr_buf+addr_len));
+
+    return 0;
+}
+
+void handleSocks5Handshake(localClient* client) {
+    char buf[NET_IOBUF_LEN];
+    int readlen = NET_IOBUF_LEN;
+    int cfd = client->re->id;
+    int nread;
+
+    nread = read(cfd, buf, readlen);
+    if (nread == -1) {
+        if (errno == EAGAIN) return;
+
+        LOG_STRERROR("Local client read error");
+        goto error;
+    } else if (nread == 0) {
+        LOGD("Local client closed connection");
+        goto error;
+    }
+
+    socks5Req *request = (socks5Req *)buf;
+    int request_len = sizeof(socks5Req);
+    if (nread < request_len || request->ver != SVERSION) {
+        LOGW("Local client socks5 request error");
+        goto error;
+    }
+
+    socks5Resp resp = {
+        SVERSION,
+        SOCKS5_REP_SUCCEEDED,
+        0,
+        SOCKS5_ATYP_IPV4
+    };
+
+    if (request->cmd != SOCKS5_CMD_CONNECT) {
+        LOGW("Local client request error, unsupported cmd: %d", request->cmd);
+        resp.rep = SOCKS5_REP_CMD_NOT_SUPPORTED;
+        write(cfd, &resp, sizeof(resp));
+
+        goto error;
+    }
+
+    int addrType = request->atyp;
+
+    char dip[NET_IP_MAX_STR_LEN] = {0};
+    int port = 0;
+    int addr_len;
+    char host[HOSTNAME_MAX_LEN] = {0};
+
+    if (addrType == SOCKS5_ATYP_IPV4) {
+        addr_len = sizeof(ipV4Addr);
+        if (nread < request_len + addr_len + 2) {
+            LOGW("Local client request error, addrlen: %d", addr_len);
+            resp.rep = SOCKS5_REP_ADDRTYPE_NOT_SUPPORTED;
+            write(cfd, &resp, sizeof(resp));
+            goto error;
+        }
+        port = ntohs(*(uint16_t *)(buf+request_len+addr_len));
+        inet_ntop(AF_INET, buf+request_len, dip, NET_IP_MAX_STR_LEN);
+        LOGD("Local client request addr: [%s:%d]", dip, port);
+
+        client->addr_buf = sdsnewlen(buf + request_len - 1, 1+addr_len+2);
+    } else if (addrType == SOCKS5_ATYP_DOMAIN) {
+        addr_len = *(buf + request_len);
+        if (nread < request_len + 1 + addr_len + 2) {
+            LOGW("Local client request error, addrlen: %d", addr_len);
+            resp.rep = SOCKS5_REP_ADDRTYPE_NOT_SUPPORTED;
+            write(cfd, &resp, sizeof(resp));
+            goto error;
+        }
+
+        memcpy(host, buf+request_len+1, addr_len);
+        port = ntohs(*(uint16_t *)(buf+request_len+1+addr_len));
+        LOGD("Local client request addr: [%s:%d]", host, port);
+
+        client->addr_buf = sdsnewlen(buf + request_len - 1, 1+1+addr_len+2);
+    } else if (addrType == SOCKS5_ATYP_IPV6) {
+        addr_len = sizeof(ipV6Addr);
+        if (nread < request_len + addr_len + 2) {
+            LOGW("Local client request error, addrlen: %d", addr_len);
+            resp.rep = SOCKS5_REP_ADDRTYPE_NOT_SUPPORTED;
+            write(cfd, &resp, sizeof(resp));
+            goto error;
+        }
+        port = ntohs(*(uint16_t *)(buf+request_len+addr_len));
+        inet_ntop(AF_INET6, buf+request_len, dip, NET_IP_MAX_STR_LEN);
+        LOGD("Local client request addr: [%s:%d]", dip, port);
+
+        client->addr_buf = sdsnewlen(buf + request_len - 1, 1+addr_len+2);
+    } else {
+        LOGW("Local client request error, unsupported addrtype: %d", addrType);
+        resp.rep = SOCKS5_REP_ADDRTYPE_NOT_SUPPORTED;
+        write(cfd, &resp, sizeof(resp));
+        goto error;
+    }
+
+    sockAddrIpV4 sock_addr;
+    bzero(&sock_addr, sizeof(sock_addr));
+
+    char resp_buf[NET_IOBUF_LEN];
+    memcpy(resp_buf, &resp, sizeof(resp));
+    memcpy(resp_buf + sizeof(resp), &sock_addr.sin_addr, sizeof(sock_addr.sin_addr));
+    memcpy(resp_buf + sizeof(resp) + sizeof(sock_addr.sin_addr),
+        &sock_addr.sin_port, sizeof(sock_addr.sin_port));
+
+    int reply_size = sizeof(resp) + sizeof(sock_addr.sin_addr) + sizeof(sock_addr.sin_port);
+
+    int nwrite = write(cfd, &resp_buf, reply_size);
+    if (nwrite != reply_size) {
+        LOGW("Local client replay error");
+        goto error;
+    }
+
+    char err[ANET_ERR_LEN];
+    int rfd  = anetTcpConnect(err, local.config->remote_addr, local.config->remote_port);
+    if (rfd == ANET_ERR) {
+        LOGW("Remote server connenct error: %s", err);
+        goto error;
+    }
+
+    client->stage = STAGE_STREAM;
+
+    remoteServer *remote = newRemote(rfd);
+    remote->client = client;
+    client->remote = remote;
+
+    return;
+error:
+    freeClient(client);
+}
+
+void handleSocks5Stream(localClient *client) {
+    remoteServer *remote = client->remote;
+
+    int readlen = NET_IOBUF_LEN;
+    int cfd = client->re->id;
+
+    client->buf = sdsMakeRoomFor(client->buf, NET_IOBUF_LEN);
+
+    int nread = read(cfd, client->buf, readlen);
+    if (nread == -1) {
+        if (errno == EAGAIN) return;
+
+        LOG_STRERROR("Local client read error");
         freeClient(client);
         freeRemote(remote);
         return;
     } else if (nread == 0) {
-        LOGD("Remote server closed connection");
+        LOGW("Local client closed connection");
         freeClient(client);
         freeRemote(remote);
         return;
     }
+    sdsIncrLen(client->buf, nread);
+
+    /*
+     * Append Shadowsocks TCP Relay Header:
+     *
+     *    +------+----------+----------+
+     *    | ATYP | DST.ADDR | DST.PORT |
+     *    +------+----------+----------+
+     *    |  1   | Variable |    2     |
+     *    +------+----------+----------+
+     */
+
+    if (client->addr_buf) {
+        client->addr_buf = sdscatsds(client->addr_buf, client->buf);
+        client->buf = sdscpylen(client->buf, client->addr_buf, sdslen(client->addr_buf));
+        sdsfree(client->addr_buf);
+        client->addr_buf = NULL;
+    }
+
+    buffer_t tmp_buf = {0,0,0, NULL};
+    balloc(&tmp_buf, NET_IOBUF_LEN);
+    memcpy(tmp_buf.data, client->buf, sdslen(client->buf));
+    tmp_buf.len = sdslen(client->buf);
+
+    if (local.crypto->encrypt(&tmp_buf, client->e_ctx, NET_IOBUF_LEN))
+        LOGW("Local client encrypt stream buffer error");
+
+    int rfd = remote->re->id;
+
+    int nwrite = write(rfd, tmp_buf.data, tmp_buf.len);
+    if (nwrite != (int)tmp_buf.len) {
+        LOG_STRERROR("Remote server write error");
+        bfree(&tmp_buf);
+        freeClient(client);
+        freeRemote(remote);
+        return;
+    }
+
+    bfree(&tmp_buf);
 
 }
 
@@ -200,267 +498,15 @@ void localClientReadHandler(event *e) {
     localClient *client = e->data;
 
     if (client->stage == STAGE_INIT) {
-        // client->buf = sdsMakeRoomFor(client->buf, readlen);
-        // sdsIncrLen(client->buf, nread);
-        char buf[NET_IOBUF_LEN];
-        int readlen = NET_IOBUF_LEN;
-        int cfd = e->id;
-        int nread = read(cfd, buf, readlen);
-        if (nread == -1) {
-            if (errno == EAGAIN) return;
-
-            LOG_STRERROR("Local client read error");
-            freeClient(client);
-            return;
-        } else if (nread == 0) {
-            LOGD("Local client closed connection");
-            freeClient(client);
-            return;
-        } else if (nread <= (int)sizeof(socks5AuthReq)) {
-            LOGW("Local client socks5 authenticates error");
-            freeClient(client);
-            return;
-        }
-
-        socks5AuthReq *auth_req = (socks5AuthReq *)buf;
-        int auth_len = sizeof(socks5AuthReq) + auth_req->nmethods;
-        if (nread < auth_len || auth_req->ver != SVERSION) {
-            LOGW("Local client socks5 authenticates error");
-            freeClient(client);
-            return;
-        }
-
-        // Must be noauth here
-        socks5AuthResp auth_resp = {
-            SVERSION,
-            METHOD_UNACCEPTABLE
-        };
-        for (int i = 0; i < auth_req->nmethods; i++) {
-            if (auth_req->methods[i] == METHOD_NOAUTH) {
-                auth_resp.method = METHOD_NOAUTH;
-                break;
-            }
-        }
-
-        if (auth_resp.method == METHOD_UNACCEPTABLE) {
-            freeClient(client);
-            return;
-        }
-
-        write(cfd, &auth_resp, sizeof(auth_resp));
-
-        client->stage = STAGE_HANDSHAKE;
-
+        handleSocks5Auth(client);
         return;
     } else if (client->stage == STAGE_HANDSHAKE) {
-        char buf[NET_IOBUF_LEN];
-        int readlen = NET_IOBUF_LEN;
-        int cfd = e->id;
-        int nread = read(cfd, buf, readlen);
-        if (nread == -1) {
-            if (errno == EAGAIN) return;
-
-            LOG_STRERROR("Local client read error");
-            freeClient(client);
-            return;
-        } else if (nread == 0) {
-            LOGD("Local client closed connection");
-            freeClient(client);
-            return;
-        }
-
-        socks5Req *request = (socks5Req *)buf;
-        int request_len = sizeof(socks5Req);
-        if (nread < request_len || request->ver != SVERSION) {
-            LOGW("Local client socks5 request error");
-            freeClient(client);
-            return;
-        }
-
-        socks5Resp resp = {
-            SVERSION,
-            SOCKS5_REP_SUCCEEDED,
-            0,
-            SOCKS5_ATYP_IPV4
-        };
-
-        if (request->cmd != SOCKS5_CMD_CONNECT) {
-            LOGW("Local client request error, unsupported cmd: %d", request->cmd);
-            resp.rep = SOCKS5_REP_CMD_NOT_SUPPORTED;
-            write(cfd, &resp, sizeof(resp));
-            freeClient(client);
-            return;
-        }
-
-        int addrType = request->atyp;
-
-        char dip[NET_IP_MAX_STR_LEN] = {0};
-        int port = 0;
-        int addr_len;
-        char host[HOSTNAME_MAX_LEN] = {0};
-
-        if (addrType == SOCKS5_ATYP_IPV4) {
-            addr_len = sizeof(ipV4Addr);
-            if (nread < request_len + addr_len + 2) {
-                LOGW("Local client request error, addrlen: %d", addr_len);
-                resp.rep = SOCKS5_REP_ADDRTYPE_NOT_SUPPORTED;
-                write(cfd, &resp, sizeof(resp));
-                freeClient(client);
-                return;
-            }
-            port = ntohs(*(uint16_t *)(buf+request_len+addr_len));
-            inet_ntop(AF_INET, buf+request_len, dip, NET_IP_MAX_STR_LEN);
-            LOGD("Local client request addr: [%s:%d]", dip, port);
-
-            client->addr_buf = sdsnewlen(buf + request_len - 1, 1+addr_len+2);
-        } else if (addrType == SOCKS5_ATYP_DOMAIN) {
-            addr_len = *(buf + request_len);
-            if (nread < request_len + 1 + addr_len + 2) {
-                LOGW("Local client request error, addrlen: %d", addr_len);
-                resp.rep = SOCKS5_REP_ADDRTYPE_NOT_SUPPORTED;
-                write(cfd, &resp, sizeof(resp));
-                freeClient(client);
-                return;
-            }
-
-            memcpy(host, buf+request_len+1, addr_len);
-            port = ntohs(*(uint16_t *)(buf+request_len+1+addr_len));
-            LOGD("Local client request addr: [%s:%d]", host, port);
-
-            client->addr_buf = sdsnewlen(buf + request_len - 1, 1+1+addr_len+2);
-        } else if (addrType == SOCKS5_ATYP_IPV6) {
-            addr_len = sizeof(ipV6Addr);
-            if (nread < request_len + addr_len + 2) {
-                LOGW("Local client request error, addrlen: %d", addr_len);
-                resp.rep = SOCKS5_REP_ADDRTYPE_NOT_SUPPORTED;
-                write(cfd, &resp, sizeof(resp));
-                freeClient(client);
-                return;
-            }
-            port = ntohs(*(uint16_t *)(buf+request_len+addr_len));
-            inet_ntop(AF_INET6, buf+request_len, dip, NET_IP_MAX_STR_LEN);
-            LOGD("Local client request addr: [%s:%d]", dip, port);
-
-            client->addr_buf = sdsnewlen(buf + request_len - 1, 1+addr_len+2);
-        } else {
-            LOGW("Local client request error, unsupported addrtype: %d", addrType);
-            resp.rep = SOCKS5_REP_ADDRTYPE_NOT_SUPPORTED;
-            write(cfd, &resp, sizeof(resp));
-            freeClient(client);
-            return;
-        }
-        DUMP(client->addr_buf, sdslen(client->addr_buf));
-
-        sockAddrIpV4 sock_addr;
-        bzero(&sock_addr, sizeof(sock_addr));
-
-        char resp_buf[NET_IOBUF_LEN];
-        memcpy(resp_buf, &resp, sizeof(resp));
-        memcpy(resp_buf + sizeof(resp), &sock_addr.sin_addr, sizeof(sock_addr.sin_addr));
-        memcpy(resp_buf + sizeof(resp) + sizeof(sock_addr.sin_addr),
-            &sock_addr.sin_port, sizeof(sock_addr.sin_port));
-
-        int reply_size = sizeof(resp) + sizeof(sock_addr.sin_addr) + sizeof(sock_addr.sin_port);
-
-        int nwrite = write(cfd, &resp_buf, reply_size);
-        if (nwrite != reply_size) {
-            LOGW("Local client replay error");
-            freeClient(client);
-            return;
-        }
-        client->stage = STAGE_STREAM;
-
-        char err[ANET_ERR_LEN];
-        int rfd  = anetTcpConnect(err, local.config->remote_addr, local.config->remote_port);
-        if (rfd == ANET_ERR) {
-            LOGW("Remote server connenct error: %s", err);
-            freeClient(client);
-            return;
-        }
-
-        remoteServer *remote = newRemote(rfd);
-        remote->client = client;
-        client->remote = remote;
-
-        return;
-    } else if (client->stage == STAGE_STREAM) {
-        remoteServer *remote = client->remote;
-
-        char buf[NET_IOBUF_LEN] = {0};
-        int readlen = NET_IOBUF_LEN;
-        int cfd = e->id;
-        int nread = read(cfd, buf, readlen);
-        if (nread == -1) {
-            if (errno == EAGAIN) return;
-
-            LOG_STRERROR("Local client read error");
-            freeClient(client);
-            freeRemote(remote);
-            return;
-        } else if (nread == 0) {
-            LOGW("Local client closed connection");
-            freeClient(client);
-            freeRemote(remote);
-            return;
-        }
-
-        // LOGDR("%s\n", buf);
-
-
-        buffer_t tmp_buf = {0,0,0, NULL};
-        balloc(&tmp_buf, NET_IOBUF_LEN);
-        memcpy(tmp_buf.data, buf, nread);
-        tmp_buf.len = nread;
-
-        int err = local.crypto->encrypt(&tmp_buf, client->e_ctx, NET_IOBUF_LEN);
-        if (err) {
-            bfree(&tmp_buf);
-            freeClient(client);
-            freeRemote(remote);
-            return;
-        }
-        int rfd = remote->re->id;
-
-        /*
-         * Append Shadowsocks TCP Relay Header:
-         *
-         *    +------+----------+----------+
-         *    | ATYP | DST.ADDR | DST.PORT |
-         *    +------+----------+----------+
-         *    |  1   | Variable |    2     |
-         *    +------+----------+----------+
-         */
-        if (client->addr_buf) {
-            buffer_t tmp_abuf ={0,0,0, NULL};;
-            balloc(&tmp_abuf, NET_IOBUF_LEN);
-            memcpy(tmp_abuf.data, client->addr_buf, sdslen(client->addr_buf));
-            tmp_abuf.len = sdslen(client->addr_buf);
-
-            // DUMP(tmp_abuf.data, tmp_abuf.len);
-            bprepend(&tmp_buf, &tmp_abuf, NET_IOBUF_LEN);
-            bfree(&tmp_abuf);
-
-            // DUMP(tmp_buf.data, tmp_buf.len);
-            sdsfree(client->addr_buf);
-            client->addr_buf = NULL;
-        }
-
-        int nwrite = write(rfd, tmp_buf.data, tmp_buf.len);
-
-        if (nwrite != (int)tmp_buf.len) {
-            LOG_STRERROR("Remote server write error");
-            bfree(&tmp_buf);
-            freeClient(client);
-            freeRemote(remote);
-            return;
-        }
-        bfree(&tmp_buf);
-
+        handleSocks5Handshake(client);
         return;
     }
 
-    LOGE("Local client read error");
-    freeClient(client);
+    assert(client->stage == STAGE_STREAM);
+    handleSocks5Stream(client);
 }
 
 void acceptHandler(event* e) {

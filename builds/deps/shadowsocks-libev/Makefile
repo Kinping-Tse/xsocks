@@ -5,7 +5,7 @@ VPATH = $(ROOT)/deps/shadowsocks-libev
 
 include $(BUILD_ROOT)/common.mk
 
-WARN = -Wall -Wextra -Wpedantic
+WARN = -Wall -Wextra #-Wpedantic
 
 SRCS = $(wildcard $(VPATH)/*.c)
 OBJS = $(notdir $(SRCS:.c=.o))
