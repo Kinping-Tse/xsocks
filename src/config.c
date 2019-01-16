@@ -4,6 +4,7 @@
 #include "utils.h"
 
 #include "json.h"
+#include "sds.h"
 
 #include <getopt.h>
 
@@ -59,7 +60,7 @@ xsocksConfig *configNew() {
     config->mode = MODE_TCP_ONLY;
     config->mtu = 0;
     config->loglevel = LOGLEVEL_NOTICE;
-    config->logfile = "";
+    config->logfile = NULL;
 
     config->no_delay = 0;
     config->help = 0;
@@ -173,6 +174,15 @@ void configLoad(xsocksConfig *config, char *filename) {
             config->reuse_port = to_integer(value);
         } else if (strcmp(name, "logfile") == 0) {
             config->logfile = to_string(value);
+            if (config->logfile != NULL && config->logfile[0] != '\0') {
+                FILE *logfp = fopen(config->logfile, "a");
+                if (logfp == NULL) {
+                    err = sdscatprintf(sdsempty(), "Can't open the log file: %s", strerror(errno));
+                    goto loaderr;
+                }
+                fclose(logfp);
+            }
+
         } else if (strcmp(name, "loglevel") == 0) {
             config->loglevel = configEnumGetValue(loglevel_enum, to_string(value));
             if (config->loglevel == INT_MIN) {

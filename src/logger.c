@@ -29,7 +29,7 @@ void loggerLogRaw(logger* log, int level, const char* file, int line, const char
     const int syslogLevelMap[] = { LOG_DEBUG, LOG_INFO, LOG_NOTICE, LOG_WARNING, LOG_ERR };
     FILE * fp;
     int rawmode = (level & LOGLEVEL_RAW);
-    int log_to_stdout = log->file[0] == '\0' || log->file == NULL;
+    int log_to_stdout = log->file == NULL || log->file[0] == '\0';
 
     level &= 0xff; /* clear flags */
     if (level < log->level) return;
