@@ -1,9 +1,9 @@
 
-#include "common.h"
-#include "config.h"
-#include "event/event.h"
-#include "utils.h"
-#include "net.h"
+#include "../core/common.h"
+#include "../core/config.h"
+#include "../core/utils.h"
+#include "../core/net.h"
+#include "../event/event.h"
 
 #include "anet.h"
 #include "sds.h"
@@ -19,6 +19,26 @@
 #define STAGE_RESOLVE    4  /* Resolve the hostname             */
 #define STAGE_STREAM     5  /* Stream between client and server */
 
+
+/*
+c: client lo: local r: remote
+lc: localClient
+amrq: auth method req
+amrp: auth method resp
+hrq: handshake req (addr)
+hrp: handshake resp (addr)
+client                  local                     remote
+1. socks5: ----->(amrq) lc
+2. socks5: <-----(amrp) lc
+3. socks5: ------>(hrq) lc
+4. socks5: <-----(hrp)  lc
+5. stream: ------>(raw) lc enc(addr+raw) rc  ----->
+7. stream: <-----(raw) lc <- (dec_buf) rc <--------------(enc_buf)
+8. stream: -----> raw  lc enc(raw) ->  rc ------------->
+9. stream: <-----(raw) lc <- (dec_buf) rc <-----------------(enc_buf)
+10. .....
+
+*/
 struct local {
     xsocksConfig *config;
     eventLoop *el;

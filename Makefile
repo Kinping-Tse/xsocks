@@ -2,4 +2,4 @@
 default: all
 
 .DEFAULT:
-	cd builds/src && $(MAKE) $@
+	cd builds/src && $(MAKE) $(MKFLAGS) $@

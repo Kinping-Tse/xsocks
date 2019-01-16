@@ -1,5 +1,5 @@
 
-#include "../common.h"
+#include "../core/common.h"
 #include "event.h"
 
 #ifdef USE_AE

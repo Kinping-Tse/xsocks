@@ -5,3 +5,4 @@
 Makefile.dep
 xs-local
 xs-server
+xs-tunnel

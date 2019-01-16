@@ -3,13 +3,17 @@ BUILD_ROOT = ..
 ROOT = $(BUILD_ROOT)/..
 DEPS_PATH = $(ROOT)/deps
 BUILD_DEPS_PATH = $(BUILD_ROOT)/deps
-VPATH = $(ROOT)/src:$(ROOT)/src/event
+SRC_ROOT = $(ROOT)/src
+VPATH = $(SRC_ROOT)/core:$(SRC_ROOT)/event:$(SRC_ROOT)/module
 
 include $(BUILD_ROOT)/common.mk
 
 PREFIX ?= /usr/local
 INSTALL_BIN = $(PREFIX)/bin
 # INSTALL = install
+
+SRCS = $(wildcard $(SRC_ROOT)/core/*.c $(SRC_ROOT)/event/*.c)
+OBJS = $(notdir $(SRCS:.c=.o))
 
 DEPENDENCY_TARGETS = libev redis json-parser shadowsocks-libev libbloom
 
@@ -56,18 +60,22 @@ ifeq ($(EVENT), libev)
 endif
 
 XSOCKS_SERVER_NAME = xs-server
-XSOCKS_SERVER_OBJ = server.o
+XSOCKS_SERVER_OBJ = server.o $(OBJS)
 XSOCKS_LOCAL_NAME = xs-local
-XSOCKS_LOCAL_OBJ = local.o utils.o config.o logger.o event.o
+XSOCKS_LOCAL_OBJ = local.o $(OBJS)
+XSOCKS_TUNNEL_NAME = xs-tunnel
+XSOCKS_TUNNEL_OBJ = tunnel.o $(OBJS)
 
-all: $(XSOCKS_SERVER_NAME) $(XSOCKS_LOCAL_NAME)
+XSOCKS_MODULE_EXE = $(XSOCKS_SERVER_NAME) $(XSOCKS_LOCAL_NAME) $(XSOCKS_TUNNEL_NAME)
+
+all: $(XSOCKS_MODULE_EXE)
 
 ifeq (0, $(words $(findstring $(MAKECMDGOALS), "clean distclean")))
 -include Makefile.dep
 endif
 
 Makefile.dep:
-	$(COMMON_CC) -MM $(ROOT)/src/*.c $(ROOT)/src/event/*.c > Makefile.dep
+	$(COMMON_CC) -MM $(SRC_ROOT)/*/*.c > Makefile.dep
 
 persist-settings: distclean
 	echo STD=$(STD) >> .make-settings
@@ -94,20 +102,22 @@ ifneq ($(strip $(PREV_FINAL_LDFLAGS)), $(strip $(FINAL_LDFLAGS)))
 .make-prerequisites: persist-settings
 endif
 
+XSOCKS_MODULE_EXE_LD = $(COMMON_LD) -o $@ $^ $(FINAL_LIBS)
+
 $(XSOCKS_SERVER_NAME): $(XSOCKS_SERVER_OBJ)
-	$(COMMON_LD) -o $@ $^ $(FINAL_LIBS)
-	ln -fs builds/src/$@ $(ROOT)/$@
+	$(XSOCKS_MODULE_EXE_LD)
 
 $(XSOCKS_LOCAL_NAME): $(XSOCKS_LOCAL_OBJ)
-	$(COMMON_LD) -o $@ $^ $(FINAL_LIBS)
-	ln -fs builds/src/$@ $(ROOT)/$@
+	$(XSOCKS_MODULE_EXE_LD)
+
+$(XSOCKS_TUNNEL_NAME): $(XSOCKS_TUNNEL_OBJ)
+	$(XSOCKS_MODULE_EXE_LD)
 
 %.o: %.c .make-prerequisites
 	$(COMMON_CC) -c $<
 
 clean:
-	rm -rf $(XSOCKS_SERVER_NAME) $(XSOCKS_LOCAL_NAME) *.o Makefile.dep
-	rm -rf $(ROOT)/$(XSOCKS_SERVER_NAME) $(ROOT)/$(XSOCKS_LOCAL_NAME)
+	rm -rf $(XSOCKS_MODULE_EXE) *.o Makefile.dep
 
 distclean: clean
 	cd $(BUILD_ROOT)/deps && $(MAKE) distclean
