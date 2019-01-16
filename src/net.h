@@ -4,6 +4,9 @@
 #include <arpa/inet.h>
 
 #define HOSTNAME_MAX_LEN 256
+#define PORT_MAX_STR_LEN 6
+#define ADDR_INFO_STR_LEN (HOSTNAME_MAX_LEN+PORT_MAX_STR_LEN) /* for dump addr */
+
 #define NET_IPV4_STR_LEN INET_ADDRSTRLEN /*  INET_ADDRSTRLEN  */
 #define NET_IPV6_STR_LEN INET6_ADDRSTRLEN /*  46  */
 #define NET_IP_MAX_STR_LEN NET_IPV6_STR_LEN

@@ -28,6 +28,7 @@ struct local {
 struct remoteServer;
 
 typedef struct localClient {
+    int fd;
     int stage;
     event *re;
     sds buf;
@@ -35,9 +36,11 @@ typedef struct localClient {
     sds addr_buf;
     struct remoteServer *remote;
     cipher_ctx_t *e_ctx;
+    char dest_addr_info[ADDR_INFO_STR_LEN];
 } localClient;
 
 typedef struct remoteServer {
+    int fd;
     event *re;
     // sds buf;
     // int buf_off;
@@ -119,10 +122,12 @@ localClient *newClient(int fd) {
     event* re = eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_READ, localClientReadHandler, client);
     eventAdd(local.el, re);
 
+    client->fd = fd;
+    client->re = re;
     client->stage = STAGE_INIT;
+    client->addr_buf = NULL;
     client->buf = sdsempty();
     // client->buf_off = 0;
-    client->re = re;
 
     client->e_ctx = xs_calloc(sizeof(*client->e_ctx));
     local.crypto->ctx_init(local.crypto->cipher, client->e_ctx, 1);
@@ -135,7 +140,7 @@ void freeClient(localClient *client) {
     sdsfree(client->addr_buf);
     eventDel(client->re);
     eventFree(client->re);
-    close(client->re->id);
+    close(client->fd);
 
     local.crypto->ctx_release(client->e_ctx);
     xs_free(client->e_ctx);
@@ -155,6 +160,7 @@ remoteServer *newRemote(int fd) {
     // remote->buf = sdsempty();
     // remote->buf_off = 0;
     remote->re = re;
+    remote->fd = fd;
 
     remote->d_ctx = xs_calloc(sizeof(*remote->d_ctx));
     local.crypto->ctx_init(local.crypto->cipher, remote->d_ctx, 0);
@@ -166,7 +172,7 @@ void freeRemote(remoteServer *remote) {
     // sdsfree(remote->buf);
     eventDel(remote->re);
     eventFree(remote->re);
-    close(remote->re->id);
+    close(remote->fd);
 
     local.crypto->ctx_release(remote->d_ctx);
     xs_free(remote->d_ctx);
@@ -189,14 +195,14 @@ void remoteServerReadHandler(event *e) {
     if (nread == -1) {
         if (errno == EAGAIN) goto end;
 
-        LOG_STRERROR("Remote server read error");
+        LOGW("Remote server [%s] read error: %s", client->dest_addr_info, strerror(errno));
         goto error;
     } else if (nread == 0) {
-        LOGD("Remote server closed connection");
+        LOGD("Remote server [%s] closed connection", client->dest_addr_info);
         goto error;
     }
     if (local.crypto->decrypt(&tmp_buf, remote->d_ctx, NET_IOBUF_LEN)) {
-        LOGW("Remote server decrypt stream buffer error");
+        LOGW("Remote server [%s] decrypt stream buffer error", client->dest_addr_info);
         goto error;
     }
 
@@ -204,7 +210,7 @@ void remoteServerReadHandler(event *e) {
 
     int nwrite = write(cfd, tmp_buf.data, tmp_buf.len);
     if (nwrite != (int)tmp_buf.len) {
-        LOG_STRERROR("Local client write error");
+        LOGW("Local client [%s] write error: %s", client->dest_addr_info, strerror(errno));
         goto error;
     }
 
@@ -355,7 +361,8 @@ void handleSocks5Handshake(localClient* client) {
         goto error;
     }
 
-    LOGD("Local client request addr: [%s:%d]", addr, port);
+    snprintf(client->dest_addr_info, ADDR_INFO_STR_LEN, "%s:%d", addr, port);
+    LOGI("Local client request addr: [%s]", client->dest_addr_info);
 
     sockAddrIpV4 sock_addr;
     bzero(&sock_addr, sizeof(sock_addr));
@@ -375,11 +382,14 @@ void handleSocks5Handshake(localClient* client) {
     }
 
     char err[ANET_ERR_LEN];
-    int rfd  = anetTcpConnect(err, local.config->remote_addr, local.config->remote_port);
+    char *remote_addr = local.config->remote_addr;
+    int remote_port = local.config->remote_port;
+    int rfd  = anetTcpConnect(err, remote_addr, remote_port);
     if (rfd == ANET_ERR) {
-        LOGW("Remote server connenct error: %s", err);
+        LOGE("Remote server [%s:%d] connenct error: %s", remote_addr, remote_port, err);
         goto error;
     }
+    LOGD("Connect to remote server suceess, fd:%d", rfd);
 
     client->addr_buf = sdsnewlen(addr_buf, buf_len);
     client->stage = STAGE_STREAM;
@@ -412,10 +422,10 @@ void handleSocks5Stream(localClient *client) {
     if (nread == -1) {
         if (errno == EAGAIN) return;
 
-        LOG_STRERROR("Local client stream read error");
+        LOGW("Local client [%s] stream read error: %s", client->dest_addr_info, strerror(errno));
         goto error;
     } else if (nread == 0) {
-        LOGW("Local client stream closed connection");
+        LOGD("Local client [%s] stream closed connection", client->dest_addr_info);
         goto error;
     }
     sdsIncrLen(client->buf, nread);
@@ -448,7 +458,7 @@ void handleSocks5Stream(localClient *client) {
 
     int nwrite = write(rfd, tmp_buf.data, tmp_buf.len);
     if (nwrite != (int)tmp_buf.len) {
-        LOG_STRERROR("Remote server write error");
+        LOGW("Local client [%s] write to remote server error", client->dest_addr_info);
         goto error;
     }
 
@@ -487,7 +497,7 @@ void acceptHandler(event* e) {
             LOGW("Accepting local client connection: %s", err);
         return;
     }
-    LOGD("Accepted %s:%d fd: %d", cip, cport, cfd);
+    LOGD("Accepted local client %s:%d fd:%d", cip, cport, cfd);
 
     newClient(cfd);
 }
