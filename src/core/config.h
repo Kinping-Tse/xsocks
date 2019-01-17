@@ -9,9 +9,9 @@ enum {
 };
 
 enum {
-    MODE_TCP_ONLY = 0,
-    MODE_TCP_AND_UDP,
-    MODE_UDP_ONLY,
+    MODE_TCP_ONLY = 1<<0,
+    MODE_UDP_ONLY = 1<<1,
+    MODE_TCP_AND_UDP = MODE_TCP_ONLY|MODE_UDP_ONLY,
 };
 
 typedef struct xsocksConfig {

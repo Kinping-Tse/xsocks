@@ -1,16 +1,9 @@
 
-#include "../core/common.h"
-#include "../core/config.h"
-#include "../core/utils.h"
-#include "../core/net.h"
-#include "../event/event.h"
+#include "module.h"
 
 #include "anet.h"
 #include "sds.h"
 #include "socks5.h"
-#include "crypto.h"
-
-#define _usage() xs_usage(MODULE_LOCAL)
 
 #define STAGE_ERROR     -1  /* Error detected                   */
 #define STAGE_INIT       0  /* Initial stage                    */
@@ -19,31 +12,27 @@
 #define STAGE_RESOLVE    4  /* Resolve the hostname             */
 #define STAGE_STREAM     5  /* Stream between client and server */
 
-
 /*
 c: client lo: local r: remote
-lc: localClient
+lc: localClient rs: remoteServer
 amrq: auth method req
 amrp: auth method resp
 hrq: handshake req (addr)
 hrp: handshake resp (addr)
-client                  local                     remote
-1. socks5: ----->(amrq) lc
-2. socks5: <-----(amrp) lc
-3. socks5: ------>(hrq) lc
-4. socks5: <-----(hrp)  lc
-5. stream: ------>(raw) lc enc(addr+raw) rc  ----->
-7. stream: <-----(raw) lc <- (dec_buf) rc <--------------(enc_buf)
-8. stream: -----> raw  lc enc(raw) ->  rc ------------->
-9. stream: <-----(raw) lc <- (dec_buf) rc <-----------------(enc_buf)
-10. .....
+ss: shadowsocks
+client                      local                     remote
+1. socks5:      (amrq)-----> lc
+2. socks5:      <-----(amrp) lc
+3. socks5:      (hrq)------> lc
+4. socks5:      <-----(hrp)  lc
+5. ss req:                       rs enc(addr) --------->
+6. ss stream: (raw)------> lc enc(raw) -> rs  (enc_buf)-------->
+7. ss stream: <-----(raw) lc <- dec(enc_buf) rs <--------------(enc_buf)
+8. (6.7 loop).....
 
 */
-struct local {
-    xsocksConfig *config;
-    eventLoop *el;
-    crypto_t *crypto;
-} local;
+
+static module local;
 
 struct remoteServer;
 
@@ -77,26 +66,6 @@ void acceptHandler(event *e);
 void remoteServerReadHandler(event *e);
 void localClientReadHandler(event *e);
 
-static void initLogger() {
-    logger *log = getLogger();
-    xsocksConfig *config = local.config;
-
-    log->file = config->logfile;
-    log->level = config->loglevel;
-    log->color_enabled = 1;
-    log->syslog_enabled = config->use_syslog;
-    log->file_line_enabled = 1;
-    log->syslog_ident = "xs-local";
-    // log->syslog_facility = LOG_USER;
-}
-
-static void initCrypto() {
-    crypto_t *crypto = crypto_init(local.config->password, local.config->key, local.config->method);
-    if (crypto == NULL) FATAL("Failed to initialize ciphers");
-
-    local.crypto =crypto;
-}
-
 void listenForLocal(int *fd) {
     char err[256];
     char *host = local.config->local_addr;
@@ -117,14 +86,10 @@ void listenForLocal(int *fd) {
     anetNonBlock(NULL, *fd);
 }
 
-static void initLocal(xsocksConfig *config) {
-    local.config = config;
-    initLogger();
-    initCrypto();
+static void initLocal() {
+    getLogger()->syslog_ident = "xs-local";
 
-    local.el = eventLoopNew();
-
-    if (config->mode != MODE_UDP_ONLY) {
+    if (local.config->mode & MODE_TCP_ONLY) {
         int lfd;
         listenForLocal(&lfd);
 
@@ -328,6 +293,41 @@ int parseSocks5Addr(char *addr_buf, int buf_len, int *atyp, char *host, int *hos
     return 0;
 }
 
+/*
+ * Just Send Shadowsocks TCP Relay Header:
+ *
+ *    +------+----------+----------+
+ *    | ATYP | DST.ADDR | DST.PORT |
+ *    +------+----------+----------+
+ *    |  1   | Variable |    2     |
+ *    +------+----------+----------+
+ */
+int shadowSocksHandshake(localClient *client) {
+    assert(client->addr_buf);
+
+    int ok = MODULE_OK;
+    buffer_t tmp_buf = {0,0,0,NULL};
+
+    balloc(&tmp_buf, NET_IOBUF_LEN);
+    memcpy(tmp_buf.data, client->addr_buf, sdslen(client->addr_buf));
+    tmp_buf.len = sdslen(client->addr_buf);
+
+    if (local.crypto->encrypt(&tmp_buf, client->e_ctx, NET_IOBUF_LEN))
+        LOGW("Local client encrypt stream buffer error");
+
+    int nwrite = write(client->remote->fd, tmp_buf.data, tmp_buf.len);
+    if (nwrite != (int)tmp_buf.len) {
+        LOGW("Local client [%s] write to remote server error", client->dest_addr_info);
+        ok = MODULE_ERR;
+    }
+
+    bfree(&tmp_buf);
+    sdsfree(client->addr_buf);
+    client->addr_buf = NULL;
+
+    return ok;
+}
+
 void handleSocks5Handshake(localClient* client) {
     char buf[NET_IOBUF_LEN];
     int readlen = NET_IOBUF_LEN;
@@ -401,7 +401,9 @@ void handleSocks5Handshake(localClient* client) {
         goto error;
     }
 
+    // Connect to remote server
     char err[ANET_ERR_LEN];
+    // bzero(err, ANET_ERR_LEN);
     char *remote_addr = local.config->remote_addr;
     int remote_port = local.config->remote_port;
     int rfd  = anetTcpConnect(err, remote_addr, remote_port);
@@ -411,13 +413,22 @@ void handleSocks5Handshake(localClient* client) {
     }
     LOGD("Connect to remote server suceess, fd:%d", rfd);
 
-    client->addr_buf = sdsnewlen(addr_buf, buf_len);
-    client->stage = STAGE_STREAM;
-
+    // Prepare stream
     remoteServer *remote = newRemote(rfd);
     remote->client = client;
-    client->remote = remote;
 
+    client->remote = remote;
+    client->stage = STAGE_STREAM;
+    client->buf = sdsMakeRoomFor(client->buf, NET_IOBUF_LEN);
+    client->addr_buf = sdsnewlen(addr_buf, buf_len);
+
+    if (shadowSocksHandshake(client) == MODULE_ERR) {
+        freeRemote(remote);
+        goto error;
+    }
+
+    anetDisableTcpNoDelay(err, client->fd);
+    anetDisableTcpNoDelay(err, remote->fd);
     return;
 error:
     freeClient(client);
@@ -425,22 +436,16 @@ error:
 
 void handleSocks5Stream(localClient *client) {
     remoteServer *remote = client->remote;
-
-    buffer_t tmp_buf = {0,0,0,NULL};
-
     int readlen = NET_IOBUF_LEN;
     int cfd = client->re->id;
+    int nread;
+    buffer_t tmp_buf = {0,0,0,NULL};
 
-    /* First read */
-    if (client->addr_buf) {
-        client->buf = sdsMakeRoomFor(client->buf, NET_IOBUF_LEN);
-    } else {
-        sdssetlen(client->buf, 0);
-    }
-
-    int nread = read(cfd, client->buf, readlen);
+    // Read local client buffer
+    sdssetlen(client->buf, 0);
+    nread = read(cfd, client->buf, readlen);
     if (nread == -1) {
-        if (errno == EAGAIN) return;
+        if (errno == EAGAIN) goto end;
 
         LOGW("Local client [%s] stream read error: %s", client->dest_addr_info, strerror(errno));
         goto error;
@@ -450,23 +455,7 @@ void handleSocks5Stream(localClient *client) {
     }
     sdsIncrLen(client->buf, nread);
 
-    /*
-     * Append Shadowsocks TCP Relay Header:
-     *
-     *    +------+----------+----------+
-     *    | ATYP | DST.ADDR | DST.PORT |
-     *    +------+----------+----------+
-     *    |  1   | Variable |    2     |
-     *    +------+----------+----------+
-     */
-
-    if (client->addr_buf) {
-        client->addr_buf = sdscatsds(client->addr_buf, client->buf);
-        client->buf = sdscpylen(client->buf, client->addr_buf, sdslen(client->addr_buf));
-        sdsfree(client->addr_buf);
-        client->addr_buf = NULL;
-    }
-
+    // Do buffer encrypt
     balloc(&tmp_buf, NET_IOBUF_LEN);
     memcpy(tmp_buf.data, client->buf, sdslen(client->buf));
     tmp_buf.len = sdslen(client->buf);
@@ -474,9 +463,11 @@ void handleSocks5Stream(localClient *client) {
     if (local.crypto->encrypt(&tmp_buf, client->e_ctx, NET_IOBUF_LEN))
         LOGW("Local client encrypt stream buffer error");
 
+    // Write to remote server
     int rfd = remote->re->id;
+    int nwrite;
 
-    int nwrite = write(rfd, tmp_buf.data, tmp_buf.len);
+    nwrite = write(rfd, tmp_buf.data, tmp_buf.len);
     if (nwrite != (int)tmp_buf.len) {
         LOGW("Local client [%s] write to remote server error", client->dest_addr_info);
         goto error;
@@ -523,34 +514,11 @@ void acceptHandler(event* e) {
 }
 
 int main(int argc, char *argv[]) {
-    setLogger(loggerNew());
+    moduleHook hook = {initLocal, NULL, NULL};
 
-    xsocksConfig *config = configNew();
-
-    if (configParse(config, argc, argv) == CONFIG_ERR) FATAL("Parse config error");
-
-    if (config->help) {
-        _usage();
-        return EXIT_SUCCESS;
-    }
-
-    initLocal(config);
-
-    LOGI("Initializing ciphers... %s", config->method);
-    LOGI("Start password: %s", config->password);
-    LOGI("Start key: %s", config->key);
-
-    if (config->mtu) LOGI("set MTU to %d", config->mtu);
-    if (config->no_delay) LOGI("enable TCP no-delay");
-    LOGN("Start local: %s:%d", config->local_addr, config->local_port);
-    LOGI("Start remote: %s:%d", config->remote_addr, config->remote_port);
-
-    LOGN("Start event loop with: %s", eventGetApiName());
-
-    eventLoopRun(local.el);
-
-    eventLoopFree(local.el);
-    loggerFree(getLogger());
+    moduleInit(MODULE_LOCAL, hook, &local, argc, argv);
+    moduleRun();
+    moduleExit();
 
     return EXIT_SUCCESS;
 }

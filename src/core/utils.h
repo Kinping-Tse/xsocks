@@ -3,7 +3,8 @@
 
 enum {
     MODULE_REMOTE = 0,
-    MODULE_LOCAL
+    MODULE_LOCAL,
+    MODULE_TUNNEL,
 };
 
 void xs_usage(int module);

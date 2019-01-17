@@ -18,8 +18,8 @@ void xs_usage(int module) {
     switch (module) {
         case MODULE_LOCAL: eprintf("    xs-local\n"); break;
         case MODULE_REMOTE: eprintf("    xs-server\n"); break;
+        case MODULE_TUNNEL: eprintf("    xs-tunnel\n"); break;
         default:
-            // eprintf("    ss-tunnel\n");
             // eprintf("    ss-redir\n");
             // eprintf("    ss-manager\n");
             break;
@@ -44,6 +44,11 @@ void xs_usage(int module) {
     eprintf("                                  salsa20, chacha20 and chacha20-ietf.\n");
     eprintf("                                  The default cipher is aes-256-cfb.\n");
     eprintf("\n");
+    if (module == MODULE_TUNNEL) {
+        eprintf(
+            "       -L <addr>:<port>           Destination server address and port\n"
+            "                                  for local port forwarding.\n");
+    }
     // eprintf("       [-a <user>]                Run as another user.\n");
     // eprintf("       [-f <pid_file>]            The file path to store pid.\n");
     eprintf("       [-t <timeout>]             Socket timeout in seconds.\n");
@@ -63,10 +68,6 @@ void xs_usage(int module) {
     // eprintf("       [-6]                       Resovle hostname to IPv6 address first.\n");
 #endif
     eprintf("\n");
-#ifdef MODULE_TUNNEL
-    // eprintf("       [-L <addr>:<port>]         Destination server address and port\n");
-    // eprintf("                                  for local port forwarding.\n");
-#endif
 #ifdef MODULE_REMOTE
     // eprintf("       [-d <addr>]                Name servers for internal DNS resolver.\n");
 #endif

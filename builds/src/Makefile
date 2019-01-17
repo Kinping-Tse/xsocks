@@ -13,7 +13,7 @@ INSTALL_BIN = $(PREFIX)/bin
 # INSTALL = install
 
 SRCS = $(wildcard $(SRC_ROOT)/core/*.c $(SRC_ROOT)/event/*.c)
-OBJS = $(notdir $(SRCS:.c=.o))
+OBJS = $(notdir $(SRCS:.c=.o)) module.o
 
 DEPENDENCY_TARGETS = libev redis json-parser shadowsocks-libev libbloom
 

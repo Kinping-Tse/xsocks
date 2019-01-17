@@ -36,6 +36,7 @@ enum {
     GETOPT_VAL_REUSE_PORT,
     GETOPT_VAL_MTU,
     GETOPT_VAL_LOGLEVEL,
+    GETOPT_VAL_LOGFILE,
     GETOPT_VAL_FAST_OPEN,
     GETOPT_VAL_NODELAY,
     // GETOPT_VAL_ACL,
@@ -121,6 +122,22 @@ static char *to_string(const json_value *value) {
     FATAL("Invalid config format.");
 }
 
+static int testLogfile(char **err, char *file) {
+    if (file && file[0] != '\0') {
+        FILE *fp = fopen(file, "a");
+        if (!fp) {
+            if (err) {
+                char *tmp_err = xs_calloc(256);
+                snprintf(tmp_err, 256, "Can't open the log file: %s", strerror(errno));
+                *err = tmp_err;
+            }
+            return CONFIG_ERR;
+        }
+        fclose(fp);
+    }
+    return CONFIG_OK;
+}
+
 void configLoad(xsocksConfig *config, char *filename) {
     char *err = NULL;
     json_value *obj = NULL;
@@ -174,15 +191,7 @@ void configLoad(xsocksConfig *config, char *filename) {
             config->reuse_port = to_integer(value);
         } else if (strcmp(name, "logfile") == 0) {
             config->logfile = to_string(value);
-            if (config->logfile != NULL && config->logfile[0] != '\0') {
-                FILE *logfp = fopen(config->logfile, "a");
-                if (logfp == NULL) {
-                    err = sdscatprintf(sdsempty(), "Can't open the log file: %s", strerror(errno));
-                    goto loaderr;
-                }
-                fclose(logfp);
-            }
-
+            if (testLogfile(&err, config->logfile) == CONFIG_ERR) goto loaderr;
         } else if (strcmp(name, "loglevel") == 0) {
             config->loglevel = configEnumGetValue(loglevel_enum, to_string(value));
             if (config->loglevel == INT_MIN) {
@@ -238,6 +247,7 @@ int configParse(xsocksConfig* config, int argc, char *argv[]) {
         { "reuse-port",  no_argument,       NULL, GETOPT_VAL_REUSE_PORT  },
         { "mtu",         required_argument, NULL, GETOPT_VAL_MTU         },
         { "loglevel",    required_argument, NULL, GETOPT_VAL_LOGLEVEL    },
+        { "logfile",     required_argument, NULL, GETOPT_VAL_LOGFILE     },
         { "fast-open",   no_argument,       NULL, GETOPT_VAL_FAST_OPEN   },
         { "no-delay",    no_argument,       NULL, GETOPT_VAL_NODELAY     },
         { "password",    required_argument, NULL, GETOPT_VAL_PASSWORD    },
@@ -262,6 +272,10 @@ int configParse(xsocksConfig* config, int argc, char *argv[]) {
                 if (config->loglevel == INT_MIN)
                     err = "Invalid log level. "
                           "Must be one of debug, info, notice, warning, error";
+                break;
+            case GETOPT_VAL_LOGFILE:
+                config->logfile = optarg;
+                testLogfile(&err, config->logfile);
                 break;
             case 's': config->remote_addr = optarg; break;
             case 'p': config->remote_port = atoi(optarg); break;

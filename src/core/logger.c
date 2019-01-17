@@ -5,7 +5,7 @@
 #include <syslog.h>
 #include <time.h>
 
-static logger *xsocks_logger;
+static logger *xsocks_logger = NULL;
 
 logger *loggerNew() {
     logger *log = xs_calloc(sizeof(*log));
@@ -89,6 +89,9 @@ void loggerLog(logger *log, int level, const char *file, int line, const char *f
 }
 
 void setLogger(logger *log) {
+    if (xsocks_logger != NULL && xsocks_logger != log)
+        loggerFree(xsocks_logger);
+
     xsocks_logger = log;
 }
 

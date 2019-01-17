@@ -15,4 +15,8 @@
 
 #define UNUSED(V) ((void)V)
 
+#define INVALID_FD -1
+#define EXIT_OK  EXIT_SUCCESS
+#define EXIT_ERR EXIT_FAILURE
+
 #endif /* __XS_COMMON_H */
