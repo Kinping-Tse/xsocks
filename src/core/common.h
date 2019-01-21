@@ -19,4 +19,8 @@
 #define EXIT_OK  EXIT_SUCCESS
 #define EXIT_ERR EXIT_FAILURE
 
+#define bool int
+#define true (1)
+#define false (0)
+
 #endif /* __XS_COMMON_H */

@@ -53,6 +53,7 @@ xsocksConfig *configNew() {
     config->local_addr = "127.0.0.1";
     config->local_port = 1080;
     config->password = "xsocks";
+    config->tunnel_address = NULL;
     config->key = NULL;
     config->method = "aes-256-cfb";
     config->timeout = 60;
@@ -66,27 +67,6 @@ xsocksConfig *configNew() {
     config->no_delay = 0;
     config->help = 0;
     return config;
-}
-
-#define INT_DIGITS 19 /* enough for 64 bit integer */
-char *xs_itoa(int i) {
-    /* Room for INT_DIGITS digits, - and '\0' */
-    static char buf[INT_DIGITS + 2];
-    char *p = buf + INT_DIGITS + 1; /* points to terminating '\0' */
-    if (i >= 0) {
-        do {
-            *--p = '0' + (i % 10);
-            i /= 10;
-        } while (i != 0);
-        return p;
-    } else { /* i < 0 */
-        do {
-            *--p = '0' - (i % 10);
-            i /= 10;
-        } while (i != 0);
-        *--p = '-';
-    }
-    return p;
 }
 
 #define check_json_value_type(value, expected_type, message)    \
@@ -199,6 +179,8 @@ void configLoad(xsocksConfig *config, char *filename) {
                       "Must be one of debug, info, notice, warning, error";
                 goto loaderr;
             }
+        } else if (strcmp(name, "tunnel_address") == 0) {
+            config->tunnel_address = to_string(value);
         } else if (strcmp(name, "mode") == 0) {
             char *mode_str = to_string(value);
 
@@ -258,7 +240,7 @@ int configParse(xsocksConfig* config, int argc, char *argv[]) {
     char *conf_path = NULL;
     char *err = NULL;
     int c;
-    while ((c = getopt_long(argc, argv, "f:s:p:l:k:t:m:i:c:b:a:n:huUv6A",
+    while ((c = getopt_long(argc, argv, "f:s:p:l:L:k:t:m:i:c:b:a:n:huUv6A",
                             long_options, NULL)) != -1) {
         switch (c) {
             case GETOPT_VAL_FAST_OPEN: config->fast_open = 1; break;
@@ -281,6 +263,7 @@ int configParse(xsocksConfig* config, int argc, char *argv[]) {
             case 'p': config->remote_port = atoi(optarg); break;
             case 'b': config->local_addr = optarg; break;
             case 'l': config->local_port = atoi(optarg); break;
+            case 'L': config->tunnel_address = optarg; break;
             case GETOPT_VAL_PASSWORD:
             case 'k':
                 config->password = optarg;
@@ -306,6 +289,15 @@ int configParse(xsocksConfig* config, int argc, char *argv[]) {
 
     if (conf_path != NULL) {
         configLoad(config, conf_path);
+    }
+
+    char *tunnel_address = config->tunnel_address;
+    char *tunnel_addr;
+    if (!tunnel_address || !(tunnel_addr = strrchr(tunnel_address, ':'))) {
+        err = "Error tunnel address";
+    } else {
+        config->tunnel_addr = strndup(tunnel_address, tunnel_addr-tunnel_address);
+        config->tunnel_port = atoi(tunnel_addr+1);
     }
 
     if (err != NULL) {

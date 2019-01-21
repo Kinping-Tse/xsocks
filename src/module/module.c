@@ -35,6 +35,7 @@ void moduleInit(int type, moduleHook hook, module *m, int argc, char *argv[]) {
         xs_usage(type);
         exit(EXIT_SUCCESS);
     }
+
     mod->config = config;
 
     initCrypto();
@@ -55,7 +56,7 @@ void moduleRun() {
     if (config->no_delay) LOGI("enable TCP no-delay");
     LOGN("Start local: %s:%d", config->local_addr, config->local_port);
     LOGI("Start remote: %s:%d", config->remote_addr, config->remote_port);
-
+    LOGI("Start tunnel: %s:%d", config->tunnel_addr, config->tunnel_port);
     LOGN("Start event loop with: %s", eventGetApiName());
 
     eventLoopRun(mod->el);

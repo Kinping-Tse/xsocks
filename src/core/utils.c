@@ -135,3 +135,38 @@ void hexdump(const void *memory, size_t bytes) {
         LOGDR(" |\n");
     }
 }
+
+void xs_error(char *err, const char *fmt, ...) {
+    va_list ap;
+
+    if (!err) return;
+    va_start(ap, fmt);
+    vsnprintf(err, XS_ERR_LEN, fmt, ap);
+    va_end(ap);
+}
+
+#define INT_DIGITS 19 /* enough for 64 bit integer */
+
+char *xs_itoa(int i) {
+    /* Room for INT_DIGITS digits, - and '\0' */
+    static char buf[INT_DIGITS + 2];
+    char *p = buf + INT_DIGITS + 1; /* points to terminating '\0' */
+    if (i >= 0) {
+        do {
+            *--p = '0' + (i % 10);
+            i /= 10;
+        } while (i != 0);
+        return p;
+    } else { /* i < 0 */
+        do {
+            *--p = '0' - (i % 10);
+            i /= 10;
+        } while (i != 0);
+        *--p = '-';
+    }
+    return p;
+}
+
+int isIPv6Addr(char *ip) {
+    return strchr(ip, ':') ? 1 : 0;
+}

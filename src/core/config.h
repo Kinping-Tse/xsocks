@@ -20,6 +20,9 @@ typedef struct xsocksConfig {
     char *local_addr;
     int local_port;
     char *password;
+    char *tunnel_address;
+    char *tunnel_addr; // parse from tunnel_address
+    int tunnel_port; // parse from tunnel_address
     char *key;
     char *method;
     int timeout;

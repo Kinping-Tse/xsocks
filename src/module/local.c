@@ -3,7 +3,6 @@
 
 #include "anet.h"
 #include "sds.h"
-#include "socks5.h"
 
 #define STAGE_ERROR     -1  /* Error detected                   */
 #define STAGE_INIT       0  /* Initial stage                    */
@@ -56,11 +55,6 @@ typedef struct remoteServer {
     localClient *client;
     cipher_ctx_t *d_ctx;
 } remoteServer;
-
-typedef struct method_select_request socks5AuthReq;
-typedef struct method_select_response socks5AuthResp;
-typedef struct socks5_request socks5Req;
-typedef struct socks5_response socks5Resp;
 
 void acceptHandler(event *e);
 void remoteServerReadHandler(event *e);
@@ -173,7 +167,7 @@ void remoteServerReadHandler(event *e) {
     balloc(&tmp_buf, NET_IOBUF_LEN);
 
     int readlen = NET_IOBUF_LEN;
-    int rfd = e->id;
+    int rfd = remote->fd;
     int nread = read(rfd, tmp_buf.data, readlen);
     tmp_buf.len = nread;
 
@@ -191,7 +185,7 @@ void remoteServerReadHandler(event *e) {
         goto error;
     }
 
-    int cfd = client->re->id;
+    int cfd = client->fd;
 
     int nwrite = write(cfd, tmp_buf.data, tmp_buf.len);
     if (nwrite != (int)tmp_buf.len) {
@@ -258,39 +252,6 @@ void handleSocks5Auth(localClient* client) {
 
 error:
     freeClient(client);
-}
-
-int parseSocks5Addr(char *addr_buf, int buf_len, int *atyp, char *host, int *host_len, int *port) {
-    int addr_type = *addr_buf++;
-    buf_len--;
-
-    if (atyp != NULL) *atyp = addr_type;
-
-    int addr_len;
-    if (addr_type == SOCKS5_ATYP_IPV4 || addr_type == SOCKS5_ATYP_IPV6) {
-        int is_v6 = addr_type == SOCKS5_ATYP_IPV6;
-        addr_len = !is_v6 ? sizeof(ipV4Addr) : sizeof(ipV6Addr);
-        if (buf_len < addr_len+2) return -1;
-
-        if (port)
-            *port = ntohs(*(uint16_t *)(addr_buf+addr_len));
-
-        if (host)
-            inet_ntop(!is_v6 ? AF_INET : AF_INET6, addr_buf, host, *host_len);
-    } else if (addr_type == SOCKS5_ATYP_DOMAIN) {
-        addr_len = *addr_buf++;
-        if (buf_len < 1+addr_len+2) return -1;
-
-        if (host)
-            memcpy(host, addr_buf, addr_len);
-    } else {
-        return -1;
-    }
-
-    if (host_len) *host_len = addr_len;
-    if (port) *port = ntohs(*(uint16_t *)(addr_buf+addr_len));
-
-    return 0;
 }
 
 /*
@@ -374,7 +335,7 @@ void handleSocks5Handshake(localClient* client) {
 
     char *addr_buf = buf+request_len-1;
     int buf_len = nread-request_len+1;
-    if (parseSocks5Addr(addr_buf, buf_len, &addr_type, addr, &addr_len, &port) == -1) {
+    if (socks5AddrParse(addr_buf, buf_len, &addr_type, addr, &addr_len, &port) == SOCKS5_ERR) {
         LOGW("Local client request error, long addrlen: %d or addrtype: %d", addr_len, addr_type);
         resp.rep = SOCKS5_REP_ADDRTYPE_NOT_SUPPORTED;
         write(cfd, &resp, sizeof(resp));
@@ -430,6 +391,7 @@ void handleSocks5Handshake(localClient* client) {
     anetDisableTcpNoDelay(err, client->fd);
     anetDisableTcpNoDelay(err, remote->fd);
     return;
+
 error:
     freeClient(client);
 }
@@ -437,7 +399,7 @@ error:
 void handleSocks5Stream(localClient *client) {
     remoteServer *remote = client->remote;
     int readlen = NET_IOBUF_LEN;
-    int cfd = client->re->id;
+    int cfd = client->fd;
     int nread;
     buffer_t tmp_buf = {0,0,0,NULL};
 

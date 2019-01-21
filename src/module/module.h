@@ -3,6 +3,7 @@
 #include "../core/config.h"
 #include "../core/utils.h"
 #include "../core/net.h"
+#include "../core/socks5.h"
 #include "../event/event.h"
 
 #include "crypto.h"

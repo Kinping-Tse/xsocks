@@ -1,7 +1,6 @@
 
 #include "module.h"
 
-#include "sds.h"
 #include "anet.h"
 
 /*
@@ -9,11 +8,20 @@ c: client lo: local r: remote
 lc: localClient rs: remoteServer
 ss: shadowsocks
 client                      local                    remote
+
+tcp:
 1. get addr by config
 2. ss req:                       rs enc(addr) --------->
 3. ss stream: (raw)------> lc enc(raw) -> rs  (enc_buf)-------->
 4. ss stream: <-----(raw) lc <- dec(enc_buf) rs <--------------(enc_buf)
 5. (3.4 loop).....
+
+udp:
+1. get addr by config
+2. udp: (raw) ---------> lc enc(addr+raw)->rc (enc_buf) --------->
+3. udp: <-------------(raw) lc <- dec(addr+raw) rc <-------------------(enc_buf)
+4. (2,3 loop)...
+
 */
 
 static module tunnel;
@@ -25,15 +33,19 @@ typedef struct localClient {
     event *re;
     sds buf;
     sds addr_buf;
-    struct remoteServer *remote;
+    // struct remoteServer *remote;
     cipher_ctx_t *e_ctx;
     char dest_addr_info[ADDR_INFO_STR_LEN];
+    sockAddrEx remote_server_sa;
 } localClient;
+
+static localClient *localTunnelServer;
 
 typedef struct remoteServer {
     int fd;
     event *re;
-    localClient *client;
+    // sockAddrEx local_client_sa;
+    // localClient *client;
     cipher_ctx_t *d_ctx;
 } remoteServer;
 
@@ -51,8 +63,12 @@ localClient *newClient(int fd) {
     client->fd = fd;
     client->re = re;
     // client->stage = STAGE_INIT;
-    client->addr_buf = NULL;
+    client->addr_buf = socks5AddrInit(NULL, app->config->tunnel_addr,
+                                      app->config->tunnel_port);
     client->buf = sdsempty();
+    client->buf = sdsMakeRoomFor(client->buf, NET_IOBUF_LEN);
+
+    netSockAddrExInit(&client->remote_server_sa);
 
     client->e_ctx = xs_calloc(sizeof(*client->e_ctx));
     app->crypto->ctx_init(app->crypto->cipher, client->e_ctx, 1);
@@ -77,13 +93,14 @@ remoteServer *newRemote(int fd) {
     remoteServer *remote = xs_calloc(sizeof(*remote));
 
     anetNonBlock(NULL, fd);
-    anetEnableTcpNoDelay(NULL, fd);
 
     event *re = eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_READ, remoteServerReadHandler, remote);
     eventAdd(app->el, re);
 
     remote->re = re;
     remote->fd = fd;
+
+    // netSockAddrExInit(&remote->local_client_sa);
 
     remote->d_ctx = xs_calloc(sizeof(*remote->d_ctx));
     app->crypto->ctx_init(app->crypto->cipher, remote->d_ctx, 0);
@@ -92,6 +109,8 @@ remoteServer *newRemote(int fd) {
 }
 
 void freeRemote(remoteServer *remote) {
+    if (!remote) return;
+
     eventDel(remote->re);
     eventFree(remote->re);
     close(remote->fd);
@@ -102,8 +121,54 @@ void freeRemote(remoteServer *remote) {
     xs_free(remote);
 }
 
+localClient *initUdpClient() {
+    char err[ANET_ERR_LEN];
+    char *host = app->config->local_addr;
+    int port = app->config->local_port;
+    int fd;
+
+    if (host && isIPv6Addr(host))
+        fd = netUdp6Server(err, port, host);
+    else
+        fd = netUdpServer(err, port, host);
+
+    if (fd == ANET_ERR) {
+        FATAL("Could not create local client UDP socket %s:%d: %s",
+              host ? host : "*", port, err);
+    }
+
+    localClient *client = newClient(fd);
+
+    if (netGetUdpSockAddr(err, app->config->remote_addr, app->config->remote_port,
+                         &client->remote_server_sa, 0) == NET_ERR) {
+        FATAL(err);
+    }
+
+    return client;
+}
+
+remoteServer *initUdpRemote() {
+    char err[ANET_ERR_LEN];
+    char *host = app->config->remote_addr;
+    int port = 0;
+    int fd;
+
+    if (host && isIPv6Addr(host))
+        fd = netUdp6Server(err, 0, NULL);
+    else
+        fd = netUdpServer(err, 0, NULL);
+
+    if (fd == ANET_ERR) {
+        FATAL("Could not create remote server UDP socket %s:%d: %s",
+              host, port, err);
+    }
+
+    return newRemote(fd);
+}
+
 static void initTunnel() {
     getLogger()->syslog_ident = "xs-tunnel";
+
 
     if (app->config->mode & MODE_TCP_ONLY) {
         LOGE("Only support UDP now!");
@@ -111,42 +176,108 @@ static void initTunnel() {
     }
 
     if (app->config->mode & MODE_UDP_ONLY) {
-        char err[ANET_ERR_LEN];
-        char *host = app->config->local_addr;
-        int port = app->config->local_port;
-        int fd;
-
-        if (host && strchr(host, ':'))
-            fd = netUdp6Server(err, port, host);
-        else
-            fd = netUdpServer(err, port, host);
-
-        if (fd == ANET_ERR) {
-            FATAL("Could not create UDP socket %s:%d: %s",
-                  host ? host : "*", port, err);
-        }
-
-        localClient *client = newClient(fd);
-        remoteServer *remote = newRemote(-1);
-        client->remote = remote;
-        remote->client = client;
+        localTunnelServer = initUdpClient();
     }
 }
 
 void remoteServerReadHandler(event *e) {
     remoteServer *remote = e->data;
-    UNUSED(remote);
+
+    buffer_t tmp_buf = {0,0,0,NULL};
+    balloc(&tmp_buf, NET_IOBUF_LEN);
+
+    int readlen = NET_IOBUF_LEN;
+    int rfd = remote->fd;
+    int nread = recvfrom(rfd, tmp_buf.data, readlen, 0, NULL, NULL);
+    tmp_buf.len = nread;
+    LOGD("Remote server UDP read %d", nread);
+    DUMP(tmp_buf.data, tmp_buf.len);
+    // if (nread == -1) {
+    //     if (errno == EAGAIN) goto end;
+
+    //     LOGW("Remote server [%s] read error: %s", client->dest_addr_info, strerror(errno));
+    //     goto error;
+    // } else if (nread == 0) {
+    //     LOGD("Remote server [%s] closed connection", client->dest_addr_info);
+    //     goto error;
+    // }
+    // if (local.crypto->decrypt(&tmp_buf, remote->d_ctx, NET_IOBUF_LEN)) {
+    //     LOGW("Remote server [%s] decrypt stream buffer error", client->dest_addr_info);
+    //     goto error;
+    // }
+
+    // int cfd = client->fd;
+
+    // int nwrite = write(cfd, tmp_buf.data, tmp_buf.len);
+    // if (nwrite != (int)tmp_buf.len) {
+    //     LOGW("Local client [%s] write error: %s", client->dest_addr_info, strerror(errno));
+    //     goto error;
+    // }
+
+    goto end;
+
+end:
+    bfree(&tmp_buf);
 }
 
 void localClientReadHandler(event *e) {
     localClient *client = e->data;
+    remoteServer *remote = NULL;
 
-    char buf[NET_IOBUF_LEN] = {0};
-    int nread = recvfrom(client->fd, buf, NET_IOBUF_LEN, 0, NULL, NULL);
+    int readlen = NET_IOBUF_LEN;
+    int cfd = client->fd;
+    int nread;
+    sds buf = sdsempty();
+    sockAddrEx src_addr;
+    buffer_t tmp_buf = {0,0,0,NULL};
 
-    LOGD("%d", nread);
+    netSockAddrExInit(&src_addr);
+    sdssetlen(client->buf, 0);
 
-    DUMP(buf, nread);
+    // Read local client buffer
+    nread = recvfrom(cfd, client->buf, readlen, 0, (sockAddr*)&src_addr.sa, &src_addr.sa_len);
+    if (nread == -1) {
+        LOGW("Local client UDP read error: %s", strerror(errno));
+        goto error;
+    }
+    sdsIncrLen(client->buf, nread);
+
+    char ip[256];
+    int port;
+    netIpPresentBySockAddr(NULL, ip, 256, &port, &src_addr);
+    LOGD("Local client [%s:%d] UDP read", ip, port);
+
+    // Append address buffer
+    buf = sdsdup(client->addr_buf);
+    buf = sdscatsds(buf, client->buf);
+
+    balloc(&tmp_buf, NET_IOBUF_LEN);
+    memcpy(tmp_buf.data, buf, sdslen(buf));
+    tmp_buf.len = sdslen(buf);
+
+    // Do buffer encrypt
+    if (app->crypto->encrypt_all(&tmp_buf, app->crypto->cipher, NET_IOBUF_LEN)) {
+        LOGW("Local client UDP encrypt buffer error");
+        goto error;
+    }
+
+    // Write to remote server
+    remote = initUdpRemote();
+    int rfd = remote->fd;
+    if (sendto(rfd, tmp_buf.data, tmp_buf.len, 0, (sockAddr *)&client->remote_server_sa.sa,
+               client->remote_server_sa.sa_len) == -1) {
+        LOGW("Remote server UDP send buffer error: %s", strerror(errno));
+        goto error;
+    }
+
+    goto end;
+
+error:
+    freeRemote(remote);
+
+end:
+    sdsfree(buf);
+    bfree(&tmp_buf);
 }
 
 int main(int argc, char *argv[]) {

@@ -7,7 +7,8 @@ enum {
     MODULE_TUNNEL,
 };
 
-void xs_usage(int module);
+#define XS_ERR_LEN 1024
+#define DUMP hexdump
 
 #define FATAL(...)          \
     do {                    \
@@ -20,8 +21,10 @@ void xs_usage(int module);
         LOGE("%s: %s", err, strerror(errno)); \
     } while (0)
 
+void xs_usage(int module);
 void hexdump(const void *memory, size_t bytes);
-
-#define DUMP hexdump
+char *xs_itoa(int i);
+void xs_error(char *err, const char *fmt, ...);
+int isIPv6Addr(char *ip);
 
 #endif /* __UTILS_H */
