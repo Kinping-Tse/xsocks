@@ -78,8 +78,10 @@ error:
 
 int socks5AddrParse(char *addr_buf, int buf_len, int *atyp,
                     char *host, int *host_len, int *port) {
+    int real_buf_len = 0;
     int addr_type = *addr_buf++;
     buf_len--;
+    real_buf_len++;
 
     if (atyp != NULL) *atyp = addr_type;
 
@@ -94,12 +96,16 @@ int socks5AddrParse(char *addr_buf, int buf_len, int *atyp,
 
         if (host)
             inet_ntop(!is_v6 ? AF_INET : AF_INET6, addr_buf, host, *host_len);
+
+        real_buf_len += addr_len + 2;
     } else if (addr_type == SOCKS5_ATYP_DOMAIN) {
         addr_len = *addr_buf++;
         if (buf_len < 1+addr_len+2) return SOCKS5_ERR;
 
         if (host)
             memcpy(host, addr_buf, addr_len);
+
+        real_buf_len += 1 + addr_len + 2;
     } else {
         return SOCKS5_ERR;
     }
@@ -107,5 +113,5 @@ int socks5AddrParse(char *addr_buf, int buf_len, int *atyp,
     if (host_len) *host_len = addr_len;
     if (port) *port = ntohs(*(uint16_t *)(addr_buf+addr_len));
 
-    return SOCKS5_OK;
+    return real_buf_len;
 }

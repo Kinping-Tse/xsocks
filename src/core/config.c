@@ -293,9 +293,7 @@ int configParse(xsocksConfig* config, int argc, char *argv[]) {
 
     char *tunnel_address = config->tunnel_address;
     char *tunnel_addr;
-    if (!tunnel_address || !(tunnel_addr = strrchr(tunnel_address, ':'))) {
-        err = "Error tunnel address";
-    } else {
+    if (tunnel_address && (tunnel_addr = strrchr(tunnel_address, ':'))) {
         config->tunnel_addr = strndup(tunnel_address, tunnel_addr-tunnel_address);
         config->tunnel_port = atoi(tunnel_addr+1);
     }
