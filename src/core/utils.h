@@ -1,12 +1,6 @@
 #ifndef __UTILS_H
 #define __UTILS_H
 
-enum {
-    MODULE_REMOTE = 0,
-    MODULE_LOCAL,
-    MODULE_TUNNEL,
-};
-
 #define XS_ERR_LEN 1024
 #define DUMP hexdump
 
@@ -21,7 +15,6 @@ enum {
         LOGE("%s: %s", err, strerror(errno)); \
     } while (0)
 
-void xs_usage(int module);
 void hexdump(const void *memory, size_t bytes);
 char *xs_itoa(int i);
 void xs_error(char *err, const char *fmt, ...);

@@ -29,7 +29,6 @@ static module *app = &tunnel;
 
 typedef struct localClient {
     int fd;
-    int stage;
     event *re;
     sds buf;
     sds addr_buf;
@@ -58,7 +57,6 @@ localClient *newClient(int fd) {
 
     client->fd = fd;
     client->re = re;
-    // client->stage = STAGE_INIT;
     client->addr_buf = socks5AddrInit(NULL, app->config->tunnel_addr,
                                       app->config->tunnel_port);
     client->buf = sdsempty();
@@ -152,7 +150,6 @@ remoteServer *initUdpRemote() {
 
 static void initTunnel() {
     getLogger()->syslog_ident = "xs-tunnel";
-
 
     if (app->config->mode & MODE_TCP_ONLY) {
         LOGE("Only support UDP now!");
