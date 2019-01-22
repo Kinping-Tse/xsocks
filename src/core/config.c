@@ -1,11 +1,10 @@
 
-#include "config.h"
 #include "common.h"
 #include "utils.h"
+#include "config.h"
 
-#include "json.h"
-#include "sds.h"
-
+#include "json-parser/json.h"
+#include "redis/sds.h"
 #include <getopt.h>
 
 typedef struct configEnum {

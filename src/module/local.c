@@ -1,8 +1,8 @@
 
 #include "module.h"
 
-#include "anet.h"
-#include "sds.h"
+#include "redis/anet.h"
+#include "redis/sds.h"
 
 #define STAGE_ERROR     -1  /* Error detected                   */
 #define STAGE_INIT       0  /* Initial stage                    */

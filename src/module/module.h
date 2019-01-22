@@ -6,7 +6,7 @@
 #include "../core/socks5.h"
 #include "../event/event.h"
 
-#include "crypto.h"
+#include "shadowsocks-libev/crypto.h"
 
 typedef struct moduleHook {
     void (*init)();

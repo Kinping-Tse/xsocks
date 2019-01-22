@@ -1,7 +1,7 @@
 #ifndef __XS_EVENT_AE_H
 #define __XS_EVENT_AE_H
 
-#include "ae.h"
+#include "redis/ae.h"
 
 typedef struct eventLoopContext {
     aeEventLoop *el;

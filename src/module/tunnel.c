@@ -1,7 +1,7 @@
 
 #include "module.h"
 
-#include "anet.h"
+#include "redis/anet.h"
 
 /*
 c: client lo: local r: remote

@@ -1,7 +1,7 @@
 #ifndef __XSALLOC_H
 #define __XSALLOC_H
 
-#include "zmalloc.h"
+#include "redis/zmalloc.h"
 
 #define xs_malloc zmalloc
 #define xs_calloc zcalloc

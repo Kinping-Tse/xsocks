@@ -1,7 +1,7 @@
 #include "common.h"
 #include "net.h"
 
-#include "anet.h"
+#include "redis/anet.h"
 #include <stdarg.h>
 
 static void anetSetError(char *err, const char *fmt, ...) {

@@ -1,10 +1,8 @@
 
 #include "common.h"
 #include "net.h"
-#include "socks5.h"
 #include "utils.h"
-
-#include "sds.h"
+#include "socks5.h"
 
 int socks5HostParse(char *host) {
     if (strchr(host, ':')) {

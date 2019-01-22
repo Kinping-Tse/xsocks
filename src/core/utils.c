@@ -1,11 +1,10 @@
 
-#include <stdarg.h>
-#include <ctype.h>
-
 #include "common.h"
 #include "version.h"
-
 #include "utils.h"
+
+#include <stdarg.h>
+#include <ctype.h>
 
 #define eprintf(...) fprintf(stderr, __VA_ARGS__)
 
@@ -20,8 +19,8 @@ void xs_usage(int module) {
         case MODULE_REMOTE: eprintf("    xs-server\n"); break;
         case MODULE_TUNNEL: eprintf("    xs-tunnel\n"); break;
         default:
-            // eprintf("    ss-redir\n");
-            // eprintf("    ss-manager\n");
+            // eprintf("    xs-redir\n");
+            // eprintf("    xs-manager\n");
             break;
 
     }
@@ -68,10 +67,11 @@ void xs_usage(int module) {
     // eprintf("       [-6]                       Resovle hostname to IPv6 address first.\n");
 #endif
     eprintf("\n");
-#ifdef MODULE_REMOTE
-    // eprintf("       [-d <addr>]                Name servers for internal DNS resolver.\n");
-#endif
-    eprintf("       [--reuse-port]             Enable port reuse.\n");
+    if (module == MODULE_REMOTE)
+        eprintf(
+            "       [-d <addr>]                Name servers for internal DNS resolver.\n");
+
+    // eprintf("       [--reuse-port]             Enable port reuse.\n");
 #if defined(MODULE_REMOTE) || defined(MODULE_LOCAL) || defined(MODULE_REDIR)
     // eprintf("       [--fast-open]              Enable TCP fast open.\n");
     // eprintf("                                  with Linux kernel > 3.7.0.\n");

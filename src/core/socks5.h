@@ -1,6 +1,6 @@
 
-#include <socks5.h>
-#include <sds.h>
+#include "shadowsocks-libev/socks5.h"
+#include "redis/sds.h"
 
 enum {
     SOCKS5_OK = 0,

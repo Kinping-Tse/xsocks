@@ -1,6 +1,8 @@
 #ifndef __XS_COMMON_H
 #define __XS_COMMON_H
 
+#include "fmacros.h"
+
 #include <assert.h>
 #include <errno.h>
 #include <limits.h>
@@ -10,7 +12,6 @@
 #include <strings.h>
 #include <unistd.h>
 
-#include "fmacros.h"
 #include "logger.h"
 #include "xsalloc.h"
 

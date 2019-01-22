@@ -2,7 +2,7 @@
 #ifndef __XS_EVENT_LIBEV_H
 #define __XS_EVENT_LIBEV_H
 
-#include "ev.h"
+#include "libev/ev.h"
 
 typedef struct eventLoopContext {
     struct ev_loop *el;
