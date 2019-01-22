@@ -42,8 +42,8 @@ endif
 
 -include .make-settings
 
-EXT_CFLAGS = -I$(DEPS_PATH)
-EXT_LDFLAGS =
+EXT_CFLAGS = -I$(DEPS_PATH) -I$(BUILD_DEPS_PATH)/libsodium/.libsodium/include -I$(BUILD_DEPS_PATH)/mbedtls/include
+EXT_LDFLAGS = -L$(BUILD_DEPS_PATH)/libsodium/.libsodium/lib -L$(BUILD_DEPS_PATH)/mbedtls/lib
 EXT_LIBS = $(BUILD_DEPS_PATH)/libev/.libs/libev.a \
 	$(BUILD_DEPS_PATH)/redis/libredis.a \
 	$(BUILD_DEPS_PATH)/json-parser/libjsonparser.a \
