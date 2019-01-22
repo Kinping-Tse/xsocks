@@ -21,6 +21,11 @@ typedef struct sockaddr_in sockAddrIpV4;
 typedef struct sockaddr_in6 sockAddrIpV6;
 typedef struct addrinfo addrInfo;
 
+typedef struct sockAddrEx {
+    sockAddrStorage sa;
+    socklen_t sa_len;
+} sockAddrEx;
+
 enum {
     NET_OK = 0,
     NET_ERR = -1
@@ -29,9 +34,10 @@ enum {
 int netUdpServer(char *err, int port, char *bindaddr);
 int netUdp6Server(char *err, int port, char *bindaddr);
 
-int netIpPresentBySockAddr(char *err, char *ip, int ip_len, int *port, sockAddrStorage* ss);
+void netSockAddrExInit(sockAddrEx* sa);
+int netIpPresentBySockAddr(char *err, char *ip, int ip_len, int *port, sockAddrEx* sae);
 int netIpPresentByIpAddr(char *err, char *ip, int ip_len, void* addr, int is_v6);
 
-int netGetUdpSockAddr(char *err, char *host, int port, sockAddrStorage *ss, int v6_first);
+int netGetUdpSockAddr(char *err, char *host, int port, sockAddrEx *sa, int v6_first);
 
 #endif /* __NET_H */

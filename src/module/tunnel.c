@@ -33,7 +33,7 @@ typedef struct localClient {
     event *re;
     sds buf;
     sds addr_buf;
-    sockAddrStorage remote_server_sa;
+    sockAddrEx remote_server_sa;
 } localClient;
 
 static localClient *localTunnelServer;
@@ -41,7 +41,7 @@ static localClient *localTunnelServer;
 typedef struct remoteServer {
     int fd;
     event *re;
-    sockAddrStorage local_client_sa;
+    sockAddrEx local_client_sa;
     localClient *client;
 } remoteServer;
 
@@ -63,6 +63,8 @@ localClient *newClient(int fd) {
                                       app->config->tunnel_port);
     client->buf = sdsempty();
     client->buf = sdsMakeRoomFor(client->buf, NET_IOBUF_LEN);
+
+    netSockAddrExInit(&client->remote_server_sa);
 
     return client;
 }
@@ -87,6 +89,8 @@ remoteServer *newRemote(int fd) {
 
     remote->re = re;
     remote->fd = fd;
+
+    netSockAddrExInit(&remote->local_client_sa);
 
     return remote;
 }
@@ -172,15 +176,15 @@ void remoteServerReadHandler(event *e) {
     buffer_t tmp_buf = {0,0,0,NULL};
     int readlen = NET_IOBUF_LEN;
     int rfd = remote->fd;
-    sockAddrStorage remote_addr = {0};
-    socklen_t remote_addr_len = sizeof(remote_addr);
+    sockAddrEx remote_addr;
     int nread;
 
     balloc(&tmp_buf, NET_IOBUF_LEN);
+    netSockAddrExInit(&remote_addr);
 
     // Read remote server buffer
     nread = recvfrom(rfd, tmp_buf.data, readlen, 0,
-                    (sockAddr*)&remote_addr, &remote_addr_len);
+                    (sockAddr *)&remote_addr.sa, &remote_addr.sa_len);
     if (nread == -1) {
         LOGW("Remote Server UDP read error: %s", strerror(errno));
         goto error;
@@ -209,7 +213,7 @@ void remoteServerReadHandler(event *e) {
     // Write to local client
     int cfd = client->fd;
     int nwrite = sendto(cfd, tmp_buf.data+addr_len, tmp_buf.len-addr_len, 0,
-                        (sockAddr *)&remote->local_client_sa, remote->local_client_sa.ss_len);
+                        (sockAddr *)&remote->local_client_sa.sa, remote->local_client_sa.sa_len);
     if (nwrite == -1) {
         LOGW("Local client UDP write error: %s", strerror(errno));
         goto error;
@@ -232,15 +236,15 @@ void localClientReadHandler(event *e) {
     int nread;
 
     sds buf = sdsempty();
-    sockAddrStorage src_addr = {0};
-    socklen_t src_addr_len = sizeof(src_addr);
+    sockAddrEx src_addr;
     buffer_t tmp_buf = {0,0,0,NULL};
 
+    netSockAddrExInit(&src_addr);
     sdssetlen(client->buf, 0);
 
     // Read local client buffer
     nread = recvfrom(cfd, client->buf, readlen, 0,
-                    (sockAddr *)&src_addr, &src_addr_len);
+                    (sockAddr *)&src_addr.sa, &src_addr.sa_len);
     if (nread == -1) {
         LOGW("Local client UDP read error: %s", strerror(errno));
         goto error;
@@ -272,8 +276,8 @@ void localClientReadHandler(event *e) {
     memcpy(&remote->local_client_sa, &src_addr, sizeof(src_addr));
 
     int rfd = remote->fd;
-    if (sendto(rfd, tmp_buf.data, tmp_buf.len, 0, (sockAddr *)&client->remote_server_sa,
-               client->remote_server_sa.ss_len) == -1) {
+    if (sendto(rfd, tmp_buf.data, tmp_buf.len, 0, (sockAddr *)&client->remote_server_sa.sa,
+               client->remote_server_sa.sa_len) == -1) {
         LOGW("Remote server UDP send buffer error: %s", strerror(errno));
         goto error;
     }
