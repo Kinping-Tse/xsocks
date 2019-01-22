@@ -10,6 +10,7 @@
 #include <strings.h>
 #include <unistd.h>
 
+#include "fmacros.h"
 #include "logger.h"
 #include "xsalloc.h"
 
