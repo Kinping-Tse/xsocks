@@ -88,21 +88,20 @@ int netUdp6Server(char *err, int port, char *bindaddr) {
     return _netUdpServer(err, port, bindaddr, AF_INET6);
 }
 
-void netSockAddrExInit(sockAddrEx* sa) {
-    socklen_t slen = sizeof(*sa);
-    bzero(sa, slen);
-    sa->sa_len = slen;
+void netSockAddrStorageInit(sockAddrStorage* ss) {
+    socklen_t slen = sizeof(*ss);
+    bzero(ss, slen);
+    ss->ss_len = slen;
 }
 
-int netIpPresentBySockAddr(char *err, char *ip, int ip_len, int *port, sockAddrEx* sae) {
-    sockAddrStorage *s = &sae->sa;
-    if (s->ss_family == AF_INET) {
-        sockAddrIpV4 *sa = (sockAddrIpV4*)s;
+int netIpPresentBySockAddr(char *err, char *ip, int ip_len, int *port, sockAddrStorage* ss) {
+    if (ss->ss_family == AF_INET) {
+        sockAddrIpV4 *sa = (sockAddrIpV4*)ss;
         if (ip && netIpPresentByIpAddr(err, ip, ip_len, (void*)&(sa->sin_addr), 0) == NET_ERR)
             return NET_ERR;
         if (port) *port = ntohs(sa->sin_port);
     } else {
-        sockAddrIpV6 *sa = (sockAddrIpV6*)s;
+        sockAddrIpV6 *sa = (sockAddrIpV6*)ss;
         if (ip && netIpPresentByIpAddr(err, ip, ip_len, (void*)&(sa->sin6_addr), 1) == NET_ERR)
             return NET_ERR;
         if (port) *port = ntohs(sa->sin6_port);
@@ -118,7 +117,7 @@ int netIpPresentByIpAddr(char *err, char *ip, int ip_len, void *addr, int is_v6)
     return NET_OK;
 }
 
-int netGetUdpSockAddr(char *err, char *host, int port, sockAddrEx *sa, int v6_first) {
+int netGetUdpSockAddr(char *err, char *host, int port, sockAddrStorage *ss, int v6_first) {
     int s = NET_OK, rv;
     char port_s[PORT_MAX_STR_LEN];
     addrInfo hints, *servinfo, *p;
@@ -138,13 +137,10 @@ int netGetUdpSockAddr(char *err, char *host, int port, sockAddrEx *sa, int v6_fi
     int prefer_af = v6_first ? AF_INET6 : AF_INET;
     for (p = servinfo; p != NULL; p = p->ai_next) {
         if (p->ai_family == prefer_af) {
-            if (p->ai_family == AF_INET) {
-                memcpy(&sa->sa, p->ai_addr, sizeof(sockAddrIpV4));
-                sa->sa_len = sizeof(sockAddrIpV4);
-            } else if (p->ai_family == AF_INET6) {
-                memcpy(&sa->sa, p->ai_addr, sizeof(sockAddrIpV6));
-                sa->sa_len = sizeof(sockAddrIpV6);
-            }
+            if (p->ai_family == AF_INET)
+                memcpy(ss, p->ai_addr, sizeof(sockAddrIpV4));
+            else if (p->ai_family == AF_INET6)
+                memcpy(ss, p->ai_addr, sizeof(sockAddrIpV6));
             break;
         }
 
@@ -153,13 +149,10 @@ int netGetUdpSockAddr(char *err, char *host, int port, sockAddrEx *sa, int v6_fi
 
     if (p == NULL) {
         for (p = servinfo; p != NULL; p = p->ai_next) {
-            if (p->ai_family == AF_INET) {
-                memcpy(&sa->sa, p->ai_addr, sizeof(sockAddrIpV4));
-                sa->sa_len = sizeof(sockAddrIpV4);
-            } else if (p->ai_family == AF_INET6) {
-                memcpy(&sa->sa, p->ai_addr, sizeof(sockAddrIpV6));
-                sa->sa_len = sizeof(sockAddrIpV6);
-            }
+            if (p->ai_family == AF_INET)
+                memcpy(ss, p->ai_addr, sizeof(sockAddrIpV4));
+            else if (p->ai_family == AF_INET6)
+                memcpy(ss, p->ai_addr, sizeof(sockAddrIpV6));
             break;
         }
     }

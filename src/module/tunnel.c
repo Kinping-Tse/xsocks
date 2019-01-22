@@ -33,10 +33,7 @@ typedef struct localClient {
     event *re;
     sds buf;
     sds addr_buf;
-    // struct remoteServer *remote;
-    // cipher_ctx_t *e_ctx;
-    // char dest_addr_info[ADDR_INFO_STR_LEN];
-    sockAddrEx remote_server_sa;
+    sockAddrStorage remote_server_sa;
 } localClient;
 
 static localClient *localTunnelServer;
@@ -44,9 +41,8 @@ static localClient *localTunnelServer;
 typedef struct remoteServer {
     int fd;
     event *re;
-    sockAddrEx local_client_sa;
+    sockAddrStorage local_client_sa;
     localClient *client;
-    // cipher_ctx_t *d_ctx;
 } remoteServer;
 
 void remoteServerReadHandler(event *e);
@@ -68,11 +64,6 @@ localClient *newClient(int fd) {
     client->buf = sdsempty();
     client->buf = sdsMakeRoomFor(client->buf, NET_IOBUF_LEN);
 
-    netSockAddrExInit(&client->remote_server_sa);
-
-    // client->e_ctx = xs_calloc(sizeof(*client->e_ctx));
-    // app->crypto->ctx_init(app->crypto->cipher, client->e_ctx, 1);
-
     return client;
 }
 
@@ -82,9 +73,6 @@ void freeClient(localClient *client) {
     eventDel(client->re);
     eventFree(client->re);
     close(client->fd);
-
-    // app->crypto->ctx_release(client->e_ctx);
-    // xs_free(client->e_ctx);
 
     xs_free(client);
 }
@@ -100,11 +88,6 @@ remoteServer *newRemote(int fd) {
     remote->re = re;
     remote->fd = fd;
 
-    netSockAddrExInit(&remote->local_client_sa);
-
-    // remote->d_ctx = xs_calloc(sizeof(*remote->d_ctx));
-    // app->crypto->ctx_init(app->crypto->cipher, remote->d_ctx, 0);
-
     return remote;
 }
 
@@ -114,9 +97,6 @@ void freeRemote(remoteServer *remote) {
     eventDel(remote->re);
     eventFree(remote->re);
     close(remote->fd);
-
-    // app->crypto->ctx_release(remote->d_ctx);
-    // xs_free(remote->d_ctx);
 
     xs_free(remote);
 }
@@ -190,39 +170,46 @@ void remoteServerReadHandler(event *e) {
     localClient *client = remote->client;
 
     buffer_t tmp_buf = {0,0,0,NULL};
-    balloc(&tmp_buf, NET_IOBUF_LEN);
-
     int readlen = NET_IOBUF_LEN;
     int rfd = remote->fd;
-    sockAddrEx remote_addr;
-    netSockAddrExInit(&remote_addr);
+    sockAddrStorage remote_addr = {0};
+    socklen_t remote_addr_len = sizeof(remote_addr);
+    int nread;
 
-    int nread = recvfrom(rfd, tmp_buf.data, readlen, 0, (sockAddr*)&remote_addr.sa, &remote_addr.sa_len);
+    balloc(&tmp_buf, NET_IOBUF_LEN);
+
+    // Read remote server buffer
+    nread = recvfrom(rfd, tmp_buf.data, readlen, 0,
+                    (sockAddr*)&remote_addr, &remote_addr_len);
     if (nread == -1) {
         LOGW("Remote Server UDP read error: %s", strerror(errno));
         goto error;
     }
     tmp_buf.len = nread;
 
-    char ip[256];
+    // Log remote server info
+    char ip[HOSTNAME_MAX_LEN];
     int port;
-    netIpPresentBySockAddr(NULL, ip, 256, &port, &remote_addr);
+    netIpPresentBySockAddr(NULL, ip, HOSTNAME_MAX_LEN, &port, &remote_addr);
     LOGD("Remote Server [%s:%d] UDP read", ip, port);
 
+    // Decrypt remote buffer
     if (app->crypto->decrypt_all(&tmp_buf, app->crypto->cipher, NET_IOBUF_LEN)) {
         LOGW("Remote server decrypt UDP buffer error");
         goto error;
     }
 
+    // Validate the buffer
     int addr_len = socks5AddrParse(tmp_buf.data, tmp_buf.len, NULL, NULL, NULL, NULL);
     if (addr_len == -1) {
         LOGW("Remote server parse UDP buffer error");
         goto error;
     }
 
+    // Write to local client
     int cfd = client->fd;
     int nwrite = sendto(cfd, tmp_buf.data+addr_len, tmp_buf.len-addr_len, 0,
-                        (sockAddr *)&remote->local_client_sa.sa, remote->local_client_sa.sa_len);
+                        (sockAddr *)&remote->local_client_sa, remote->local_client_sa.ss_len);
     if (nwrite == -1) {
         LOGW("Local client UDP write error: %s", strerror(errno));
         goto error;
@@ -243,24 +230,26 @@ void localClientReadHandler(event *e) {
     int readlen = NET_IOBUF_LEN;
     int cfd = client->fd;
     int nread;
+
     sds buf = sdsempty();
-    sockAddrEx src_addr;
+    sockAddrStorage src_addr = {0};
+    socklen_t src_addr_len = sizeof(src_addr);
     buffer_t tmp_buf = {0,0,0,NULL};
 
-    netSockAddrExInit(&src_addr);
     sdssetlen(client->buf, 0);
 
     // Read local client buffer
-    nread = recvfrom(cfd, client->buf, readlen, 0, (sockAddr*)&src_addr.sa, &src_addr.sa_len);
+    nread = recvfrom(cfd, client->buf, readlen, 0,
+                    (sockAddr *)&src_addr, &src_addr_len);
     if (nread == -1) {
         LOGW("Local client UDP read error: %s", strerror(errno));
         goto error;
     }
     sdsIncrLen(client->buf, nread);
 
-    char ip[256];
+    char ip[HOSTNAME_MAX_LEN];
     int port;
-    netIpPresentBySockAddr(NULL, ip, 256, &port, &src_addr);
+    netIpPresentBySockAddr(NULL, ip, HOSTNAME_MAX_LEN, &port, &src_addr);
     LOGD("Local client [%s:%d] UDP read", ip, port);
 
     // Append address buffer
@@ -283,8 +272,8 @@ void localClientReadHandler(event *e) {
     memcpy(&remote->local_client_sa, &src_addr, sizeof(src_addr));
 
     int rfd = remote->fd;
-    if (sendto(rfd, tmp_buf.data, tmp_buf.len, 0, (sockAddr *)&client->remote_server_sa.sa,
-               client->remote_server_sa.sa_len) == -1) {
+    if (sendto(rfd, tmp_buf.data, tmp_buf.len, 0, (sockAddr *)&client->remote_server_sa,
+               client->remote_server_sa.ss_len) == -1) {
         LOGW("Remote server UDP send buffer error: %s", strerror(errno));
         goto error;
     }
