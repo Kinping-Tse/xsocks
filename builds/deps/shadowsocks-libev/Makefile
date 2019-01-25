@@ -1,32 +1,37 @@
 
 BUILD_ROOT = ../..
 ROOT = $(BUILD_ROOT)/..
+BUILD_DEPS_PATH = $(BUILD_ROOT)/deps
 VPATH = $(ROOT)/deps/shadowsocks-libev
 
 include $(BUILD_ROOT)/common.mk
 
-WARN = -Wall -Wextra #-Wpedantic
-
 SRCS = $(wildcard $(VPATH)/*.c)
 OBJS = $(notdir $(SRCS:.c=.o))
-
 LIBNAME = libshadowsocks-libev
-
-EXT_CFLAGS = -fPIC $(ARCH) -I$(ROOT)/deps/libbloom -I$(BUILD_ROOT)/deps/mbedtls/include -I$(BUILD_ROOT)/deps/libsodium/.libsodium/include
-EXT_LDFLAGS = $(ARCH)
-
+DYLIBNAME = $(LIBNAME).$(DYLIB_SUFFIX)
 STLIBNAME = $(LIBNAME).$(STLIB_SUFFIX)
-STLIB_MAKE_CMD = $(AR) rcs $(STLIBNAME)
+
+LIBBLOOM_PATH = $(BUILD_DEPS_PATH)/libbloom/build
+MBEDTLS_PATH = $(BUILD_DEPS_PATH)/mbedtls
+LIBSODIUM_PATH = $(BUILD_DEPS_PATH)/libsodium/.libsodium
+
+WARN = -Wall -Wextra #-Wpedantic
+EXT_CFLAGS = -fPIC -I$(ROOT)/deps/libbloom -I$(MBEDTLS_PATH)/include -I$(LIBSODIUM_PATH)/include
+EXT_LDFLAGS = -shared -L$(LIBBLOOM_PATH) -L$(MBEDTLS_PATH)/lib -L$(LIBSODIUM_PATH)/lib
+EXT_LIBS += -lbloom -lmbedcrypto -lsodium
+ARFLAGS =
+EXT_ARFLAGS = -rcs
+
+all: dynamic static
+dynamic: $(DYLIBNAME)
+static: $(STLIBNAME)
 
 $(DYLIBNAME): $(OBJS)
-	$(DYLIB_MAKE_CMD) $(OBJS)
+	$(COMMON_LD) -o $@ $^ $(FINAL_LIBS)
 
 $(STLIBNAME): $(OBJS)
-	$(STLIB_MAKE_CMD) $(OBJS)
-
-dynamic: $(DYLIBNAME)
-
-static: $(STLIBNAME)
+	$(COMMON_AR) $@ $^
 
 %.o: %.c
 	$(COMMON_CC) -c $<
@@ -34,4 +39,4 @@ static: $(STLIBNAME)
 clean:
 	rm -rf $(DYLIBNAME) $(STLIBNAME) *.o
 
-.PHONY: clean
+.PHONY: all dynamic static clean

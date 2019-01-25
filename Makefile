@@ -2,4 +2,9 @@
 default: all
 
 .DEFAULT:
-	cd builds/src && $(MAKE) $(MKFLAGS) $@
+	$(MAKE) -C builds/src $(MKFLAGS) $@
+
+install:
+	$(MAKE) -C builds/src $@
+
+.PHONY: install

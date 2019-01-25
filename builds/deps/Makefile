@@ -1,65 +1,88 @@
 
 BUILD_ROOT = $(realpath ..)
 ROOT = $(BUILD_ROOT)/..
+DEPS_PATH = $(ROOT)/deps
+BUILD_DEPS_PATH = $(BUILD_ROOT)/deps
 
 include $(BUILD_ROOT)/common.mk
 
-LIBSODIUM_CONFIG_FILE = m4/argz.m4 m4/libtool.m4 m4/ltoptions.m4 m4/ltsugar.m4 m4/ltversion.m4 m4/lt~obsolete.m4 configure aclocal.m4 autom4te.cache build-aux
+LIBSODIUM_CONFIG_FILE = m4/argz.m4 m4/libtool.m4 m4/ltoptions.m4 m4/ltsugar.m4 m4/ltversion.m4 m4/lt~obsolete.m4 configure aclocal.m4 build-aux
+REDIS_DEPS =
 
-default:
-	@echo "Explicit target required"
+ifeq ($(MALLOC), jemalloc)
+	REDIS_DEPS += jemalloc
+endif
+
+# default:
+	# @echo "Explicit target required"
+
+default: all
+
+all: redis json-parser shadowsocks-libev
 
 libev:
 	$(QUIET_MAKE)
-	cd $@ && $(ROOT)/deps/libev/configure > /dev/null
-	cd $@ && $(MAKE) $(MFLAGS) &> /dev/null
+	cd $@ && $(DEPS_PATH)/$@/configure &> $@.configure.log
+	cd $@ && $(MAKE) $(MFLAGS) &> $@.make.log
 
-redis:
+JEMALLOC_VERSION := 5.1.0-0-g0
+
+jemalloc:
 	$(QUIET_MAKE)
-	cd $@ && $(MAKE) $(MFLAGS) static
+	cd $(DEPS_PATH)/$@ && autoconf -f
+	cd $@ && $(DEPS_PATH)/$@/configure --enable-autogen --with-version=$(JEMALLOC_VERSION) &> $@.configure.log
+	cd $@ && $(MAKE) $(MFLAGS) &> $@.make.log
+
+jemalloc-clean:
+	-(cd jemalloc && $(MAKE) relclean)
+	cd $(DEPS_PATH)/jemalloc && rm -rf configure
+
+redis: $(REDIS_DEPS)
+	$(QUIET_MAKE)
+	cd $@ && $(MAKE) $(MFLAGS)
 
 json-parser:
 	$(QUIET_MAKE)
-	cd $@ && $(ROOT)/deps/json-parser/configure > /dev/null
-	cd $@ && $(MAKE) $(MFLAGS) libjsonparser.a &> /dev/null
+	cd $@ && $(DEPS_PATH)/$@/configure > $@.configure.log
+	cd $@ && $(MAKE) $(MFLAGS) > $@.make.log
 
-shadowsocks-libev: libsodium mbedtls
+shadowsocks-libev: libsodium mbedtls libbloom
 	$(QUIET_MAKE)
-	cd $@ && $(MAKE) $(MFLAGS) static
+	cd $@ && $(MAKE) $(MFLAGS)
 
 libbloom:
 	$(QUIET_MAKE)
-	cd $(ROOT)/deps/$@ && $(MAKE) $(MFLAGS)
+	cd $@ && $(MAKE) -C $(DEPS_PATH)/$@ $(MFLAGS) > $@.make.log BUILD=$(BUILD_DEPS_PATH)/$@/build
 
 mbedtls:
 	$(QUIET_MAKE)
-	cd $(ROOT)/deps/$@ && $(MAKE) $(MFLAGS) lib
-	cd $(ROOT)/deps/$@ && $(MAKE) install DESTDIR=$(BUILD_ROOT)/deps/mbedtls
+	cd $@ && $(MAKE) -C $(DEPS_PATH)/$@ $(MFLAGS) lib > $@.make.log SHARED=1
+	cd $@ && $(MAKE) -C $(DEPS_PATH)/$@ install DESTDIR=$(BUILD_DEPS_PATH)/$@ >> $@.make.log
 
 mbedtls-clean:
-	cd $(ROOT)/deps/mbedtls && $(MAKE) clean
-	cd $(ROOT)/deps/mbedtls && $(MAKE) uninstall DESTDIR=$(BUILD_ROOT)/deps/mbedtls
+	$(MAKE) -C $(DEPS_PATH)/mbedtls clean
+	$(MAKE) -C $(DEPS_PATH)/mbedtls uninstall DESTDIR=$(BUILD_DEPS_PATH)/$@
 
 libsodium:
 	$(QUIET_MAKE)
-	cd $(ROOT)/deps/libsodium && sh autogen.sh &> /dev/null
-	cd $@ && $(ROOT)/deps/libsodium/configure --prefix=$(BUILD_ROOT)/deps/libsodium/.libsodium > /dev/null
-	cd $@ && $(MAKE) $(MFLAGS) && $(MAKE) install
+	cd $(DEPS_PATH)/$@ && sh autogen.sh &> $(BUILD_DEPS_PATH)/$@/$@.autotool.log
+	cd $@ && $(DEPS_PATH)/$@/configure --prefix=$(BUILD_DEPS_PATH)/$@/.$@ > $@.configure.log
+	cd $@ && $(MAKE) $(MFLAGS) > $@.make.log && $(MAKE) install >> $@.make.log
 
 libsodium-clean:
-	-(cd libsodium && $(MAKE) distclean && rm -rf .libsodium)
-	cd $(ROOT)/deps/libsodium && rm -rf $(LIBSODIUM_CONFIG_FILE)
-	find $(ROOT)/deps/libsodium -type f -name "Makefile.in" -exec rm -f {} \;
+	-(cd libsodium && $(MAKE) maintainer-clean && rm -rf .libsodium)
+	cd $(DEPS_PATH)/libsodium && rm -rf $(LIBSODIUM_CONFIG_FILE)
+	find $(DEPS_PATH)/libsodium -type f -name "Makefile.in" -exec rm -f {} \;
 
-clean: mbedtls-clean libsodium-clean
-	-(cd libev && $(MAKE) distclean)
+clean: jemalloc-clean mbedtls-clean libsodium-clean
+	-(cd libev && $(MAKE) maintainer-clean)
 	cd redis && $(MAKE) clean
 	-(cd json-parser && $(MAKE) distclean)
 	cd shadowsocks-libev && $(MAKE) clean
-	cd $(ROOT)/deps/libbloom && $(MAKE) clean
+	$(MAKE) -C $(DEPS_PATH)/libbloom clean BUILD=$(BUILD_DEPS_PATH)/libbloom/build
 
 distclean: clean
+	rm -rf */*.configure.log */*.make.log */*.autotool.log
 	rm -rf .make-*
 
-.PHONY: default clean distclean libev redis json-parser shadowsocks-libev \
-	libbloom libsodium libsodium-clean mbedtls mbedtls-clean
+.PHONY: default all clean distclean libev jemalloc jemalloc-clean redis json-parser shadowsocks-libev libbloom libsodium libsodium-clean mbedtls mbedtls-clean
