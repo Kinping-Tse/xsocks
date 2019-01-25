@@ -45,7 +45,7 @@ EXT_LIBS += $(REDIS_PATH)/libredis.a \
 	$(MBEDTLS_PATH)/lib/libmbedcrypto.a \
 	$(LIBSODIUM_PATH)/lib/libsodium.a
 	ifeq ($(MALLOC), jemalloc)
-		EXT_LIBS += $(JEMALLOC_PATH)/lib/libjemalloc.a
+		EXT_LIBS += $(JEMALLOC_PATH)/lib/libjemalloc.a -pthread -ldl
 	endif
 endif
 ifeq ($(LINK_MODE), shared)
@@ -139,12 +139,14 @@ install-lib:
 ifeq ($(LINK_MODE), shared)
 install-lib:
 	@mkdir -p $(INSTALL_LIB)
-	$(COMMON_INSTALL) $(BUILD_DEPS_PATH)/redis/libredis.dylib $(INSTALL_LIB)
-	$(COMMON_INSTALL) $(BUILD_DEPS_PATH)/libev/.libs/libev.dylib $(INSTALL_LIB)
-	$(COMMON_INSTALL) $(BUILD_DEPS_PATH)/json-parser/libjsonparser.dylib $(INSTALL_LIB)
-	$(COMMON_INSTALL) $(BUILD_DEPS_PATH)/shadowsocks-libev/libshadowsocks-libev.dylib $(INSTALL_LIB)
-	$(COMMON_INSTALL) $(BUILD_DEPS_PATH)/jemalloc/lib/libjemalloc.dylib $(INSTALL_LIB)
-	$(COMMON_INSTALL) $(BUILD_DEPS_PATH)/mbedtls/lib/libmbedcrypto.dylib $(INSTALL_LIB)
+	$(COMMON_INSTALL) $(JEMALLOC_PATH)/lib/libjemalloc.$(DYLIB_SUFFIX) $(INSTALL_LIB)
+	$(COMMON_INSTALL) $(LIBEV_PATH)/libev.$(DYLIB_SUFFIX) $(INSTALL_LIB)
+	$(COMMON_INSTALL) $(REDIS_PATH)/libredis.$(DYLIB_SUFFIX) $(INSTALL_LIB)
+	$(COMMON_INSTALL) $(SHADOWSOCKS_LIBEV_PATH)/libshadowsocks-libev.$(DYLIB_SUFFIX) $(INSTALL_LIB)
+	$(COMMON_INSTALL) $(JSONPARSER_PATH)/libjsonparser.$(DYLIB_SUFFIX) $(INSTALL_LIB)
+	$(COMMON_INSTALL) $(MBEDTLS_PATH)/mbedtls/lib/libmbedcrypto.$(DYLIB_SUFFIX) $(INSTALL_LIB)
+	$(COMMON_INSTALL) $(LIBBLOOM_PATH)/lib/libbloom.$(DYLIB_SUFFIX) $(INSTALL_LIB)
+	$(COMMON_INSTALL) $(LIBSODIUM_PATH)/lib/libsodium.$(DYLIB_SUFFIX) $(INSTALL_LIB)
 endif
 
 clean:
