@@ -26,17 +26,6 @@ COMMON_LD = $(QUIET_LINK) $(CC) $(FINAL_LDFLAGS)
 COMMON_AR = $(QUIET_AR) $(AR) $(FINAL_ARFLAGS)
 COMMON_INSTALL = $(QUIET_INSTALL) $(INSTALL)
 
-MALLOC = libc
-ifeq ($(USE_TCMALLOC), yes)
-	MALLOC = tcmalloc
-endif
-ifeq ($(USE_TCMALLOC_MINIMAL), yes)
-	MALLOC = tcmalloc_minimal
-endif
-ifeq ($(USE_JEMALLOC), yes)
-	MALLOC = jemalloc
-endif
-
 CCCOLOR = "\033[34m"
 LINKCOLOR = "\033[34;1m"
 ARCOLOR = "\033[34;1m"

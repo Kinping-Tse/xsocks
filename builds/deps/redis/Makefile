@@ -1,9 +1,9 @@
 
-BUILD_ROOT = ../..
-ROOT = $(BUILD_ROOT)/..
-VPATH = $(ROOT)/deps/redis
+ROOT = $(realpath ../../..)
+include $(ROOT)/builds/common.mk
+include $(ROOT)/builds/deps.mk
 
-include $(BUILD_ROOT)/common.mk
+VPATH = $(DEPS_PATH)/redis
 
 OBJS = anet.o zmalloc.o ae.o sds.o
 LIBNAME = libredis
@@ -16,8 +16,8 @@ ARFLAGS =
 EXT_ARFLAGS = -rcs
 
 ifeq ($(MALLOC), jemalloc)
-	EXT_CFLAGS += -DUSE_JEMALLOC -I$(BUILD_ROOT)/deps/jemalloc/include
-	EXT_LDFLAGS += -L$(BUILD_ROOT)/deps/jemalloc/lib
+	EXT_CFLAGS += -DUSE_JEMALLOC -I$(JEMALLOC_PATH)/include
+	EXT_LDFLAGS += -L$(JEMALLOC_PATH)/lib -Wl,-rpath,$(PREFIX)/lib,-rpath,$(JEMALLOC_PATH)/lib
 	EXT_LIBS += -ljemalloc
 endif
 

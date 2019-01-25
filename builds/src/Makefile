@@ -1,8 +1,8 @@
 
-BUILD_ROOT = ..
-ROOT = $(BUILD_ROOT)/..
-DEPS_PATH = $(ROOT)/deps
-BUILD_DEPS_PATH = $(BUILD_ROOT)/deps
+ROOT = $(realpath ../..)
+include $(ROOT)/builds/common.mk
+include $(ROOT)/builds/deps.mk
+
 SRC_ROOT = $(ROOT)/src
 VPATH = $(SRC_ROOT)/core:$(SRC_ROOT)/event:$(SRC_ROOT)/module
 
@@ -33,38 +33,40 @@ endif
 
 -include .make-settings
 
-EXT_CFLAGS = -I$(DEPS_PATH) -I$(BUILD_DEPS_PATH)/libsodium/.libsodium/include -I$(BUILD_DEPS_PATH)/mbedtls/include
+EXT_CFLAGS = -I$(DEPS_PATH) -I$(LIBSODIUM_PATH)/include -I$(MBEDTLS_PATH)/include
+EXT_LDFLAGS =
+EXT_LIBS = -lm
+
 ifeq ($(LINK_MODE), static)
-EXT_LIBS = $(BUILD_DEPS_PATH)/redis/libredis.a \
-	$(BUILD_DEPS_PATH)/json-parser/libjsonparser.a \
-	$(BUILD_DEPS_PATH)/shadowsocks-libev/libshadowsocks-libev.a \
-	$(BUILD_DEPS_PATH)/libbloom/build/libbloom.a \
-	$(BUILD_DEPS_PATH)/mbedtls/lib/libmbedcrypto.a \
-	$(BUILD_DEPS_PATH)/libsodium/.libsodium/lib/libsodium.a
+EXT_LIBS += $(REDIS_PATH)/libredis.a \
+	$(SHADOWSOCKS_LIBEV_PATH)/libshadowsocks-libev.a \
+	$(JSONPARSER_PATH)/lib/libjsonparser.a \
+	$(LIBBLOOM_PATH)/libbloom.a \
+	$(MBEDTLS_PATH)/lib/libmbedcrypto.a \
+	$(LIBSODIUM_PATH)/lib/libsodium.a
 	ifeq ($(MALLOC), jemalloc)
-		EXT_LIBS += $(BUILD_DEPS_PATH)/jemalloc/lib/libjemalloc.a
+		EXT_LIBS += $(JEMALLOC_PATH)/lib/libjemalloc.a
 	endif
 endif
 ifeq ($(LINK_MODE), shared)
-EXT_LDFLAGS = -L$(BUILD_DEPS_PATH)/redis \
-	-L$(BUILD_DEPS_PATH)/json-parser \
-	-L$(BUILD_DEPS_PATH)/shadowsocks-libev \
-	-L$(BUILD_DEPS_PATH)/redis \
-	-Xlinker -rpath -Xlinker /Users/xjp/unix/src/github.com/Kinping-Tse/xsocks/builds/deps/redis
-EXT_LIBS = -lredis -ljsonparser -lshadowsocks-libev
+EXT_LDFLAGS += -L$(REDIS_PATH) \
+	-L$(SHADOWSOCKS_LIBEV_PATH) \
+	-L$(JSONPARSER_PATH)/lib \
+	-Wl,-rpath,$(PREFIX)/lib,-rpath,$(REDIS_PATH),-rpath,$(SHADOWSOCKS_LIBEV_PATH),-rpath,$(JSONPARSER_PATH)/lib
+EXT_LIBS += -lredis -ljsonparser -lshadowsocks-libev
 endif
 
 ifeq ($(EVENT), ae)
 	EXT_CFLAGS += -DUSE_AE
 endif
 ifeq ($(EVENT), libev)
-	EXT_CFLAGS += -DUSE_LIBEV
+	EXT_CFLAGS += -DUSE_LIBEV -Wno-strict-aliasing
 	DEPENDENCY_TARGETS += libev
 	ifeq ($(LINK_MODE), static)
-		EXT_LIBS += $(BUILD_DEPS_PATH)/libev/.libs/libev.a
+		EXT_LIBS += $(LIBEV_PATH)/libev.a
 	endif
 	ifeq ($(LINK_MODE), shared)
-		EXT_LDFLAGS += -L$(BUILD_DEPS_PATH)/libev/.libs
+		EXT_LDFLAGS += -L$(LIBEV_PATH)
 		EXT_LIBS += -lev
 	endif
 endif
@@ -149,7 +151,7 @@ clean:
 	rm -rf $(XSOCKS_MODULE_EXE) *.o Makefile.dep
 
 distclean: clean
-	cd $(BUILD_ROOT)/deps && $(MAKE) distclean
+	cd $(BUILD_ROOT)/deps && $(MAKE) distclean &> /dev/null
 	rm -rf .make-*
 
 .PHONY: all install install-lib clean distclean persist-settings
