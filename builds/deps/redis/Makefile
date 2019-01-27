@@ -17,16 +17,25 @@ EXT_ARFLAGS = -rcs
 
 ifeq ($(MALLOC), jemalloc)
 	EXT_CFLAGS += -DUSE_JEMALLOC -I$(JEMALLOC_PATH)/include
-	EXT_LDFLAGS += -L$(JEMALLOC_PATH)/lib -Wl,-rpath,$(PREFIX)/lib,-rpath,$(JEMALLOC_PATH)/lib
+	EXT_LDFLAGS += -L$(JEMALLOC_PATH)/lib #-Wl,-rpath,$(PREFIX)/lib,-rpath,$(JEMALLOC_PATH)/lib
 	EXT_LIBS += -ljemalloc
+endif
+
+DYLIB_MAKE_CMD = $(COMMON_LD)
+ifeq ($(uname_S), Darwin)
+DYLIB_MAKE_CMD = $(COMMON_LD) -Wl,-install_name,$(PREFIX)/lib/$(DYLIBNAME)
 endif
 
 all: dynamic static
 dynamic: $(DYLIBNAME)
 static: $(STLIBNAME)
 
+install-shared: $(DYLIBNAME)
+	$(COMMON_INSTALL) -d $(INSTALL_LIB)
+	$(COMMON_INSTALL) -m 755 $(DYLIBNAME) $(INSTALL_LIB)
+
 $(DYLIBNAME): $(OBJS)
-	$(COMMON_LD) -o $@ $^ $(FINAL_LIBS)
+	$(DYLIB_MAKE_CMD) -o $@ $^ $(FINAL_LIBS)
 
 $(STLIBNAME): $(OBJS)
 	$(COMMON_AR) $@ $^
@@ -37,4 +46,4 @@ $(STLIBNAME): $(OBJS)
 clean:
 	rm -rf $(DYLIBNAME) $(STLIBNAME) *.o
 
-.PHONY: all dynamic static clean
+.PHONY: all install-shared dynamic static clean

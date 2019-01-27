@@ -8,11 +8,6 @@ VPATH = $(SRC_ROOT)/core:$(SRC_ROOT)/event:$(SRC_ROOT)/module
 
 include $(BUILD_ROOT)/common.mk
 
-PREFIX ?= $(ROOT)/tmp
-INSTALL_BIN = $(PREFIX)/bin
-INSTALL_LIB = $(PREFIX)/lib
-INSTALL_ETC = $(PREFIX)/etc
-
 SRCS = $(wildcard $(SRC_ROOT)/core/*.c $(SRC_ROOT)/event/*.c)
 OBJS = $(notdir $(SRCS:.c=.o)) module.o
 
@@ -33,26 +28,26 @@ endif
 
 -include .make-settings
 
-EXT_CFLAGS = -I$(DEPS_PATH) -I$(LIBSODIUM_PATH)/include -I$(MBEDTLS_PATH)/include
+EXT_CFLAGS = -I$(DEPS_PATH) $(LIBSODIUM_HEADER_CFLAGS) -I$(MBEDTLS_PATH)/include
 EXT_LDFLAGS =
 EXT_LIBS = -lm
 
 ifeq ($(LINK_MODE), static)
 EXT_LIBS += $(REDIS_PATH)/libredis.a \
 	$(SHADOWSOCKS_LIBEV_PATH)/libshadowsocks-libev.a \
-	$(JSONPARSER_PATH)/lib/libjsonparser.a \
+	$(JSONPARSER_PATH)/libjsonparser.a \
 	$(LIBBLOOM_PATH)/libbloom.a \
-	$(MBEDTLS_PATH)/lib/libmbedcrypto.a \
-	$(LIBSODIUM_PATH)/lib/libsodium.a
+	$(MBEDTLS_PATH)/library/libmbedcrypto.a \
+	$(LIBSODIUM_PATH)/.libs/libsodium.a
 	ifeq ($(MALLOC), jemalloc)
-		EXT_LIBS += $(JEMALLOC_PATH)/lib/libjemalloc.a -pthread -ldl
+		EXT_LIBS += $(JEMALLOC_PATH)/lib/libjemalloc.a #-pthread -ldl
 	endif
 endif
 ifeq ($(LINK_MODE), shared)
 EXT_LDFLAGS += -L$(REDIS_PATH) \
 	-L$(SHADOWSOCKS_LIBEV_PATH) \
-	-L$(JSONPARSER_PATH)/lib \
-	-Wl,-rpath,$(PREFIX)/lib,-rpath,$(REDIS_PATH),-rpath,$(SHADOWSOCKS_LIBEV_PATH),-rpath,$(JSONPARSER_PATH)/lib
+	-L$(JSONPARSER_PATH)
+	#-Wl,-rpath,$(PREFIX)/lib,-rpath,$(REDIS_PATH),-rpath,$(SHADOWSOCKS_LIBEV_PATH),-rpath,$(JSONPARSER_PATH)
 EXT_LIBS += -lredis -ljsonparser -lshadowsocks-libev
 endif
 
@@ -63,10 +58,10 @@ ifeq ($(EVENT), libev)
 	EXT_CFLAGS += -DUSE_LIBEV -Wno-strict-aliasing
 	DEPENDENCY_TARGETS += libev
 	ifeq ($(LINK_MODE), static)
-		EXT_LIBS += $(LIBEV_PATH)/libev.a
+		EXT_LIBS += $(LIBEV_PATH)/.libs/libev.a
 	endif
 	ifeq ($(LINK_MODE), shared)
-		EXT_LDFLAGS += -L$(LIBEV_PATH)
+		EXT_LDFLAGS += -L$(LIBEV_PATH)/.libs
 		EXT_LIBS += -lev
 	endif
 endif
@@ -87,21 +82,23 @@ ifeq (0, $(words $(findstring $(MAKECMDGOALS), "clean distclean")))
 endif
 
 Makefile.dep:
-	$(COMMON_CC) -MM $(SRC_ROOT)/*/*.c > Makefile.dep
+	$(COMMON_CC) -MM $(SRC_ROOT)/*/*.c > Makefile.dep 2> /dev/null
 
 persist-settings: distclean
-	echo STD=$(STD) >> .make-settings
-	echo WARN=$(WARN) >> .make-settings
-	echo OPT=$(OPT) >> .make-settings
-	echo MALLOC=$(MALLOC) >> .make-settings
-	echo EVENT=$(EVENT) >> .make-settings
-	echo CFLAGS=$(CFLAGS) >> .make-settings
-	echo LDFLAGS=$(LDFLAGS) >> .make-settings
-	echo EXT_CFLAGS=$(EXT_CFLAGS) >> .make-settings
-	echo EXT_LDFLAGS=$(EXT_LDFLAGS) >> .make-settings
-	echo PREV_FINAL_CFLAGS=$(FINAL_CFLAGS) >> .make-settings
-	echo PREV_FINAL_LDFLAGS=$(FINAL_LDFLAGS) >> .make-settings
-	echo LINK_MODE=$(LINK_MODE) >> .make-settings
+	@echo "Set env to .make-settings"
+	@echo STD=$(STD) >> .make-settings
+	@echo WARN=$(WARN) >> .make-settings
+	@echo OPT=$(OPT) >> .make-settings
+	@echo MALLOC=$(MALLOC) >> .make-settings
+	@echo EVENT=$(EVENT) >> .make-settings
+	@echo CFLAGS=$(CFLAGS) >> .make-settings
+	@echo LDFLAGS=$(LDFLAGS) >> .make-settings
+	@echo EXT_CFLAGS=$(EXT_CFLAGS) >> .make-settings
+	@echo EXT_LDFLAGS=$(EXT_LDFLAGS) >> .make-settings
+	@echo PREV_FINAL_CFLAGS=$(FINAL_CFLAGS) >> .make-settings
+	@echo PREV_FINAL_LDFLAGS=$(FINAL_LDFLAGS) >> .make-settings
+	@echo LINK_MODE=$(LINK_MODE) >> .make-settings
+	@echo PREFIX=$(PREFIX) >> .make-settings
 	cd $(BUILD_ROOT)/deps && $(MAKE) $(MFLAGS) $(DEPENDENCY_TARGETS)
 
 .make-prerequisites:
@@ -139,14 +136,7 @@ install-lib:
 ifeq ($(LINK_MODE), shared)
 install-lib:
 	@mkdir -p $(INSTALL_LIB)
-	$(COMMON_INSTALL) $(JEMALLOC_PATH)/lib/libjemalloc.$(DYLIB_SUFFIX) $(INSTALL_LIB)
-	$(COMMON_INSTALL) $(LIBEV_PATH)/libev.$(DYLIB_SUFFIX) $(INSTALL_LIB)
-	$(COMMON_INSTALL) $(REDIS_PATH)/libredis.$(DYLIB_SUFFIX) $(INSTALL_LIB)
-	$(COMMON_INSTALL) $(SHADOWSOCKS_LIBEV_PATH)/libshadowsocks-libev.$(DYLIB_SUFFIX) $(INSTALL_LIB)
-	$(COMMON_INSTALL) $(JSONPARSER_PATH)/libjsonparser.$(DYLIB_SUFFIX) $(INSTALL_LIB)
-	$(COMMON_INSTALL) $(MBEDTLS_PATH)/mbedtls/lib/libmbedcrypto.$(DYLIB_SUFFIX) $(INSTALL_LIB)
-	$(COMMON_INSTALL) $(LIBBLOOM_PATH)/lib/libbloom.$(DYLIB_SUFFIX) $(INSTALL_LIB)
-	$(COMMON_INSTALL) $(LIBSODIUM_PATH)/lib/libsodium.$(DYLIB_SUFFIX) $(INSTALL_LIB)
+	$(MAKE) -C $(BUILD_DEPS_PATH) install-shared
 endif
 
 clean:
