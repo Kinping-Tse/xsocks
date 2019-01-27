@@ -11,9 +11,9 @@ LIBNAME = libshadowsocks-libev
 DYLIBNAME = $(LIBNAME).$(DYLIB_SUFFIX)
 STLIBNAME = $(LIBNAME).$(STLIB_SUFFIX)
 
-WARN = -Wall -Wextra #-Wpedantic
+WARN = -Wall -Wextra #-pedantic
 EXT_CFLAGS = -fPIC -I$(DEPS_PATH)/libbloom -I$(MBEDTLS_PATH)/include $(LIBSODIUM_HEADER_CFLAGS)
-EXT_LDFLAGS = -shared -L$(LIBBLOOM_PATH) -L$(MBEDTLS_PATH)/library -L$(LIBSODIUM_PATH)/.libs #-Wl,-rpath,$(PREFIX)/lib,-rpath,$(LIBBLOOM_PATH),-rpath,$(MBEDTLS_PATH)/lib,-rpath,$(LIBSODIUM_PATH)/lib
+EXT_LDFLAGS = -shared -L$(LIBBLOOM_PATH) -L$(MBEDTLS_PATH)/library -L$(LIBSODIUM_PATH)/.libs
 EXT_LIBS += -lbloom -lmbedcrypto -lsodium
 ARFLAGS =
 EXT_ARFLAGS = -rcs

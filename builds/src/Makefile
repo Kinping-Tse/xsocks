@@ -40,14 +40,19 @@ EXT_LIBS += $(REDIS_PATH)/libredis.a \
 	$(MBEDTLS_PATH)/library/libmbedcrypto.a \
 	$(LIBSODIUM_PATH)/.libs/libsodium.a
 	ifeq ($(MALLOC), jemalloc)
-		EXT_LIBS += $(JEMALLOC_PATH)/lib/libjemalloc.a #-pthread -ldl
+		EXT_LIBS += $(JEMALLOC_PATH)/lib/libjemalloc.a
+		ifeq ($(uname_S), Linux)
+		EXT_LIBS += -pthread -ldl -lrt
+		endif
 	endif
 endif
 ifeq ($(LINK_MODE), shared)
 EXT_LDFLAGS += -L$(REDIS_PATH) \
 	-L$(SHADOWSOCKS_LIBEV_PATH) \
 	-L$(JSONPARSER_PATH)
-	#-Wl,-rpath,$(PREFIX)/lib,-rpath,$(REDIS_PATH),-rpath,$(SHADOWSOCKS_LIBEV_PATH),-rpath,$(JSONPARSER_PATH)
+	ifeq ($(uname_S), Linux)
+	EXT_LDFLAGS += -Wl,-rpath,$(INSTALL_LIB),-rpath,$(JEMALLOC_PATH)/lib,-rpath,$(LIBBLOOM_PATH),-rpath,$(MBEDTLS_PATH)/library,-rpath,$(LIBSODIUM_PATH)/.libs
+	endif
 EXT_LIBS += -lredis -ljsonparser -lshadowsocks-libev
 endif
 

@@ -17,7 +17,7 @@ EXT_ARFLAGS = -rcs
 
 ifeq ($(MALLOC), jemalloc)
 	EXT_CFLAGS += -DUSE_JEMALLOC -I$(JEMALLOC_PATH)/include
-	EXT_LDFLAGS += -L$(JEMALLOC_PATH)/lib #-Wl,-rpath,$(PREFIX)/lib,-rpath,$(JEMALLOC_PATH)/lib
+	EXT_LDFLAGS += -L$(JEMALLOC_PATH)/lib
 	EXT_LIBS += -ljemalloc
 endif
 
