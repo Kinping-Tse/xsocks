@@ -90,7 +90,7 @@ Makefile.dep:
 	$(COMMON_CC) -MM $(SRC_ROOT)/*/*.c > Makefile.dep 2> /dev/null
 
 persist-settings: distclean
-	@echo "Set env to .make-settings"
+	@printf "Set env to to %b\n" $(COLOR_INFO)$(BUILD_ROOT)/src/.make-settings$(ENDCOLOR)
 	@echo STD=$(STD) >> .make-settings
 	@echo WARN=$(WARN) >> .make-settings
 	@echo OPT=$(OPT) >> .make-settings
@@ -135,6 +135,7 @@ install: all install-lib
 	@mkdir -p $(INSTALL_BIN) $(INSTALL_ETC)
 	$(COMMON_INSTALL) $(XSOCKS_MODULE_EXE) $(INSTALL_BIN)
 	$(COMMON_INSTALL) $(ROOT)/config.json $(INSTALL_ETC)
+	@printf "\nInstall to %b\n\n" $(COLOR_INFO)$(PREFIX)$(ENDCOLOR)
 
 install-lib:
 
