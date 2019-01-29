@@ -289,8 +289,12 @@ end:
     bfree(&tmp_buf);
 }
 
+static void runTunnel() {
+    LOGI("Start tunnel: %s:%d", app->config->tunnel_addr, app->config->tunnel_port);
+}
+
 int main(int argc, char *argv[]) {
-    moduleHook hook = {initTunnel, NULL, NULL};
+    moduleHook hook = {initTunnel, runTunnel, NULL};
 
     moduleInit(MODULE_TUNNEL, hook, &tunnel, argc, argv);
     moduleRun();

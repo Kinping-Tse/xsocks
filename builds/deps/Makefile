@@ -104,6 +104,7 @@ install-shared:
 	$(MAKE) -C libsodium install-exec >> deps.install.log 2>&1
 	$(MAKE) -C $(DEPS_PATH)/mbedtls install DESTDIR=$(PREFIX) PREFIX=mbedtls_ >> deps.install.log 2>&1
 	$(COMMON_INSTALL) $(LIBBLOOM_PATH)/libbloom.$(DYLIB_SUFFIX) $(INSTALL_LIB)
-	rm -rf $(INSTALL_LIB)/*.a $(INSTALL_LIB)/*.la $(INSTALL_INC) $(INSTALL_DATA) $(INSTALL_BIN)/mbedtls_*
+	rm -rf $(INSTALL_LIB)/*.a $(INSTALL_LIB)/*.la $(INSTALL_INC) $(INSTALL_DATA)
+	rm -rf $(INSTALL_BIN)/mbedtls_* $(INSTALL_LIB)/libmbedx509* $(INSTALL_LIB)/libmbedtls*
 
 .PHONY: default all clean distclean install install-shared libev jemalloc jemalloc-clean redis json-parser shadowsocks-libev libbloom libsodium libsodium-clean mbedtls mbedtls-clean

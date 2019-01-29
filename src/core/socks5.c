@@ -4,7 +4,7 @@
 #include "utils.h"
 #include "socks5.h"
 
-int socks5HostParse(char *host) {
+static int socks5HostParse(char *host) {
     if (strchr(host, ':')) {
         return SOCKS5_ATYP_IPV6;
     } else {
@@ -31,7 +31,6 @@ int socks5HostParse(char *host) {
  *    |  1   | Variable |    2     |
  *    +------+----------+----------+
  */
-
 sds socks5AddrInit(char *err, char *host, int port) {
     sds addr = sdsempty();
     int addr_type = socks5HostParse(host);
@@ -92,8 +91,10 @@ int socks5AddrParse(char *addr_buf, int buf_len, int *atyp,
         if (port)
             *port = ntohs(*(uint16_t *)(addr_buf+addr_len));
 
-        if (host)
+        if (host) {
+            assert(host_len);
             inet_ntop(!is_v6 ? AF_INET : AF_INET6, addr_buf, host, *host_len);
+        }
 
         real_buf_len += addr_len + 2;
     } else if (addr_type == SOCKS5_ATYP_DOMAIN) {

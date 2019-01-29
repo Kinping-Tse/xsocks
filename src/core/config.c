@@ -192,7 +192,7 @@ void configLoad(xsocksConfig *config, char *filename) {
             else if (strcmp(mode_str, "udp_only") == 0)
                 config->mode = MODE_UDP_ONLY;
             else
-                LOGI("ignore unknown mode: %s, use tcp_only as fallback", mode_str);
+                LOGW("ignore unknown mode: %s, use tcp_only as fallback", mode_str);
 
             xs_free(mode_str);
         } else if (strcmp(name, "mtu") == 0) {

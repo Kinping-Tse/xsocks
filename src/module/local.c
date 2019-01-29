@@ -61,22 +61,21 @@ void remoteServerReadHandler(event *e);
 void localClientReadHandler(event *e);
 
 void listenForLocal(int *fd) {
-    char err[256];
+    char err[ANET_ERR_LEN];
     char *host = local.config->local_addr;
     int port = local.config->local_port;
     int backlog = 256;
-    if (host == NULL) host = "0.0.0.0";
-    if (strchr(host, ':')) {
-        /* Bind IPv6 address. */
+
+    if (host && isIPv6Addr(host)) {
         *fd = anetTcp6Server(err, port, host, backlog);
     } else {
-        /* Bind IPv4 address. */
         *fd = anetTcpServer(err, port, host, backlog);
     }
     if (*fd == ANET_ERR) {
         FATAL("Could not create server TCP listening socket %s:%d: %s",
               host ? host : "*", port, err);
     }
+
     anetNonBlock(NULL, *fd);
 }
 
