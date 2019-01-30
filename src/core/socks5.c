@@ -80,7 +80,7 @@ int socks5AddrParse(char *addr_buf, int buf_len, int *atyp,
     buf_len--;
     real_buf_len++;
 
-    if (atyp != NULL) *atyp = addr_type;
+    if (atyp) *atyp = (uint8_t)addr_type;
 
     int addr_len;
     if (addr_type == SOCKS5_ATYP_IPV4 || addr_type == SOCKS5_ATYP_IPV6) {
@@ -98,11 +98,13 @@ int socks5AddrParse(char *addr_buf, int buf_len, int *atyp,
 
         real_buf_len += addr_len + 2;
     } else if (addr_type == SOCKS5_ATYP_DOMAIN) {
-        addr_len = *addr_buf++;
+        addr_len = (uint8_t)*addr_buf++;
         if (buf_len < 1+addr_len+2) return SOCKS5_ERR;
 
-        if (host)
+        if (host) {
             memcpy(host, addr_buf, addr_len);
+            host[addr_len] = '\0';
+        }
 
         real_buf_len += 1 + addr_len + 2;
     } else {

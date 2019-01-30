@@ -162,6 +162,8 @@ void moduleRun() {
 }
 
 void moduleExit() {
+    if (mod->hook.exit) mod->hook.exit();
+
     eventLoopFree(mod->el);
     loggerFree(getLogger());
 }

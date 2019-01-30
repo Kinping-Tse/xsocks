@@ -167,9 +167,10 @@ void remoteServerReadHandler(event *e) {
 
     int readlen = NET_IOBUF_LEN;
     int rfd = remote->fd;
-    int nread = read(rfd, tmp_buf.data, readlen);
-    tmp_buf.len = nread;
+    int cfd = client->fd;
+    int nread, nwrite;
 
+    nread = read(rfd, tmp_buf.data, readlen);
     if (nread == -1) {
         if (errno == EAGAIN) goto end;
 
@@ -179,15 +180,14 @@ void remoteServerReadHandler(event *e) {
         LOGD("Remote server [%s] closed connection", client->dest_addr_info);
         goto error;
     }
+    tmp_buf.len = nread;
+
     if (local.crypto->decrypt(&tmp_buf, remote->d_ctx, NET_IOBUF_LEN)) {
         LOGW("Remote server [%s] decrypt stream buffer error", client->dest_addr_info);
         goto error;
     }
 
-    int cfd = client->fd;
-
-    int nwrite = write(cfd, tmp_buf.data, tmp_buf.len);
-    if (nwrite != (int)tmp_buf.len) {
+    if ((nwrite = write(cfd, tmp_buf.data, tmp_buf.len)) != (int)tmp_buf.len) {
         LOGW("Local client [%s] write error: %s", client->dest_addr_info, strerror(errno));
         goto error;
     }
@@ -330,7 +330,7 @@ void handleSocks5Handshake(localClient* client) {
     int port;
     int addr_type;
     int addr_len = HOSTNAME_MAX_LEN;
-    char addr[HOSTNAME_MAX_LEN] = {0};
+    char addr[HOSTNAME_MAX_LEN];
 
     char *addr_buf = buf+request_len-1;
     int buf_len = nread-request_len+1;

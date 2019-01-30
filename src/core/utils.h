@@ -15,6 +15,8 @@
         LOGE("%s: %s", err, strerror(errno)); \
     } while (0)
 
+#define STRERR (strerror(errno))
+
 void hexdump(const void *memory, size_t bytes);
 char *xs_itoa(int i);
 void xs_error(char *err, const char *fmt, ...);
