@@ -3,7 +3,7 @@
     "server_port": 8388,
     "local_port": 1080,
     "local_address": "127.0.0.1",
-    "password": "barfoo!11",
+    "password": "foobar0",
     "port_password":
     {
         "8381": "foobar1",
@@ -13,8 +13,12 @@
     },
     "timeout": 60,
     "method": "aes-256-cfb",
-    "fast_open": false,
     "loglevel": "notice",
+    "ipv6_first": false,
+    "ipv6_only": true,
     "logfile": "",
-    "use_syslog": true
+    "mode": "tcp_and_udp",
+    "fast_open": false,
+    "use_syslog": true,
+    "tunnel_address": "8.8.8.8:53"
 }

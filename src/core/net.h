@@ -34,10 +34,11 @@ enum {
 int netUdpServer(char *err, int port, char *bindaddr);
 int netUdp6Server(char *err, int port, char *bindaddr);
 
-void netSockAddrExInit(sockAddrEx* sa);
-int netIpPresentBySockAddr(char *err, char *ip, int ip_len, int *port, sockAddrEx* sae);
-int netIpPresentByIpAddr(char *err, char *ip, int ip_len, void* addr, int is_v6);
+int netSetIpV6Only(char *err, int s, int ipv6_only);
 
-int netGetUdpSockAddr(char *err, char *host, int port, sockAddrEx *sa, int v6_first);
+void netSockAddrExInit(sockAddrEx* sa);
+int netUdpGetSockAddrEx(char *err, char *host, int port, int ipv6_first, sockAddrEx *sa);
+int netIpPresentBySockAddr(char *err, char *ip, int ip_len, int *port, sockAddrEx* sae);
+int netIpPresentByIpAddr(char *err, char *ip, int ip_len, void* addr, int is_ipv6);
 
 #endif /* __NET_H */

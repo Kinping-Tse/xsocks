@@ -121,8 +121,8 @@ localClient *initUdpClient() {
 
     localClient *client = newClient(fd);
 
-    if (netGetUdpSockAddr(err, app->config->remote_addr, app->config->remote_port,
-                         &client->remote_server_sa, 0) == NET_ERR) {
+    if (netUdpGetSockAddrEx(err, app->config->remote_addr, app->config->remote_port,
+                            app->config->ipv6_first, &client->remote_server_sa) == NET_ERR) {
         FATAL(err);
     }
 
@@ -290,7 +290,7 @@ end:
 }
 
 static void runTunnel() {
-    LOGI("Start tunnel: %s:%d", app->config->tunnel_addr, app->config->tunnel_port);
+    LOGI("Use tunnel addr: %s:%d", app->config->tunnel_addr, app->config->tunnel_port);
 }
 
 int main(int argc, char *argv[]) {

@@ -143,15 +143,17 @@ void moduleInit(int type, moduleHook hook, module *m, int argc, char *argv[]) {
 void moduleRun() {
     xsocksConfig* config = mod->config;
 
-    LOGI("Initializing ciphers... %s", config->method);
-    LOGI("Start password: %s", config->password);
-    LOGI("Start key: %s", config->key);
-    if (config->mtu) LOGI("set MTU to %d", config->mtu);
-    if (config->no_delay) LOGI("enable TCP no-delay");
-    if (config->mode & MODE_TCP_ONLY) LOGI("enable TCP mode");
-    if (config->mode & MODE_UDP_ONLY) LOGI("enable UDP mode");
-    LOGN("Start local: %s:%d", config->local_addr, config->local_port);
-    LOGI("Start remote: %s:%d", config->remote_addr, config->remote_port);
+    LOGN("Use crypto method: %s", config->method);
+    LOGN("Use crypto password: %s", config->password);
+    LOGN("Use crypto key: %s", config->key);
+    if (config->mode & MODE_TCP_ONLY) LOGI("Enable TCP mode");
+    if (config->mode & MODE_UDP_ONLY) LOGI("Enable UDP mode");
+    if (config->mtu) LOGI("Set MTU to %d", config->mtu);
+    if (config->no_delay) LOGI("Enable TCP no-delay");
+    if (config->ipv6_first) LOGI("Use IPv6 address first");
+    if (config->ipv6_only) LOGI("Use IPv6 address only");
+    LOGN("Use local addr: %s:%d", config->local_addr, config->local_port);
+    LOGI("Use remote addr: %s:%d", config->remote_addr, config->remote_port);
     LOGN("Start event loop with: %s", eventGetApiName());
 
     if (mod->hook.run) mod->hook.run();

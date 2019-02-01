@@ -32,15 +32,6 @@ static int anetBind(char *err, int s, sockAddr *saddr, socklen_t slen) {
     return ANET_OK;
 }
 
-static int anetV6Only(char *err, int s) {
-    int yes = 1;
-    if (setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &yes, sizeof(yes)) == -1) {
-        anetSetError(err, "setsockopt: %s", strerror(errno));
-        return ANET_ERR;
-    }
-    return ANET_OK;
-}
-
 static int _netUdpServer(char *err, int port, char *bindaddr, int af) {
     int s = -1, rv;
     char port_s[PORT_MAX_STR_LEN];
@@ -61,7 +52,7 @@ static int _netUdpServer(char *err, int port, char *bindaddr, int af) {
         if ((s = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1)
             continue;
 
-        if (af == AF_INET6 && anetV6Only(err, s) == ANET_ERR) goto error;
+        if (af == AF_INET6 && netSetIpV6Only(err, s, 1) == ANET_ERR) goto error;
         if (anetSetReuseAddr(err, s) == ANET_ERR) goto error;
         if (anetBind(err, s, p->ai_addr,p->ai_addrlen) == ANET_ERR) goto error;
 
@@ -88,37 +79,21 @@ int netUdp6Server(char *err, int port, char *bindaddr) {
     return _netUdpServer(err, port, bindaddr, AF_INET6);
 }
 
+int netSetIpV6Only(char *err, int s, int ipv6_only) {
+    if (setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &ipv6_only, sizeof(ipv6_only)) == -1) {
+        anetSetError(err, "setsockopt: %s", strerror(errno));
+        return NET_ERR;
+    }
+    return NET_OK;
+}
+
 void netSockAddrExInit(sockAddrEx* sa) {
     socklen_t slen = sizeof(*sa);
     bzero(sa, slen);
     sa->sa_len = slen;
 }
 
-int netIpPresentBySockAddr(char *err, char *ip, int ip_len, int *port, sockAddrEx* sae) {
-    sockAddrStorage *s = &sae->sa;
-    if (s->ss_family == AF_INET) {
-        sockAddrIpV4 *sa = (sockAddrIpV4*)s;
-        if (ip && netIpPresentByIpAddr(err, ip, ip_len, (void*)&(sa->sin_addr), 0) == NET_ERR)
-            return NET_ERR;
-        if (port) *port = ntohs(sa->sin_port);
-    } else {
-        sockAddrIpV6 *sa = (sockAddrIpV6*)s;
-        if (ip && netIpPresentByIpAddr(err, ip, ip_len, (void*)&(sa->sin6_addr), 1) == NET_ERR)
-            return NET_ERR;
-        if (port) *port = ntohs(sa->sin6_port);
-    }
-    return NET_OK;
-}
-
-int netIpPresentByIpAddr(char *err, char *ip, int ip_len, void *addr, int is_v6) {
-    if (!inet_ntop(!is_v6 ? AF_INET : AF_INET6, addr, ip, ip_len)) {
-        anetSetError(err, "inet_ntop error: %s", strerror(errno));
-        return NET_ERR;
-    }
-    return NET_OK;
-}
-
-int netGetUdpSockAddr(char *err, char *host, int port, sockAddrEx *sa, int v6_first) {
+int netUdpGetSockAddrEx(char *err, char *host, int port, int ipv6_first, sockAddrEx *sa) {
     int s = NET_OK, rv;
     char port_s[PORT_MAX_STR_LEN];
     addrInfo hints, *servinfo, *p;
@@ -135,7 +110,7 @@ int netGetUdpSockAddr(char *err, char *host, int port, sockAddrEx *sa, int v6_fi
         return NET_ERR;
     }
 
-    int prefer_af = v6_first ? AF_INET6 : AF_INET;
+    int prefer_af = ipv6_first ? AF_INET6 : AF_INET;
     for (p = servinfo; p != NULL; p = p->ai_next) {
         if (p->ai_family == prefer_af) {
             if (p->ai_family == AF_INET) {
@@ -176,4 +151,28 @@ error:
 end:
     freeaddrinfo(servinfo);
     return s;
+}
+
+int netIpPresentBySockAddr(char *err, char *ip, int ip_len, int *port, sockAddrEx* sae) {
+    sockAddrStorage *s = &sae->sa;
+    if (s->ss_family == AF_INET) {
+        sockAddrIpV4 *sa = (sockAddrIpV4*)s;
+        if (ip && netIpPresentByIpAddr(err, ip, ip_len, (void*)&(sa->sin_addr), 0) == NET_ERR)
+            return NET_ERR;
+        if (port) *port = ntohs(sa->sin_port);
+    } else {
+        sockAddrIpV6 *sa = (sockAddrIpV6*)s;
+        if (ip && netIpPresentByIpAddr(err, ip, ip_len, (void*)&(sa->sin6_addr), 1) == NET_ERR)
+            return NET_ERR;
+        if (port) *port = ntohs(sa->sin6_port);
+    }
+    return NET_OK;
+}
+
+int netIpPresentByIpAddr(char *err, char *ip, int ip_len, void *addr, int is_ipv6) {
+    if (!inet_ntop(!is_ipv6 ? AF_INET : AF_INET6, addr, ip, ip_len)) {
+        anetSetError(err, "inet_ntop error: %s", strerror(errno));
+        return NET_ERR;
+    }
+    return NET_OK;
 }

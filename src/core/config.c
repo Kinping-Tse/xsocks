@@ -62,6 +62,8 @@ xsocksConfig *configNew() {
     config->mtu = 0;
     config->loglevel = LOGLEVEL_NOTICE;
     config->logfile = NULL;
+    config->ipv6_first = 0;
+    config->ipv6_only = 1;
 
     config->no_delay = 0;
     config->help = 0;
@@ -205,6 +207,10 @@ void configLoad(xsocksConfig *config, char *filename) {
             check_json_value_type(value, json_boolean,
                                   "invalid config file: option 'ipv6_first' must be a boolean");
             config->ipv6_first = to_integer(value);
+        } else if (strcmp(name, "ipv6_only") == 0) {
+            check_json_value_type(value, json_boolean,
+                                  "invalid config file: option 'ipv6_only' must be a boolean");
+            config->ipv6_only = to_integer(value);
         } else if (strcmp(name, "use_syslog") == 0) {
             check_json_value_type(value, json_boolean,
                                   "invalid config file: option 'use_syslog' must be a boolean");
