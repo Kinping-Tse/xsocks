@@ -7,4 +7,7 @@ default: all
 install:
 	$(MAKE) -C builds/src $@
 
-.PHONY: install
+docker:
+	$(MAKE) -C builds/docker $@
+
+.PHONY: install docker

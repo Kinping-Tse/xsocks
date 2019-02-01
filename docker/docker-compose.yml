@@ -1,0 +1,23 @@
+version: "3"
+
+services:
+  xs-server:
+    build: .
+    image: xsocks:alpine
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 10M
+        reservations:
+          cpus: '0.25'
+          memory: 1M
+    privileged: true
+    volumes:
+      - /etc/localtime:/etc/localtime
+      - ../config.json:etc/config.json
+    restart: on-failure:0
+    ports:
+      - "8388:8388/tcp"
+      - "8388:8388/udp"
+    command: bin/xs-server -c etc/config.json

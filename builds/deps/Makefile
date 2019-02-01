@@ -19,16 +19,16 @@ all: redis json-parser shadowsocks-libev
 
 libev:
 	$(QUIET_MAKE)
-	cd $@ && $(DEPS_PATH)/$@/configure --prefix=$(PREFIX) &> $@.configure.log
-	cd $@ && $(MAKE) $(MFLAGS) &> $@.make.log
+	cd $@ && $(DEPS_PATH)/$@/configure --prefix=$(PREFIX)
+	cd $@ && $(MAKE) $(MFLAGS)
 
 JEMALLOC_VERSION := 5.1.0-0-g0
 
 jemalloc:
 	$(QUIET_MAKE)
 	cd $(DEPS_PATH)/$@ && autoconf -f
-	cd $@ && $(DEPS_PATH)/$@/configure --enable-autogen --prefix=$(PREFIX) --with-version=$(JEMALLOC_VERSION) --with-jemalloc-prefix=je_ &> $@.configure.log
-	cd $@ && $(MAKE) $(MFLAGS) &> $@.make.log
+	cd $@ && $(DEPS_PATH)/$@/configure --enable-autogen --prefix=$(PREFIX) --with-version=$(JEMALLOC_VERSION) --with-jemalloc-prefix=je_
+	cd $@ && $(MAKE) $(MFLAGS)
 
 jemalloc-clean:
 	-(cd jemalloc && $(MAKE) relclean)
@@ -45,12 +45,12 @@ endif
 
 json-parser:
 	$(QUIET_MAKE)
-	cd $@ && $(DEPS_PATH)/$@/configure --prefix=$(PREFIX) &> $@.configure.log
-	cd $@ && $(MAKE) $(MFLAGS) LDFLAGS='$(JSONPARSER_LDFLAGS)' &> $@.make.log
+	cd $@ && $(DEPS_PATH)/$@/configure --prefix=$(PREFIX)
+	cd $@ && $(MAKE) $(MFLAGS) LDFLAGS='$(JSONPARSER_LDFLAGS)'
 
 shadowsocks-libev: libsodium mbedtls libbloom
 	$(QUIET_MAKE)
-	cd $@ && $(MAKE) $(MFLAGS) &> $@.make.log
+	cd $@ && $(MAKE) $(MFLAGS)
 
 LIBBLOOM_LDFLAGS = $(LDFLAGS)
 ifeq ($(uname_S), Darwin)
@@ -59,7 +59,7 @@ endif
 
 libbloom:
 	$(QUIET_MAKE)
-	cd $@ && $(MAKE) -C $(DEPS_PATH)/$@ $(MFLAGS) BUILD=$(LIBBLOOM_PATH) LDFLAGS="$(LIBBLOOM_LDFLAGS)" &> $@.make.log
+	cd $@ && $(MAKE) -C $(DEPS_PATH)/$@ $(MFLAGS) BUILD=$(LIBBLOOM_PATH) LDFLAGS="$(LIBBLOOM_LDFLAGS)"
 
 MBEDTLS_LDFLAGS = $(LDFLAGS)
 ifeq ($(uname_S), Darwin)
@@ -68,13 +68,13 @@ endif
 
 mbedtls:
 	$(QUIET_MAKE)
-	cd $@ && $(MAKE) -C $(DEPS_PATH)/$@ $(MFLAGS) lib LDFLAGS='$(MBEDTLS_LDFLAGS)' SHARED=1 &> $@.make.log
+	cd $@ && $(MAKE) -C $(DEPS_PATH)/$@ $(MFLAGS) lib LDFLAGS='$(MBEDTLS_LDFLAGS)' SHARED=1
 
 libsodium:
 	$(QUIET_MAKE)
-	cd $(DEPS_PATH)/$@ && sh autogen.sh &> $(BUILD_DEPS_PATH)/$@/$@.autotool.log
-	cd $@ && $(DEPS_PATH)/$@/configure --prefix=$(PREFIX) &> $@.configure.log
-	cd $@ && $(MAKE) $(MFLAGS) &> $@.make.log
+	cd $(DEPS_PATH)/$@ && sh autogen.sh
+	cd $@ && $(DEPS_PATH)/$@/configure --prefix=$(PREFIX)
+	cd $@ && $(MAKE) $(MFLAGS)
 
 libsodium-clean:
 	-(cd libsodium && $(MAKE) maintainer-clean)
@@ -91,18 +91,17 @@ clean: jemalloc-clean libsodium-clean
 
 distclean: clean
 	-(find jemalloc/* libsodium/* -type d -exec rm -rf {} \; &> /dev/null)
-	rm -rf */*.configure.log */*.make.log */*.autotool.log *.install.log
 	rm -rf .make-*
 
 install: install-shared
 install-shared:
-	-($(MAKE) -C jemalloc install_lib_shared >> deps.install.log)
-	-($(MAKE) -C libev install-libLTLIBRARIES >> deps.install.log)
-	$(MAKE) -C json-parser install-shared >> deps.install.log 2>&1
+	-($(MAKE) -C jemalloc install_lib_shared)
+	-($(MAKE) -C libev install-libLTLIBRARIES)
+	$(MAKE) -C json-parser install-shared
 	$(MAKE) -C redis install-shared
 	$(MAKE) -C shadowsocks-libev install-shared
-	$(MAKE) -C libsodium install-exec >> deps.install.log 2>&1
-	$(MAKE) -C $(DEPS_PATH)/mbedtls install DESTDIR=$(PREFIX) PREFIX=mbedtls_ >> deps.install.log 2>&1
+	$(MAKE) -C libsodium install-exec
+	$(MAKE) -C $(DEPS_PATH)/mbedtls install DESTDIR=$(PREFIX) PREFIX=mbedtls_
 	$(COMMON_INSTALL) $(LIBBLOOM_PATH)/libbloom.$(DYLIB_SUFFIX) $(INSTALL_LIB)
 	rm -rf $(INSTALL_LIB)/*.a $(INSTALL_LIB)/*.la $(INSTALL_INC) $(INSTALL_DATA)
 	rm -rf $(INSTALL_BIN)/mbedtls_* $(INSTALL_LIB)/libmbedx509* $(INSTALL_LIB)/libmbedtls*
