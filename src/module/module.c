@@ -60,9 +60,7 @@ void moduleUsage(int module) {
     // eprintf("                                  TPROXY is required in redir mode.\n");
 #endif
     eprintf("       [-U]                       Enable UDP relay and disable TCP relay.\n");
-#ifdef MODULE_REMOTE
-    // eprintf("       [-6]                       Resovle hostname to IPv6 address first.\n");
-#endif
+    eprintf("       [-6]                       Use IPv6 address first.\n");
     eprintf("\n");
     if (module == MODULE_REMOTE)
         eprintf(

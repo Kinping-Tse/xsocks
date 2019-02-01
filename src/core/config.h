@@ -37,7 +37,7 @@ typedef struct xsocksConfig {
     char *logfile;
     int use_syslog;
     int help;
-    // int ipv6_first;
+    int ipv6_first;
     int no_delay;
     //
     // int max_clients;

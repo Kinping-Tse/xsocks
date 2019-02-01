@@ -109,7 +109,7 @@ localClient *initUdpClient() {
     int port = app->config->local_port;
     int fd;
 
-    if (host && isIPv6Addr(host))
+    if (app->config->ipv6_first || (host && isIPv6Addr(host)))
         fd = netUdp6Server(err, port, host);
     else
         fd = netUdpServer(err, port, host);

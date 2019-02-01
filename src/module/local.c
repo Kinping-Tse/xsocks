@@ -32,6 +32,7 @@ client                      local                     remote
 */
 
 static module local;
+static module *app = &local;
 
 struct remoteServer;
 
@@ -62,11 +63,11 @@ void localClientReadHandler(event *e);
 
 void listenForLocal(int *fd) {
     char err[ANET_ERR_LEN];
-    char *host = local.config->local_addr;
-    int port = local.config->local_port;
+    char *host = app->config->local_addr;
+    int port = app->config->local_port;
     int backlog = 256;
 
-    if (host && isIPv6Addr(host)) {
+    if (app->config->ipv6_first || (host && isIPv6Addr(host))) {
         *fd = anetTcp6Server(err, port, host, backlog);
     } else {
         *fd = anetTcpServer(err, port, host, backlog);

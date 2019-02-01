@@ -121,7 +121,7 @@ static void tcpServerInit() {
     int backlog = 256;
     int fd;
 
-    if (host && isIPv6Addr(host))
+    if (app->config->ipv6_first || (host && isIPv6Addr(host)))
         fd = anetTcp6Server(err, port, host, backlog);
     else
         fd = anetTcpServer(err, port, host, backlog);
@@ -372,7 +372,7 @@ static void udpServerInit() {
     int port = app->config->remote_port;
     int fd;
 
-    if (host && isIPv6Addr(host))
+    if (app->config->ipv6_first || (host && isIPv6Addr(host)))
         fd = netUdp6Server(err, port, host);
     else
         fd = netUdpServer(err, port, host);

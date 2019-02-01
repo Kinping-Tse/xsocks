@@ -146,6 +146,8 @@ void configLoad(xsocksConfig *config, char *filename) {
             config->remote_addr = to_string(value);
         } else if (strcmp(name, "server_port") == 0) {
             config->remote_port = to_integer(value);
+        } else if (strcmp(name, "port_password") == 0) {
+
         } else if (strcmp(name, "local_address") == 0) {
             config->local_addr = to_string(value);
         } else if (strcmp(name, "local_port") == 0) {
@@ -199,6 +201,10 @@ void configLoad(xsocksConfig *config, char *filename) {
             check_json_value_type(value, json_integer,
                                   "invalid config file: option 'mtu' must be an integer");
             config->mtu = to_integer(value);
+        } else if (strcmp(name, "ipv6_first") == 0) {
+            check_json_value_type(value, json_boolean,
+                                  "invalid config file: option 'ipv6_first' must be a boolean");
+            config->ipv6_first = to_integer(value);
         } else if (strcmp(name, "use_syslog") == 0) {
             check_json_value_type(value, json_boolean,
                                   "invalid config file: option 'use_syslog' must be a boolean");
@@ -208,6 +214,8 @@ void configLoad(xsocksConfig *config, char *filename) {
                 value, json_boolean,
                 "invalid config file: option 'no_delay' must be a boolean");
             config->no_delay = to_integer(value);
+        } else {
+            err = sdscatprintf(sdsempty(), "Bad directive: %s", name); goto loaderr;
         }
     }
 
@@ -276,9 +284,7 @@ int configParse(xsocksConfig* config, int argc, char *argv[]) {
             case 'v': config->loglevel = LOGLEVEL_DEBUG; break;
             case 'h':
             case GETOPT_VAL_HELP: config->help = 1; break;
-            // case '6':
-            //     ipv6first = 1;
-            //     break;
+            case '6': config->ipv6_first = 1; break;
             case '?':
                 // The option character is not recognized.
                 err = "Unrecognized option";
