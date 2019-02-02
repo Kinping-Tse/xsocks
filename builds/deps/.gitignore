@@ -1,0 +1,6 @@
+jemalloc/
+libev/
+json-parser/
+libbloom/
+libsodium/
+*.lock

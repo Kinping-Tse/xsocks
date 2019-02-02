@@ -3,22 +3,34 @@ ROOT = $(realpath ../..)
 include $(ROOT)/builds/common.mk
 include $(ROOT)/builds/deps.mk
 
-LIBSODIUM_CONFIG_FILE = m4/argz.m4 m4/libtool.m4 m4/ltoptions.m4 m4/ltsugar.m4 m4/ltversion.m4 m4/lt~obsolete.m4 configure aclocal.m4 build-aux
 REDIS_DEPS =
 
 ifeq ($(MALLOC), jemalloc)
 	REDIS_DEPS += jemalloc
 endif
 
+GIT_SUBMODULE_DEPS = jemalloc libbloom libsodium mbedtls libev
+GIT_SUBMODULE_INIT_FILE = .submodule.lock
 # default:
 	# @echo "Explicit target required"
 
 default: all
 
-all: redis json-parser shadowsocks-libev
+all: deps-init redis json-parser shadowsocks-libev
+
+deps-init: | $(GIT_SUBMODULE_INIT_FILE)
+
+$(GIT_SUBMODULE_INIT_FILE):
+	touch $@
+	git submodule update --init --recursive
+	cd $(DEPS_PATH)/jemalloc && git checkout -b 5.1.0 5.1.0
+	cd $(DEPS_PATH)/libbloom && git checkout -b v1.5 v1.5
+	cd $(DEPS_PATH)/libsodium && git checkout -b 1.0.17 1.0.17
+	cd $(DEPS_PATH)/mbedtls && git checkout -b mbedtls-2.16.0 mbedtls-2.16.0
 
 libev:
 	$(QUIET_MAKE)
+	mkdir -p $@
 	cd $@ && $(DEPS_PATH)/$@/configure --prefix=$(PREFIX)
 	cd $@ && $(MAKE) $(MFLAGS)
 
@@ -26,13 +38,10 @@ JEMALLOC_VERSION := 5.1.0-0-g0
 
 jemalloc:
 	$(QUIET_MAKE)
+	mkdir -p $@
 	cd $(DEPS_PATH)/$@ && autoconf -f
 	cd $@ && $(DEPS_PATH)/$@/configure --enable-autogen --prefix=$(PREFIX) --with-version=$(JEMALLOC_VERSION) --with-jemalloc-prefix=je_
 	cd $@ && $(MAKE) $(MFLAGS)
-
-jemalloc-clean:
-	-(cd jemalloc && $(MAKE) relclean)
-	cd $(DEPS_PATH)/jemalloc && rm -rf configure
 
 redis: $(REDIS_DEPS)
 	$(QUIET_MAKE)
@@ -45,6 +54,7 @@ endif
 
 json-parser:
 	$(QUIET_MAKE)
+	mkdir -p $@
 	cd $@ && $(DEPS_PATH)/$@/configure --prefix=$(PREFIX)
 	cd $@ && $(MAKE) $(MFLAGS) LDFLAGS='$(JSONPARSER_LDFLAGS)'
 
@@ -59,6 +69,7 @@ endif
 
 libbloom:
 	$(QUIET_MAKE)
+	mkdir -p $@
 	cd $@ && $(MAKE) -C $(DEPS_PATH)/$@ $(MFLAGS) BUILD=$(LIBBLOOM_PATH) LDFLAGS="$(LIBBLOOM_LDFLAGS)"
 
 MBEDTLS_LDFLAGS = $(LDFLAGS)
@@ -68,29 +79,28 @@ endif
 
 mbedtls:
 	$(QUIET_MAKE)
+	mkdir -p $@
 	cd $@ && $(MAKE) -C $(DEPS_PATH)/$@ $(MFLAGS) lib LDFLAGS='$(MBEDTLS_LDFLAGS)' SHARED=1
 
 libsodium:
 	$(QUIET_MAKE)
+	mkdir -p $@
 	cd $(DEPS_PATH)/$@ && sh autogen.sh
 	cd $@ && $(DEPS_PATH)/$@/configure --prefix=$(PREFIX)
 	cd $@ && $(MAKE) $(MFLAGS)
 
-libsodium-clean:
-	-(cd libsodium && $(MAKE) maintainer-clean)
-	cd $(DEPS_PATH)/libsodium && rm -rf $(LIBSODIUM_CONFIG_FILE)
-	find $(DEPS_PATH)/libsodium -type f -name "Makefile.in" -exec rm -f {} \;
-
-clean: jemalloc-clean libsodium-clean
+clean:
 	-($(MAKE) -C libev maintainer-clean)
+	-($(MAKE) -C jemalloc relclean)
 	$(MAKE) -C redis clean
 	-($(MAKE) -C json-parser distclean)
 	$(MAKE) -C shadowsocks-libev clean
-	$(MAKE) -C $(DEPS_PATH)/libbloom clean BUILD=$(LIBBLOOM_PATH)
-	$(MAKE) -C $(DEPS_PATH)/mbedtls clean
+	-($(MAKE) -C $(DEPS_PATH)/libbloom clean BUILD=$(LIBBLOOM_PATH))
+	-($(MAKE) -C $(DEPS_PATH)/mbedtls clean)
+	-($(MAKE) -C libsodium maintainer-clean)
 
 distclean: clean
-	-(find jemalloc/* libsodium/* -type d -exec rm -rf {} \; &> /dev/null)
+	rm -rf $(GIT_SUBMODULE_INIT_FILE) $(GIT_SUBMODULE_DEPS) json-parser
 	rm -rf .make-*
 
 install: install-shared
@@ -106,4 +116,4 @@ install-shared:
 	rm -rf $(INSTALL_LIB)/*.a $(INSTALL_LIB)/*.la $(INSTALL_INC) $(INSTALL_DATA)
 	rm -rf $(INSTALL_BIN)/mbedtls_* $(INSTALL_LIB)/libmbedx509* $(INSTALL_LIB)/libmbedtls*
 
-.PHONY: default all clean distclean install install-shared libev jemalloc jemalloc-clean redis json-parser shadowsocks-libev libbloom libsodium libsodium-clean mbedtls mbedtls-clean
+.PHONY: default deps-init all clean distclean install install-shared redis json-parser shadowsocks-libev $(GIT_SUBMODULE_DEPS)

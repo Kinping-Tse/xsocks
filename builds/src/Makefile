@@ -149,7 +149,7 @@ clean:
 	rm -rf $(XSOCKS_MODULE_EXE) *.o Makefile.dep
 
 distclean: clean
-	cd $(BUILD_DEPS_PATH) && $(MAKE) distclean &> /dev/null
+	cd $(BUILD_DEPS_PATH) && $(MAKE) distclean
 	cd $(BUILD_DOCKER_PATH) && $(MAKE) clean
 	rm -rf .make-*
 

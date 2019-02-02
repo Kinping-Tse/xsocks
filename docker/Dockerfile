@@ -15,6 +15,7 @@ RUN set -xe \
         automake \
         libtool \
         linux-headers \
+        git \
     && ( \
         cd /tmp/xsocks \
         && make -j "$(getconf _NPROCESSORS_ONLN)" \
