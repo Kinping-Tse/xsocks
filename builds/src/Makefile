@@ -104,7 +104,7 @@ persist-settings: distclean
 	@echo PREV_FINAL_LDFLAGS=$(FINAL_LDFLAGS) >> .make-settings
 	@echo LINK_MODE=$(LINK_MODE) >> .make-settings
 	@echo PREFIX=$(PREFIX) >> .make-settings
-	cd $(BUILD_ROOT)/deps && $(MAKE) $(MFLAGS) $(DEPENDENCY_TARGETS)
+	cd $(BUILD_ROOT)/deps && $(MAKE) $(MFLAGS) deps-init $(DEPENDENCY_TARGETS)
 
 .make-prerequisites:
 	@touch $@

@@ -11,22 +11,19 @@ endif
 
 GIT_SUBMODULE_DEPS = jemalloc libbloom libsodium mbedtls libev
 GIT_SUBMODULE_INIT_FILE = .submodule.lock
-# default:
-	# @echo "Explicit target required"
 
-default: all
-
-all: deps-init redis json-parser shadowsocks-libev
+default:
+	@echo "Explicit target required"
 
 deps-init: | $(GIT_SUBMODULE_INIT_FILE)
 
 $(GIT_SUBMODULE_INIT_FILE):
 	touch $@
-	git submodule update --init --recursive
-	cd $(DEPS_PATH)/jemalloc && git checkout -b 5.1.0 5.1.0
-	cd $(DEPS_PATH)/libbloom && git checkout -b v1.5 v1.5
-	cd $(DEPS_PATH)/libsodium && git checkout -b 1.0.17 1.0.17
-	cd $(DEPS_PATH)/mbedtls && git checkout -b mbedtls-2.16.0 mbedtls-2.16.0
+	cd $(ROOT) && git submodule update --init --recursive
+	cd $(DEPS_PATH)/jemalloc && git checkout -B 5.1.0 refs/tags/5.1.0
+	cd $(DEPS_PATH)/libbloom && git checkout -B v1.5 refs/tags/v1.5
+	cd $(DEPS_PATH)/libsodium && git checkout -B 1.0.17 refs/tags/1.0.17
+	cd $(DEPS_PATH)/mbedtls && git checkout -B mbedtls-2.16.0 refs/tags/mbedtls-2.16.0
 
 libev:
 	$(QUIET_MAKE)
@@ -116,4 +113,4 @@ install-shared:
 	rm -rf $(INSTALL_LIB)/*.a $(INSTALL_LIB)/*.la $(INSTALL_INC) $(INSTALL_DATA)
 	rm -rf $(INSTALL_BIN)/mbedtls_* $(INSTALL_LIB)/libmbedx509* $(INSTALL_LIB)/libmbedtls*
 
-.PHONY: default deps-init all clean distclean install install-shared redis json-parser shadowsocks-libev $(GIT_SUBMODULE_DEPS)
+.PHONY: default deps-init clean distclean install install-shared redis json-parser shadowsocks-libev $(GIT_SUBMODULE_DEPS)
