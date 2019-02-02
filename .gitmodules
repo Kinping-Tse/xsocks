@@ -1,0 +1,15 @@
+[submodule "deps/jemalloc"]
+	path = deps/jemalloc
+	url = https://github.com/jemalloc/jemalloc.git
+[submodule "deps/libev"]
+	path = deps/libev
+	url = https://github.com/enki/libev.git
+[submodule "deps/libbloom"]
+	path = deps/libbloom
+	url = https://github.com/jvirkki/libbloom.git
+[submodule "deps/libsodium"]
+	path = deps/libsodium
+	url = https://github.com/jedisct1/libsodium.git
+[submodule "deps/mbedtls"]
+	path = deps/mbedtls
+	url = https://github.com/ARMmbed/mbedtls.git
