@@ -104,7 +104,7 @@ persist-settings: distclean
 	@echo PREV_FINAL_LDFLAGS=$(FINAL_LDFLAGS) >> .make-settings
 	@echo LINK_MODE=$(LINK_MODE) >> .make-settings
 	@echo PREFIX=$(PREFIX) >> .make-settings
-	cd $(BUILD_ROOT)/deps && $(MAKE) $(MFLAGS) deps-init $(DEPENDENCY_TARGETS)
+	cd $(BUILD_DEPS_PATH) && $(MAKE) deps-init && $(MAKE) $(MFLAGS) $(DEPENDENCY_TARGETS)
 
 .make-prerequisites:
 	@touch $@
@@ -149,8 +149,7 @@ clean:
 	rm -rf $(XSOCKS_MODULE_EXE) *.o Makefile.dep
 
 distclean: clean
-	cd $(BUILD_DEPS_PATH) && $(MAKE) distclean
-	cd $(BUILD_DOCKER_PATH) && $(MAKE) clean
+	$(MAKE) -C $(BUILD_DEPS_PATH) distclean
 	rm -rf .make-*
 
 .PHONY: all install install-lib clean distclean persist-settings

@@ -4,8 +4,6 @@ MAINTAINER XJP09_HK <jianping_xie@aliyun.com>
 
 ENV XSOCKS_PATH /usr/local/xsocks
 
-COPY . /tmp/xsocks
-
 RUN set -xe \
     && apk add --no-cache --virtual .build-deps \
         make \
@@ -16,8 +14,10 @@ RUN set -xe \
         libtool \
         linux-headers \
         git \
+    && TMP_XSOCKS=/tmp/xsocks \
     && ( \
-        cd /tmp/xsocks \
+        git clone https://github.com/Kinping-Tse/xsocks.git $TMP_XSOCKS \
+        && cd $TMP_XSOCKS \
         && make -j "$(getconf _NPROCESSORS_ONLN)" \
             PREFIX="$XSOCKS_PATH" \
             USE_JEMALLOC=no USE_LIBEV=no USE_SHARED=no \
@@ -25,7 +25,7 @@ RUN set -xe \
         && make distclean \
     ) \
     && apk del .build-deps \
-    && rm -rf /tmp/xsocks
+    && rm -rf $TMP_XSOCKS
 
 WORKDIR $XSOCKS_PATH
 

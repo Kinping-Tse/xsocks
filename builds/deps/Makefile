@@ -18,7 +18,7 @@ default:
 deps-init: | $(GIT_SUBMODULE_INIT_FILE)
 
 $(GIT_SUBMODULE_INIT_FILE):
-	touch $@
+	@touch $@
 	cd $(ROOT) && git submodule update --init --recursive
 	cd $(DEPS_PATH)/jemalloc && git checkout -B 5.1.0 refs/tags/5.1.0
 	cd $(DEPS_PATH)/libbloom && git checkout -B v1.5 refs/tags/v1.5
@@ -27,7 +27,7 @@ $(GIT_SUBMODULE_INIT_FILE):
 
 libev:
 	$(QUIET_MAKE)
-	mkdir -p $@
+	@mkdir -p $@
 	cd $@ && $(DEPS_PATH)/$@/configure --prefix=$(PREFIX)
 	cd $@ && $(MAKE) $(MFLAGS)
 
@@ -35,7 +35,7 @@ JEMALLOC_VERSION := 5.1.0-0-g0
 
 jemalloc:
 	$(QUIET_MAKE)
-	mkdir -p $@
+	@mkdir -p $@
 	cd $(DEPS_PATH)/$@ && autoconf -f
 	cd $@ && $(DEPS_PATH)/$@/configure --enable-autogen --prefix=$(PREFIX) --with-version=$(JEMALLOC_VERSION) --with-jemalloc-prefix=je_
 	cd $@ && $(MAKE) $(MFLAGS)
@@ -51,7 +51,7 @@ endif
 
 json-parser:
 	$(QUIET_MAKE)
-	mkdir -p $@
+	@mkdir -p $@
 	cd $@ && $(DEPS_PATH)/$@/configure --prefix=$(PREFIX)
 	cd $@ && $(MAKE) $(MFLAGS) LDFLAGS='$(JSONPARSER_LDFLAGS)'
 
@@ -66,7 +66,7 @@ endif
 
 libbloom:
 	$(QUIET_MAKE)
-	mkdir -p $@
+	@mkdir -p $@
 	cd $@ && $(MAKE) -C $(DEPS_PATH)/$@ $(MFLAGS) BUILD=$(LIBBLOOM_PATH) LDFLAGS="$(LIBBLOOM_LDFLAGS)"
 
 MBEDTLS_LDFLAGS = $(LDFLAGS)
@@ -76,12 +76,12 @@ endif
 
 mbedtls:
 	$(QUIET_MAKE)
-	mkdir -p $@
+	@mkdir -p $@
 	cd $@ && $(MAKE) -C $(DEPS_PATH)/$@ $(MFLAGS) lib LDFLAGS='$(MBEDTLS_LDFLAGS)' SHARED=1
 
 libsodium:
 	$(QUIET_MAKE)
-	mkdir -p $@
+	@mkdir -p $@
 	cd $(DEPS_PATH)/$@ && sh autogen.sh
 	cd $@ && $(DEPS_PATH)/$@/configure --prefix=$(PREFIX)
 	cd $@ && $(MAKE) $(MFLAGS)

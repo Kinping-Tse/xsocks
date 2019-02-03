@@ -114,22 +114,17 @@ int main(int argc, char *argv[]) {
 static void serverInit() {
     getLogger()->syslog_ident = "xs-server";
 
-    if (app->config->mode & MODE_TCP_ONLY) {
-        tcpServerInit();
-    }
-
-    if (app->config->mode & MODE_UDP_ONLY) {
-        udpServerInit();
-    }
+    if (app->config->mode & MODE_TCP_ONLY) tcpServerInit();
+    if (app->config->mode & MODE_UDP_ONLY) udpServerInit();
 }
 
 static void serverRun() {
     char addr_info[ADDR_INFO_STR_LEN];
 
-    if (anetFormatSock(s.ts->fd, addr_info, ADDR_INFO_STR_LEN) > 0)
-        LOGI("TCP server listen at: %s", addr_info);
-    if (anetFormatSock(s.us->fd, addr_info, ADDR_INFO_STR_LEN) > 0)
-        LOGI("UDP server read at: %s", addr_info);
+    if (s.ts && anetFormatSock(s.ts->fd, addr_info, ADDR_INFO_STR_LEN) > 0)
+        LOGN("TCP server listen at: %s", addr_info);
+    if (s.us && anetFormatSock(s.us->fd, addr_info, ADDR_INFO_STR_LEN) > 0)
+        LOGN("UDP server read at: %s", addr_info);
 }
 
 static void serverExit() {
@@ -404,6 +399,7 @@ static void tcpRemoteReadHandler(event *e) {
 error:
     tcpClientFree(client);
     tcpRemoteFree(remote);
+
 end:
     bfree(&tmp_buf);
 }
