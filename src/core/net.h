@@ -34,7 +34,10 @@ enum {
 int netUdpServer(char *err, int port, char *bindaddr);
 int netUdp6Server(char *err, int port, char *bindaddr);
 
-int netSetIpV6Only(char *err, int s, int ipv6_only);
+int netSendTimeout(char *err, int fd, int s);
+int netRecvTimeout(char *err, int fd, int s);
+int netSetIpV6Only(char *err, int fd, int ipv6_only);
+int netNoSigPipe(char *err, int fd);
 
 void netSockAddrExInit(sockAddrEx* sa);
 int netUdpGetSockAddrEx(char *err, char *host, int port, int ipv6_first, sockAddrEx *sa);

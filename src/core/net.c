@@ -1,5 +1,6 @@
 #include "common.h"
 #include "net.h"
+#include "utils.h"
 
 #include "redis/anet.h"
 #include <stdarg.h>
@@ -79,9 +80,42 @@ int netUdp6Server(char *err, int port, char *bindaddr) {
     return _netUdpServer(err, port, bindaddr, AF_INET6);
 }
 
-int netSetIpV6Only(char *err, int s, int ipv6_only) {
-    if (setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, &ipv6_only, sizeof(ipv6_only)) == -1) {
+int netSendTimeout(char *err, int fd, int s) {
+    struct timeval tv = {
+        .tv_sec = s,
+        .tv_usec = 0,
+    };
+    if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) == -1) {
+        anetSetError(err, "setsockopt SO_SNDTIMEO: %s", STRERR);
+        return ANET_ERR;
+    }
+    return ANET_OK;
+}
+
+int netRecvTimeout(char *err, int fd, int s) {
+    struct timeval tv = {
+        .tv_sec = s,
+        .tv_usec = 0,
+    };
+    if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) == -1) {
+        anetSetError(err, "setsockopt SO_RCVTIMEO: %s", STRERR);
+        return ANET_ERR;
+    }
+    return ANET_OK;
+}
+
+int netSetIpV6Only(char *err, int fd, int ipv6_only) {
+    if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &ipv6_only, sizeof(ipv6_only)) == -1) {
         anetSetError(err, "setsockopt: %s", strerror(errno));
+        return NET_ERR;
+    }
+    return NET_OK;
+}
+
+int netNoSigPipe(char *err, int fd) {
+    int yes = 1;
+    if (setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &yes, sizeof(yes)) == -1) {
+        anetSetError(err, "setsockopt SO_NOSIGPIPE: %s", STRERR);
         return NET_ERR;
     }
     return NET_OK;

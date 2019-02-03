@@ -4,6 +4,7 @@
 
 #include <stdarg.h>
 #include <ctype.h>
+#include <sys/time.h>
 
 void hexdump(const void *memory, size_t bytes) {
     const unsigned char * p, * q;
@@ -71,4 +72,26 @@ char *xs_itoa(int i) {
 
 int isIPv6Addr(char *ip) {
     return strchr(ip, ':') ? 1 : 0;
+}
+
+#define MICROSECOND_UNIT 1000000
+#define MICROSECOND_UNIT_F (double)1000000.0
+
+uint64_t timerStart() {
+    struct timeval time;
+    if (gettimeofday(&time, NULL) == -1)
+        return 0;
+
+    return time.tv_sec * MICROSECOND_UNIT + time.tv_usec;
+}
+
+double timerStop(uint64_t start_time, uint64_t *stop_time) {
+    struct timeval time;
+    if (gettimeofday(&time, NULL) == -1)
+        return 0;
+
+    uint64_t t = time.tv_sec * MICROSECOND_UNIT + time.tv_usec;
+    if (stop_time) *stop_time = t;
+
+    return t/MICROSECOND_UNIT_F - start_time/MICROSECOND_UNIT_F;
 }

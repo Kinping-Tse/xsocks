@@ -22,4 +22,7 @@ char *xs_itoa(int i);
 void xs_error(char *err, const char *fmt, ...);
 int isIPv6Addr(char *ip);
 
+uint64_t timerStart();
+double timerStop(uint64_t start_time, uint64_t *stop_time);
+
 #endif /* __UTILS_H */

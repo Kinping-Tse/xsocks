@@ -151,7 +151,8 @@ void moduleRun() {
     if (config->mtu) LOGI("Set MTU to %d", config->mtu);
     if (config->no_delay) LOGI("Enable TCP no-delay");
     if (config->ipv6_first) LOGI("Use IPv6 address first");
-    if (config->ipv6_only) LOGI("Use IPv6 address only");
+    // if (config->ipv6_only) LOGI("Use IPv6 address only");
+    // if (config->timeout) LOGI("Use timeout: %d", config->timeout);
     LOGI("Use local addr: %s:%d", config->local_addr, config->local_port);
     LOGI("Use remote addr: %s:%d", config->remote_addr, config->remote_port);
     LOGI("Start event loop with: %s", eventGetApiName());
