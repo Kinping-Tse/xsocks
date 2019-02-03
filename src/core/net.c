@@ -113,11 +113,16 @@ int netSetIpV6Only(char *err, int fd, int ipv6_only) {
 }
 
 int netNoSigPipe(char *err, int fd) {
+#ifdef SO_NOSIGPIPE
     int yes = 1;
     if (setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &yes, sizeof(yes)) == -1) {
         anetSetError(err, "setsockopt SO_NOSIGPIPE: %s", STRERR);
         return NET_ERR;
     }
+#else
+    UNUSED(err);
+    UNUSED(fd);
+#endif
     return NET_OK;
 }
 

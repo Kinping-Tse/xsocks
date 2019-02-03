@@ -137,6 +137,8 @@ void moduleInit(int type, moduleHook hook, module *m, int argc, char *argv[]) {
     initLogger();
     mod->el = eventLoopNew();
 
+    signal(SIGPIPE, SIG_IGN);
+
     if (mod->hook.init) mod->hook.init();
 }
 
