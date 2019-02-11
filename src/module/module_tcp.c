@@ -5,7 +5,10 @@
 #include "redis/anet.h"
 
 static void tcpServerReadHandler(event *e);
+
+static void tcpClientWriteHandler(event *e);
 static void tcpClientReadTimeHandler(event *e);
+
 static void tcpRemoteReadHandler(event *e);
 static void tcpRemoteWriteHandler(event *e);
 static void tcpRemoteConnectTimeHandler(event *e);
@@ -58,21 +61,11 @@ static void tcpServerReadHandler(event* e) {
     LOGD("Tcp client current count: %d", server->client_count);
 }
 
-static void tcpClientReadTimeHandler(event *e) {
-    tcpClient *client = e->data;
-
-    if (client->stage != STAGE_STREAM) {
-        LOGD("Tcp client (%d) [%s] read timeout", client->fd, client->client_addr_info);
-
-        tcpConnectionFree(client);
-    }
-}
-
 void tcpConnectionFree(tcpClient *client) {
     tcpServer *server = client->server;
 
     server->client_count--;
-    client->remote && server->remote_count--;
+    if (client->remote) server->remote_count--;
 
     LOGD("Tcp client current count: %d", server->client_count);
     LOGD("Tcp remote current count: %d", server->remote_count);
@@ -86,6 +79,7 @@ tcpClient *tcpClientNew(int fd) {
 
     client->fd = fd;
     client->re = eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_READ, tcpClientReadHandler, client);
+    client->we = eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_WRITE, tcpClientWriteHandler, client);
     client->te = eventNew(app->config->timeout, EVENT_TYPE_TIME, EVENT_FLAG_TIME_ONCE,
                           tcpClientReadTimeHandler, client);
     client->server = NULL;
@@ -118,8 +112,10 @@ void tcpClientFree(tcpClient *client) {
     sdsfree(client->addr_buf);
 
     eventDel(client->re);
+    eventDel(client->we);
     eventDel(client->te);
     eventFree(client->re);
+    eventFree(client->we);
     eventFree(client->te);
     close(client->fd);
 
@@ -131,6 +127,48 @@ void tcpClientFree(tcpClient *client) {
     xs_free(client);
 }
 
+static void tcpClientWriteHandler(event *e) {
+    tcpClient *client = e->data;
+    tcpRemote *remote = client->remote;
+    int nwrite;
+    int cfd = client->fd;
+
+    if (remote->buf.len - remote->buf_off == 0) {
+        remote->buf_off = 0;
+        eventDel(client->we);
+        eventAdd(app->el, client->re);
+        eventAdd(app->el, remote->re);
+        return;
+    }
+
+    nwrite = write(cfd, remote->buf.data, remote->buf.len);
+    if (nwrite <= (int)remote->buf.len-remote->buf_off) {
+        if (nwrite == -1) {
+            if (errno == EAGAIN) return;
+
+            LOGW("Tcp client [%s] write error: %s", client->client_addr_info, STRERR);
+            goto error;
+        }
+
+        remote->buf_off += nwrite;
+    }
+
+    return;
+
+error:
+    tcpConnectionFree(client);
+}
+
+static void tcpClientReadTimeHandler(event *e) {
+    tcpClient *client = e->data;
+
+    if (client->stage != STAGE_STREAM) {
+        LOGD("Tcp client (%d) [%s] read timeout", client->fd, client->client_addr_info);
+
+        tcpConnectionFree(client);
+    }
+}
+
 tcpRemote *tcpRemoteNew(int fd) {
     tcpRemote *remote = xs_calloc(sizeof(*remote));
 
@@ -139,6 +177,8 @@ tcpRemote *tcpRemoteNew(int fd) {
     remote->we = eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_WRITE, tcpRemoteWriteHandler, remote);
     remote->te = eventNew(app->config->timeout, EVENT_TYPE_TIME, EVENT_FLAG_TIME_ONCE,
                           tcpRemoteConnectTimeHandler, remote);
+    remote->buf_off = 0;
+
     anetNonBlock(NULL, fd);
     anetEnableTcpNoDelay(NULL, fd);
     netNoSigPipe(NULL, fd);
@@ -146,11 +186,16 @@ tcpRemote *tcpRemoteNew(int fd) {
     eventAdd(app->el, remote->we);
     eventAdd(app->el, remote->te);
 
+    bzero(&remote->buf, sizeof(remote->buf));
+    balloc(&remote->buf, NET_IOBUF_LEN);
+
     return remote;
 }
 
 void tcpRemoteFree(tcpRemote *remote) {
     if (!remote) return;
+
+    bfree(&remote->buf);
 
     eventDel(remote->re);
     eventDel(remote->we);
@@ -167,17 +212,15 @@ static void tcpRemoteReadHandler(event *e) {
     tcpRemote *remote = e->data;
     tcpClient *client = remote->client;
 
-    buffer_t tmp_buf = {0,0,0,NULL};
-    balloc(&tmp_buf, NET_IOBUF_LEN);
-
     int readlen = NET_IOBUF_LEN;
     int rfd = remote->fd;
     int cfd = client->fd;
     int nread, nwrite;
 
-    nread = read(rfd, tmp_buf.data, readlen);
+    // Read remote buffer
+    nread = read(rfd, remote->buf.data, readlen);
     if (nread == -1) {
-        if (errno == EAGAIN) goto end;
+        if (errno == EAGAIN) return;
 
         LOGW("Tcp remote [%s] read error: %s", client->remote_addr_info, STRERR);
         goto error;
@@ -185,32 +228,46 @@ static void tcpRemoteReadHandler(event *e) {
         LOGD("Tcp remote [%s] closed connection", client->remote_addr_info);
         goto error;
     }
-    tmp_buf.len = nread;
+    remote->buf.len = nread;
 
     if (app->type == MODULE_REMOTE) {
-        if (app->crypto->encrypt(&tmp_buf, client->e_ctx, NET_IOBUF_LEN)) {
+        if (app->crypto->encrypt(&remote->buf, client->e_ctx, NET_IOBUF_LEN)) {
             LOGW("Tcp remote [%s] encrypt buffer error", client->remote_addr_info);
             goto error;
         }
     } else if (app->type == MODULE_LOCAL) {
-        if (app->crypto->decrypt(&tmp_buf, client->d_ctx, NET_IOBUF_LEN)) {
+        if (app->crypto->decrypt(&remote->buf, client->d_ctx, NET_IOBUF_LEN)) {
             LOGW("Tcp remote [%s] decrypt buffer error", client->remote_addr_info);
             goto error;
         }
     }
 
-    if ((nwrite = anetWrite(cfd, tmp_buf.data, tmp_buf.len)) != (int)tmp_buf.len) {
-        LOGW("Tcp client [%s] write error: %s", client->client_addr_info, STRERR);
-        goto error;
+    // Write buffer to client
+    nwrite = write(cfd, remote->buf.data, remote->buf.len);
+    if (nwrite != (int)remote->buf.len) {
+        if (nwrite == -1) {
+            if (errno == EAGAIN) {
+                eventDel(remote->re);
+                eventDel(client->re);
+                eventAdd(app->el, client->we);
+
+                return;
+            }
+
+            LOGW("Tcp client [%s] write error: %s", client->client_addr_info, STRERR);
+            goto error;
+        }
+
+        remote->buf_off = nwrite;
+        eventDel(remote->re);
+        eventDel(client->re);
+        eventAdd(app->el, client->we);
     }
 
-    goto end;
+    return;
 
 error:
     tcpConnectionFree(client);
-
-end:
-    bfree(&tmp_buf);
 }
 
 static void tcpRemoteWriteHandler(event *e) {

@@ -20,6 +20,7 @@ typedef struct tcpClient {
     int fd;
     int stage;
     event *re;
+    event *we;
     event *te;
     buffer_t buf;
     int buf_off;
@@ -34,6 +35,8 @@ typedef struct tcpClient {
 
 typedef struct tcpRemote {
     int fd;
+    buffer_t buf;
+    int buf_off;
     event *re;
     event *we;
     event *te;
