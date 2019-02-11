@@ -35,6 +35,7 @@ typedef struct xsocksConfig {
     int mtu;
     int loglevel;
     char *logfile;
+    int logfile_line;
     int use_syslog;
     int help;
     int ipv6_first;

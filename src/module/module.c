@@ -1,6 +1,8 @@
 
 #include "module.h"
 
+#include <signal.h>
+
 static module *mod;
 
 #define eprintf(...) fprintf(stderr, __VA_ARGS__)
@@ -113,7 +115,7 @@ static void initLogger() {
     log->level = config->loglevel;
     log->color_enabled = 1;
     log->syslog_enabled = config->use_syslog;
-    // log->file_line_enabled = 1;
+    log->file_line_enabled = config->logfile_line;
     // log->syslog_facility = LOG_USER;
 }
 
@@ -154,7 +156,7 @@ void moduleRun() {
     if (config->no_delay) LOGI("Enable TCP no-delay");
     if (config->ipv6_first) LOGI("Use IPv6 address first");
     // if (config->ipv6_only) LOGI("Use IPv6 address only");
-    // if (config->timeout) LOGI("Use timeout: %d", config->timeout);
+    if (config->timeout) LOGI("Use timeout: %d", config->timeout);
     LOGI("Use local addr: %s:%d", config->local_addr, config->local_port);
     LOGI("Use remote addr: %s:%d", config->remote_addr, config->remote_port);
     LOGI("Start event loop with: %s", eventGetApiName());

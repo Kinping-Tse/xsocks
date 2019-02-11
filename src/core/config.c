@@ -62,6 +62,7 @@ xsocksConfig *configNew() {
     config->mtu = 0;
     config->loglevel = LOGLEVEL_NOTICE;
     config->logfile = NULL;
+    config->logfile_line = 0;
     config->ipv6_first = 0;
     config->ipv6_only = 1;
 
@@ -182,6 +183,10 @@ void configLoad(xsocksConfig *config, char *filename) {
                       "Must be one of debug, info, notice, warning, error";
                 goto loaderr;
             }
+        } else if (strcmp(name, "logfile_line") == 0) {
+            check_json_value_type(value, json_boolean,
+                                  "invalid config file: option 'logfile_line' must be a boolean");
+            config->logfile_line = to_integer(value);
         } else if (strcmp(name, "tunnel_address") == 0) {
             config->tunnel_address = to_string(value);
         } else if (strcmp(name, "mode") == 0) {

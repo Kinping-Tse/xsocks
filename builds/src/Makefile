@@ -72,11 +72,11 @@ ifeq ($(EVENT), libev)
 endif
 
 XSOCKS_SERVER_NAME = xs-server
-XSOCKS_SERVER_OBJ = server.o $(OBJS)
+XSOCKS_SERVER_OBJ = server.o module_tcp.o module_udp.o $(OBJS)
 XSOCKS_LOCAL_NAME = xs-local
-XSOCKS_LOCAL_OBJ = local.o $(OBJS)
+XSOCKS_LOCAL_OBJ = local.o module_tcp.o $(OBJS)
 XSOCKS_TUNNEL_NAME = xs-tunnel
-XSOCKS_TUNNEL_OBJ = tunnel.o $(OBJS)
+XSOCKS_TUNNEL_OBJ = tunnel.o module_udp.o $(OBJS)
 
 XSOCKS_MODULE_EXE = $(XSOCKS_SERVER_NAME) $(XSOCKS_LOCAL_NAME) $(XSOCKS_TUNNEL_NAME)
 
@@ -94,16 +94,17 @@ persist-settings: distclean
 	@echo STD=$(STD) >> .make-settings
 	@echo WARN=$(WARN) >> .make-settings
 	@echo OPT=$(OPT) >> .make-settings
-	@echo MALLOC=$(MALLOC) >> .make-settings
-	@echo EVENT=$(EVENT) >> .make-settings
+	@echo DEBUG=$(DEBUG) >> .make-settings
 	@echo CFLAGS=$(CFLAGS) >> .make-settings
 	@echo LDFLAGS=$(LDFLAGS) >> .make-settings
 	@echo EXT_CFLAGS=$(EXT_CFLAGS) >> .make-settings
 	@echo EXT_LDFLAGS=$(EXT_LDFLAGS) >> .make-settings
+	@echo PREFIX=$(PREFIX) >> .make-settings
+	@echo MALLOC=$(MALLOC) >> .make-settings
+	@echo EVENT=$(EVENT) >> .make-settings
+	@echo LINK_MODE=$(LINK_MODE) >> .make-settings
 	@echo PREV_FINAL_CFLAGS=$(FINAL_CFLAGS) >> .make-settings
 	@echo PREV_FINAL_LDFLAGS=$(FINAL_LDFLAGS) >> .make-settings
-	@echo LINK_MODE=$(LINK_MODE) >> .make-settings
-	@echo PREFIX=$(PREFIX) >> .make-settings
 	cd $(BUILD_DEPS_PATH) && $(MAKE) deps-init && $(MAKE) $(MFLAGS) $(DEPENDENCY_TARGETS)
 
 .make-prerequisites:

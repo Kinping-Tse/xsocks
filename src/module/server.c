@@ -1,5 +1,7 @@
 
 #include "module.h"
+#include "module_tcp.h"
+#include "module_udp.h"
 
 #include "redis/anet.h"
 
@@ -24,56 +26,11 @@ udp:
 
 */
 
-#define STAGE_ERROR     -1  /* Error detected                   */
-#define STAGE_INIT       0  /* Initial stage                    */
-#define STAGE_HANDSHAKE  1  /* Handshake with client            */
-#define STAGE_STREAM     5  /* Stream between client and server */
-
-typedef struct tcpServer {
-    int fd;
-    event *re;
-} tcpServer;
-
-typedef struct tcpClient {
-    int fd;
-    int stage;
-    buffer_t buf;
-    int buf_off;
-    event *re;
-    struct tcpRemote *remote;
-    cipher_ctx_t *e_ctx;
-    cipher_ctx_t *d_ctx;
-    char client_addr_info[ADDR_INFO_STR_LEN];
-    char remote_addr_info[ADDR_INFO_STR_LEN];
-} tcpClient;
-
-typedef struct tcpRemote {
-    int fd;
-    event *re;
-    event *we;
-    tcpClient *client;
-} tcpRemote;
-
-typedef struct udpServer {
-    int fd;
-    event *re;
-} udpServer;
-
-typedef struct udpRemote {
-    int fd;
-    event *re;
-    sockAddrEx local_client_sa;
-    udpServer *server;
-} udpRemote;
-
 typedef struct server {
     module mod;
     tcpServer *ts;
     udpServer *us;
 } server;
-
-static server s;
-static module *app = (module *)&s;
 
 static void serverInit();
 static void serverRun();
@@ -81,30 +38,16 @@ static void serverExit();
 
 static void tcpServerInit();
 static void tcpServerExit();
-static tcpServer *tcpServerNew(int fd);
-static void tcpServerFree(tcpServer *server);
-static void tcpServerReadHandler(event *e);
 
-static tcpClient *tcpClientNew(int fd);
-static void tcpClientFree(tcpClient *client);
-static void tcpClientReadHandler(event *e);
+static void _tcpClientReadHandler(event *e);
 static int tcpShadowSocksHandshake(tcpClient *client);
-
-static tcpRemote *tcpRemoteNew(int fd);
-static void tcpRemoteFree(tcpRemote *remote);
-static void tcpRemoteReadHandler(event *e);
-static void tcpRemoteWriteHandler(event *e);
 
 static void udpServerInit();
 static void udpServerExit();
-static udpServer *udpServerNew(int fd);
-static void udpServerFree(udpServer *server);
-static void udpServerReadHandler(event *e);
 
-static udpRemote *udpRemoteCreate(char *host);
-static udpRemote *udpRemoteNew(int fd);
-static void udpRemoteFree(udpRemote *remote);
-static void udpRemoteReadHandler(event *e);
+static server s;
+module *app = (module *)&s;
+eventHandler tcpClientReadHandler = _tcpClientReadHandler;
 
 int main(int argc, char *argv[]) {
     moduleHook hook = {serverInit, serverRun, serverExit};
@@ -160,91 +103,7 @@ static void tcpServerExit() {
     tcpServerFree(s.ts);
 }
 
-static tcpServer *tcpServerNew(int fd) {
-    tcpServer *server = xs_calloc(sizeof(*server));
-
-    server->fd = fd;
-    server->re = eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_READ, tcpServerReadHandler, server);
-
-    anetNonBlock(NULL, server->fd);
-    eventAdd(app->el, server->re);
-
-    return server;
-}
-
-static void tcpServerFree(tcpServer *server) {
-    if (!server) return;
-
-    eventDel(server->re);
-    eventFree(server->re);
-    close(server->fd);
-
-    xs_free(server);
-}
-
-static void tcpServerReadHandler(event* e) {
-    int cfd, cport;
-    char cip[NET_IP_MAX_STR_LEN];
-    char err[ANET_ERR_LEN];
-
-    cfd = anetTcpAccept(err, e->id, cip, sizeof(cip), &cport);
-    if (cfd == ANET_ERR) {
-        if (errno != EWOULDBLOCK)
-            LOGW("Tcp server accept: %s", err);
-
-        return;
-    }
-
-    tcpClient *client = tcpClientNew(cfd);
-    snprintf(client->client_addr_info, ADDR_INFO_STR_LEN, "%s:%d", cip, cport);
-
-    LOGD("Tcp server accepted client %s fd:%d", client->client_addr_info, cfd);
-}
-
-tcpClient *tcpClientNew(int fd) {
-    tcpClient *client = xs_calloc(sizeof(*client));
-
-    anetNonBlock(NULL, fd);
-    anetEnableTcpNoDelay(NULL, fd);
-
-    event* re = eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_READ, tcpClientReadHandler, client);
-    eventAdd(app->el, re);
-
-    client->fd = fd;
-    client->re = re;
-    client->remote = NULL;
-    client->stage = STAGE_INIT;
-
-    client->e_ctx = xs_calloc(sizeof(*client->e_ctx));
-    client->d_ctx = xs_calloc(sizeof(*client->d_ctx));
-
-    app->crypto->ctx_init(app->crypto->cipher, client->e_ctx, 1);
-    app->crypto->ctx_init(app->crypto->cipher, client->d_ctx, 0);
-
-    bzero(&client->buf, sizeof(client->buf));
-    balloc(&client->buf, NET_IOBUF_LEN);
-
-    return client;
-}
-
-static void tcpClientFree(tcpClient *client) {
-    if (!client) return;
-
-    eventDel(client->re);
-    eventFree(client->re);
-    close(client->fd);
-
-    app->crypto->ctx_release(client->e_ctx);
-    app->crypto->ctx_release(client->d_ctx);
-    xs_free(client->e_ctx);
-    xs_free(client->d_ctx);
-
-    bfree(&client->buf);
-
-    xs_free(client);
-}
-
-static void tcpClientReadHandler(event *e) {
+static void _tcpClientReadHandler(event *e) {
     tcpClient *client = e->data;
     tcpRemote *remote = client->remote;
 
@@ -257,7 +116,7 @@ static void tcpClientReadHandler(event *e) {
     if (nread == -1) {
         if (errno == EAGAIN) return;
 
-        LOGW("Tcp client [%s] read error: %s", client->client_addr_info, strerror(errno));
+        LOGW("Tcp client [%s] read error: %s", client->client_addr_info, STRERR);
         goto error;
     } else if (nread == 0) {
         LOGD("Tcp client [%s] closed connection", client->client_addr_info);
@@ -283,14 +142,14 @@ static void tcpClientReadHandler(event *e) {
     int nwrite;
     int rfd = remote->fd;
 
-    nwrite = write(rfd, client->buf.data, client->buf.len);
+    nwrite = anetWrite(rfd, client->buf.data, client->buf.len);
     if (nwrite != (int)client->buf.len) {
-        LOGW("Tcp remote [%s] write error: %s", client->remote_addr_info, STRERR);
+        LOGW("Tcp remote (%d) [%s] write error: %s", rfd, client->remote_addr_info, STRERR);
         goto error;
     }
 
     if (client->stage == STAGE_HANDSHAKE){
-        LOGD("Tcp remote [%s] connect suceess", client->remote_addr_info);
+        LOGD("Tcp remote (%d) [%s] connect success", rfd, client->remote_addr_info);
         client->stage = STAGE_STREAM;
 
         anetDisableTcpNoDelay(NULL, client->fd);
@@ -300,8 +159,7 @@ static void tcpClientReadHandler(event *e) {
     return;
 
 error:
-    tcpClientFree(client);
-    tcpRemoteFree(remote);
+    tcpConnectionFree(client);
 }
 
 int tcpShadowSocksHandshake(tcpClient *client) {
@@ -319,7 +177,7 @@ int tcpShadowSocksHandshake(tcpClient *client) {
     }
 
     anetFormatAddr(client->remote_addr_info, ADDR_INFO_STR_LEN, rhost, rport);
-    LOGI("Tcp client [%s] request remote addr [%s]", client->client_addr_info,
+    LOGI("Tcp client (%d) [%s] request remote addr [%s]", client->fd, client->client_addr_info,
          client->remote_addr_info);
 
     // Connect to remote server
@@ -327,9 +185,10 @@ int tcpShadowSocksHandshake(tcpClient *client) {
     int rfd;
 
     if ((rfd = anetTcpNonBlockConnect(err, rhost, rport)) == ANET_ERR) {
-        LOGW("Tcp Remote [%s] connenct error: %s", client->remote_addr_info, err);
+        LOGW("Tcp remote (%d) [%s] connect error: %s", rfd, client->remote_addr_info, err);
         return -1;
     }
+    LOGD("Tcp remote (%d) [%s] is connecting ...", rfd, client->remote_addr_info);
 
     // Prepare stream
     tcpRemote *remote = tcpRemoteNew(rfd);
@@ -342,106 +201,10 @@ int tcpShadowSocksHandshake(tcpClient *client) {
     client->buf_off = raddr_len;
     eventDel(client->re);
 
+    s.ts->remote_count++;
+    LOGD("Tcp remote current count: %d", s.ts->remote_count);
+
     return raddr_len;
-}
-
-static tcpRemote *tcpRemoteNew(int fd) {
-    tcpRemote *remote = xs_calloc(sizeof(*remote));
-
-    remote->fd = fd;
-    remote->re = eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_READ, tcpRemoteReadHandler, remote);
-    remote->we = eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_WRITE, tcpRemoteWriteHandler, remote);
-
-    anetNonBlock(NULL, fd);
-    anetEnableTcpNoDelay(NULL, fd);
-    netNoSigPipe(NULL, fd);
-
-    eventAdd(app->el, remote->we);
-
-    return remote;
-}
-
-static void tcpRemoteFree(tcpRemote *remote) {
-    if (!remote) return;
-
-    eventDel(remote->re);
-    eventDel(remote->we);
-    eventFree(remote->re);
-    eventFree(remote->we);
-    close(remote->fd);
-
-    xs_free(remote);
-}
-
-static void tcpRemoteReadHandler(event *e) {
-    tcpRemote *remote = e->data;
-    tcpClient *client = remote->client;
-
-    buffer_t tmp_buf = {0,0,0,NULL};
-    balloc(&tmp_buf, NET_IOBUF_LEN);
-
-    int readlen = NET_IOBUF_LEN;
-    int rfd = remote->fd;
-    int cfd = client->fd;
-    int nread, nwrite;
-
-    nread = read(rfd, tmp_buf.data, readlen);
-    if (nread == -1) {
-        if (errno == EAGAIN) goto end;
-
-        LOGW("Tcp remote [%s] read error: %s", client->remote_addr_info, STRERR);
-        goto error;
-    } else if (nread == 0) {
-        LOGD("Tcp remote [%s] closed connection", client->remote_addr_info);
-        goto error;
-    }
-    tmp_buf.len = nread;
-
-    if (app->crypto->encrypt(&tmp_buf, client->e_ctx, NET_IOBUF_LEN)) {
-        LOGW("Tcp remote [%s] encrypt buffer error", client->remote_addr_info);
-        goto error;
-    }
-
-    if ((nwrite = write(cfd, tmp_buf.data, tmp_buf.len)) != (int)tmp_buf.len) {
-        LOGW("Tcp client [%s] write error: %s", client->client_addr_info, STRERR);
-        goto error;
-    }
-
-    goto end;
-
-error:
-    tcpClientFree(client);
-    tcpRemoteFree(remote);
-
-end:
-    bfree(&tmp_buf);
-}
-
-static void tcpRemoteWriteHandler(event *e) {
-    tcpRemote *remote = e->data;
-    tcpClient *client = remote->client;
-
-    eventDel(remote->we);
-    eventAdd(app->el, remote->re);
-    eventAdd(app->el, client->re);
-
-    if (client->buf.len - client->buf_off == 0) return;
-
-    // Write to remote server
-    int nwrite;
-    int rfd = remote->fd;
-
-    nwrite = write(rfd, client->buf.data+client->buf_off, client->buf.len-client->buf_off);
-    if (nwrite != (int)client->buf.len-client->buf_off) {
-        LOGW("Tcp remote [%s] write error: %s", client->remote_addr_info, STRERR);
-        goto error;
-    }
-
-    return;
-
-error:
-    tcpClientFree(client);
-    tcpRemoteFree(remote);
 }
 
 static void udpServerInit() {
@@ -465,204 +228,4 @@ static void udpServerInit() {
 
 static void udpServerExit() {
     udpServerFree(s.us);
-}
-
-static udpServer *udpServerNew(int fd) {
-    udpServer *server = xs_calloc(sizeof(*server));
-
-    server->fd = fd;
-    server->re = eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_READ, udpServerReadHandler, server);
-
-    anetNonBlock(NULL, server->fd);
-    eventAdd(app->el, server->re);
-
-    return server;
-}
-
-static void udpServerFree(udpServer *server) {
-    if (!server) return;
-
-    eventDel(server->re);
-    eventFree(server->re);
-    close(server->fd);
-
-    xs_free(server);
-}
-
-static void udpServerReadHandler(event *e) {
-    udpServer *server = e->data;
-    udpRemote *remote = NULL;
-
-    int readlen = NET_IOBUF_LEN;
-    int sfd = server->fd;
-    int nread;
-
-    sockAddrEx caddr;
-    buffer_t tmp_buf = {0,0,0,NULL};
-
-    balloc(&tmp_buf, NET_IOBUF_LEN);
-    netSockAddrExInit(&caddr);
-
-    // Read local client buffer
-    nread = recvfrom(sfd, tmp_buf.data, readlen, 0,
-                    (sockAddr *)&caddr.sa, &caddr.sa_len);
-    if (nread == -1) {
-        LOGW("Local server read UDP error: %s", strerror(errno));
-        goto error;
-    }
-    tmp_buf.len = nread;
-
-    char cip[HOSTNAME_MAX_LEN];
-    int cport;
-
-    netIpPresentBySockAddr(NULL, cip, HOSTNAME_MAX_LEN, &cport, &caddr);
-    LOGD("Local server read UDP from [%s:%d]", cip, cport);
-
-    // Decrypt local client buffer
-    if (app->crypto->decrypt_all(&tmp_buf, app->crypto->cipher, NET_IOBUF_LEN)) {
-        LOGW("Local server decrypt UDP buffer error");
-        goto error;
-    }
-
-    // Validate the buffer
-    char rip[HOSTNAME_MAX_LEN];
-    int rip_len = HOSTNAME_MAX_LEN;
-    int rport;
-    int raddr_len;
-
-    if ((raddr_len= socks5AddrParse(tmp_buf.data, tmp_buf.len, NULL, rip, &rip_len, &rport)) == -1) {
-        LOGW("Local server parse UDP buffer error");
-        goto error;
-    }
-
-    char raddr_info[ADDR_INFO_STR_LEN];
-    anetFormatAddr(raddr_info, ADDR_INFO_STR_LEN, rip, rport);
-    LOGI("Local client request UDP addr: %s", raddr_info);
-
-    // Write to remote server
-    sockAddrEx raddr;
-    char err[ANET_ERR_LEN];
-    if (netUdpGetSockAddrEx(err, rip, rport, app->config->ipv6_first, &raddr) == NET_ERR) {
-        LOGW("Remote server get sockaddr error: %s", err);
-        goto error;
-    }
-
-    remote = udpRemoteCreate(rip);
-    remote->server = server;
-    memcpy(&remote->local_client_sa, &caddr, sizeof(caddr));
-
-    int rfd = remote->fd;
-    if (sendto(rfd, tmp_buf.data+raddr_len, tmp_buf.len-raddr_len, 0,
-               (sockAddr *)&raddr.sa, raddr.sa_len) == -1) {
-        LOGW("Remote client send UDP buffer error: %s", strerror(errno));
-        goto error;
-    }
-
-    goto end;
-
-error:
-    udpRemoteFree(remote);
-
-end:
-    bfree(&tmp_buf);
-}
-
-udpRemote *udpRemoteCreate(char *host) {
-    char err[ANET_ERR_LEN];
-    int port = 0;
-    int fd;
-
-    if (host && isIPv6Addr(host))
-        fd = netUdp6Server(err, 0, NULL);
-    else
-        fd = netUdpServer(err, 0, NULL);
-
-    if (fd == ANET_ERR) {
-        FATAL("Could not create remote server UDP socket %s:%d: %s",
-              host, port, err);
-    }
-
-    return udpRemoteNew(fd);
-}
-
-static udpRemote *udpRemoteNew(int fd) {
-    udpRemote *remote = xs_calloc(sizeof(*remote));
-
-    remote->fd = fd;
-    remote->re = eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_READ, udpRemoteReadHandler, remote);
-
-    anetNonBlock(NULL, remote->fd);
-    eventAdd(app->el, remote->re);
-    netSockAddrExInit(&remote->local_client_sa);
-
-    return remote;
-}
-
-static void udpRemoteFree(udpRemote *remote) {
-    if (!remote) return;
-
-    eventDel(remote->re);
-    eventFree(remote->re);
-    close(remote->fd);
-
-    xs_free(remote);
-}
-
-static void udpRemoteReadHandler(event *e) {
-    udpRemote *remote = e->data;
-    udpServer *server = remote->server;
-
-    int readlen = NET_IOBUF_LEN;
-    int rfd = remote->fd;
-    int nread;
-    char buf[NET_IOBUF_LEN];
-    sds sbuf = NULL;
-    buffer_t tmp_buf = {0,0,0,NULL};
-    sockAddrEx remote_addr;
-
-    balloc(&tmp_buf, NET_IOBUF_LEN);
-    netSockAddrExInit(&remote_addr);
-
-    // Read remote server buffer
-    nread = recvfrom(rfd, buf, readlen, 0,
-                    (sockAddr *)&remote_addr.sa, &remote_addr.sa_len);
-    if (nread == -1) {
-        LOGW("Remote client UDP read error: %s", strerror(errno));
-        goto error;
-    }
-
-    // Log remote server info
-    char rip[HOSTNAME_MAX_LEN];
-    int rport;
-    netIpPresentBySockAddr(NULL, rip, HOSTNAME_MAX_LEN, &rport, &remote_addr);
-    LOGD("Remote client read UDP from [%s:%d] ", rip, rport);
-
-    // Append address buffer
-    sbuf = socks5AddrInit(NULL, rip, rport);
-    sbuf = sdscatlen(sbuf, buf, nread);
-    memcpy(tmp_buf.data, sbuf, sdslen(sbuf));
-    tmp_buf.len = sdslen(sbuf);
-
-    // Encrypt remote buffer
-    if (app->crypto->encrypt_all(&tmp_buf, app->crypto->cipher, NET_IOBUF_LEN)) {
-        LOGW("Remote client encrypt UDP buffer error");
-        goto error;
-    }
-
-    // Write to local client
-    int sfd = server->fd;
-    int nwrite = sendto(sfd, tmp_buf.data, tmp_buf.len, 0,
-                        (sockAddr *)&remote->local_client_sa.sa, remote->local_client_sa.sa_len);
-    if (nwrite == -1) {
-        LOGW("Local server UDP write error: %s", strerror(errno));
-        goto error;
-    }
-
-    goto end;
-
-error:
-end:
-    udpRemoteFree(remote);
-    sdsfree(sbuf);
-    bfree(&tmp_buf);
 }

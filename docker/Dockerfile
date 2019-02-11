@@ -20,6 +20,7 @@ RUN set -xe \
         && cd $TMP_XSOCKS \
         && make -j "$(getconf _NPROCESSORS_ONLN)" \
             PREFIX="$XSOCKS_PATH" \
+            OPTIMIZATION=-O3 DEBUG= \
             USE_JEMALLOC=no USE_LIBEV=no USE_SHARED=no \
         && make install \
         && make distclean \

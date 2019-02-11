@@ -1,15 +1,9 @@
 
 #include "module.h"
+#include "module_tcp.h"
 
 #include "redis/anet.h"
 #include "redis/sds.h"
-
-#define STAGE_ERROR     -1  /* Error detected                   */
-#define STAGE_INIT       0  /* Initial stage                    */
-#define STAGE_HANDSHAKE  1  /* Handshake with client            */
-#define STAGE_SNI        3  /* Parse HTTP/SNI header            */
-#define STAGE_RESOLVE    4  /* Resolve the hostname             */
-#define STAGE_STREAM     5  /* Stream between client and server */
 
 /*
 c: client lo: local r: remote
@@ -31,178 +25,99 @@ client                      local                     remote
 
 */
 
-static module local;
-static module *app = &local;
+typedef struct server {
+    module mod;
+    tcpServer *ts;
+} server;
 
-struct remoteServer;
+static void localInit();
+static void localRun();
+static void localExit();
 
-typedef struct localClient {
-    int fd;
-    int stage;
-    event *re;
-    sds buf;
-    // int buf_off;
-    sds addr_buf;
-    struct remoteServer *remote;
-    cipher_ctx_t *e_ctx;
-    char dest_addr_info[ADDR_INFO_STR_LEN];
-} localClient;
+static void tcpServerInit();
+static void tcpServerExit();
 
-typedef struct remoteServer {
-    int fd;
-    event *re;
-    // sds buf;
-    // int buf_off;
-    localClient *client;
-    cipher_ctx_t *d_ctx;
-} remoteServer;
+static void _tcpClientReadHandler(event *e);
+static void handleSocks5Auth(tcpClient* client);
+static void handleSocks5Handshake(tcpClient* client);
+static void handleSocks5Stream(tcpClient *client);
+static int shadowSocksHandshake(tcpClient *client);
 
-void acceptHandler(event *e);
-void remoteServerReadHandler(event *e);
-void localClientReadHandler(event *e);
+static server s;
+module *app = (module *)&s;
+eventHandler tcpClientReadHandler = _tcpClientReadHandler;
 
-void listenForLocal(int *fd) {
+int main(int argc, char *argv[]) {
+    moduleHook hook = {localInit, localRun, localExit};
+
+    moduleInit(MODULE_LOCAL, hook, app, argc, argv);
+    moduleRun();
+    moduleExit();
+
+    return EXIT_SUCCESS;
+}
+
+static void localInit() {
+    getLogger()->syslog_ident = "xs-local";
+
+    if (app->config->mode & MODE_TCP_ONLY) tcpServerInit();
+
+    if (app->config->mode & MODE_UDP_ONLY) {
+        LOGW("Only support TCP now!");
+        LOGW("UDP mode is not working!");
+    }
+}
+
+static void localRun() {
+    char addr_info[ADDR_INFO_STR_LEN];
+
+    if (s.ts && anetFormatSock(s.ts->fd, addr_info, ADDR_INFO_STR_LEN) > 0)
+        LOGN("TCP server listen at: %s", addr_info);
+}
+
+static void localExit() {
+    tcpServerExit();
+}
+
+static void tcpServerInit() {
     char err[ANET_ERR_LEN];
     char *host = app->config->local_addr;
     int port = app->config->local_port;
     int backlog = 256;
+    int fd;
 
-    if (app->config->ipv6_first || (host && isIPv6Addr(host))) {
-        *fd = anetTcp6Server(err, port, host, backlog);
-    } else {
-        *fd = anetTcpServer(err, port, host, backlog);
-    }
-    if (*fd == ANET_ERR) {
+    if (app->config->ipv6_first || (host && isIPv6Addr(host)))
+        fd = anetTcp6Server(err, port, host, backlog);
+    else
+        fd = anetTcpServer(err, port, host, backlog);
+
+    if (fd == ANET_ERR)
         FATAL("Could not create server TCP listening socket %s:%d: %s",
               host ? host : "*", port, err);
+
+    s.ts = tcpServerNew(fd);
+}
+
+static void tcpServerExit() {
+    tcpServerFree(s.ts);
+}
+
+static void _tcpClientReadHandler(event *e) {
+    tcpClient *client = e->data;
+
+    if (client->stage == STAGE_INIT) {
+        handleSocks5Auth(client);
+        return;
+    } else if (client->stage == STAGE_HANDSHAKE) {
+        handleSocks5Handshake(client);
+        return;
     }
 
-    anetNonBlock(NULL, *fd);
+    assert(client->stage == STAGE_STREAM);
+    handleSocks5Stream(client);
 }
 
-static void initLocal() {
-    getLogger()->syslog_ident = "xs-local";
-
-    if (local.config->mode & MODE_TCP_ONLY) {
-        int lfd;
-        listenForLocal(&lfd);
-
-        event* e = eventNew(lfd, EVENT_TYPE_IO, EVENT_FLAG_READ, acceptHandler, NULL);
-        eventAdd(local.el, e);
-    }
-}
-
-localClient *newClient(int fd) {
-    localClient *client = xs_calloc(sizeof(*client));
-
-    anetNonBlock(NULL, fd);
-    anetEnableTcpNoDelay(NULL, fd);
-
-    event* re = eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_READ, localClientReadHandler, client);
-    eventAdd(local.el, re);
-
-    client->fd = fd;
-    client->re = re;
-    client->stage = STAGE_INIT;
-    client->addr_buf = NULL;
-    client->buf = sdsempty();
-    // client->buf_off = 0;
-
-    client->e_ctx = xs_calloc(sizeof(*client->e_ctx));
-    local.crypto->ctx_init(local.crypto->cipher, client->e_ctx, 1);
-
-    return client;
-}
-
-void freeClient(localClient *client) {
-    sdsfree(client->buf);
-    sdsfree(client->addr_buf);
-    eventDel(client->re);
-    eventFree(client->re);
-    close(client->fd);
-
-    local.crypto->ctx_release(client->e_ctx);
-    xs_free(client->e_ctx);
-
-    xs_free(client);
-}
-
-remoteServer *newRemote(int fd) {
-    remoteServer *remote = xs_calloc(sizeof(*remote));
-
-    anetNonBlock(NULL, fd);
-    anetEnableTcpNoDelay(NULL, fd);
-
-    event* re = eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_READ, remoteServerReadHandler, remote);
-    eventAdd(local.el, re);
-
-    // remote->buf = sdsempty();
-    // remote->buf_off = 0;
-    remote->re = re;
-    remote->fd = fd;
-
-    remote->d_ctx = xs_calloc(sizeof(*remote->d_ctx));
-    local.crypto->ctx_init(local.crypto->cipher, remote->d_ctx, 0);
-
-    return remote;
-}
-
-void freeRemote(remoteServer *remote) {
-    // sdsfree(remote->buf);
-    eventDel(remote->re);
-    eventFree(remote->re);
-    close(remote->fd);
-
-    local.crypto->ctx_release(remote->d_ctx);
-    xs_free(remote->d_ctx);
-
-    xs_free(remote);
-}
-
-void remoteServerReadHandler(event *e) {
-    remoteServer *remote = e->data;
-    localClient *client = remote->client;
-
-    buffer_t tmp_buf = {0,0,0, NULL};
-    balloc(&tmp_buf, NET_IOBUF_LEN);
-
-    int readlen = NET_IOBUF_LEN;
-    int rfd = remote->fd;
-    int cfd = client->fd;
-    int nread, nwrite;
-
-    nread = read(rfd, tmp_buf.data, readlen);
-    if (nread == -1) {
-        if (errno == EAGAIN) goto end;
-
-        LOGW("Remote server [%s] read error: %s", client->dest_addr_info, strerror(errno));
-        goto error;
-    } else if (nread == 0) {
-        LOGD("Remote server [%s] closed connection", client->dest_addr_info);
-        goto error;
-    }
-    tmp_buf.len = nread;
-
-    if (local.crypto->decrypt(&tmp_buf, remote->d_ctx, NET_IOBUF_LEN)) {
-        LOGW("Remote server [%s] decrypt stream buffer error", client->dest_addr_info);
-        goto error;
-    }
-
-    if ((nwrite = write(cfd, tmp_buf.data, tmp_buf.len)) != (int)tmp_buf.len) {
-        LOGW("Local client [%s] write error: %s", client->dest_addr_info, strerror(errno));
-        goto error;
-    }
-
-    goto end;
-
-error:
-    freeClient(client);
-    freeRemote(remote);
-end:
-    bfree(&tmp_buf);
-}
-
-void handleSocks5Auth(localClient* client) {
+static void handleSocks5Auth(tcpClient* client) {
     char buf[NET_IOBUF_LEN];
     int readlen = NET_IOBUF_LEN;
     int cfd = client->re->id;
@@ -251,45 +166,10 @@ void handleSocks5Auth(localClient* client) {
     return;
 
 error:
-    freeClient(client);
+    tcpConnectionFree(client);
 }
 
-/*
- * Just Send Shadowsocks TCP Relay Header:
- *
- *    +------+----------+----------+
- *    | ATYP | DST.ADDR | DST.PORT |
- *    +------+----------+----------+
- *    |  1   | Variable |    2     |
- *    +------+----------+----------+
- */
-int shadowSocksHandshake(localClient *client) {
-    assert(client->addr_buf);
-
-    int ok = MODULE_OK;
-    buffer_t tmp_buf = {0,0,0,NULL};
-
-    balloc(&tmp_buf, NET_IOBUF_LEN);
-    memcpy(tmp_buf.data, client->addr_buf, sdslen(client->addr_buf));
-    tmp_buf.len = sdslen(client->addr_buf);
-
-    if (local.crypto->encrypt(&tmp_buf, client->e_ctx, NET_IOBUF_LEN))
-        LOGW("Local client encrypt stream buffer error");
-
-    int nwrite = write(client->remote->fd, tmp_buf.data, tmp_buf.len);
-    if (nwrite != (int)tmp_buf.len) {
-        LOGW("Local client [%s] write to remote server error", client->dest_addr_info);
-        ok = MODULE_ERR;
-    }
-
-    bfree(&tmp_buf);
-    sdsfree(client->addr_buf);
-    client->addr_buf = NULL;
-
-    return ok;
-}
-
-void handleSocks5Handshake(localClient* client) {
+static void handleSocks5Handshake(tcpClient* client) {
     char buf[NET_IOBUF_LEN];
     int readlen = NET_IOBUF_LEN;
     int cfd = client->re->id;
@@ -342,8 +222,8 @@ void handleSocks5Handshake(localClient* client) {
         goto error;
     }
 
-    snprintf(client->dest_addr_info, ADDR_INFO_STR_LEN, "%s:%d", addr, port);
-    LOGI("Local client request addr: [%s]", client->dest_addr_info);
+    snprintf(client->remote_addr_info, ADDR_INFO_STR_LEN, "%s:%d", addr, port);
+    LOGI("Tcp client request addr: [%s]", client->remote_addr_info);
 
     sockAddrIpV4 sock_addr;
     bzero(&sock_addr, sizeof(sock_addr));
@@ -364,9 +244,8 @@ void handleSocks5Handshake(localClient* client) {
 
     // Connect to remote server
     char err[ANET_ERR_LEN];
-    // bzero(err, ANET_ERR_LEN);
-    char *remote_addr = local.config->remote_addr;
-    int remote_port = local.config->remote_port;
+    char *remote_addr = app->config->remote_addr;
+    int remote_port = app->config->remote_port;
     int rfd  = anetTcpConnect(err, remote_addr, remote_port);
     if (rfd == ANET_ERR) {
         LOGE("Remote server [%s:%d] connenct error: %s", remote_addr, remote_port, err);
@@ -375,16 +254,17 @@ void handleSocks5Handshake(localClient* client) {
     LOGD("Connect to remote server suceess, fd:%d", rfd);
 
     // Prepare stream
-    remoteServer *remote = newRemote(rfd);
+    tcpRemote *remote = tcpRemoteNew(rfd);
     remote->client = client;
 
     client->remote = remote;
     client->stage = STAGE_STREAM;
-    client->buf = sdsMakeRoomFor(client->buf, NET_IOBUF_LEN);
     client->addr_buf = sdsnewlen(addr_buf, buf_len);
 
+    s.ts->remote_count++;
+    LOGD("Tcp remote current count: %d", s.ts->remote_count);
+
     if (shadowSocksHandshake(client) == MODULE_ERR) {
-        freeRemote(remote);
         goto error;
     }
 
@@ -393,94 +273,81 @@ void handleSocks5Handshake(localClient* client) {
     return;
 
 error:
-    freeClient(client);
+    tcpConnectionFree(client);
 }
 
-void handleSocks5Stream(localClient *client) {
-    remoteServer *remote = client->remote;
+static void handleSocks5Stream(tcpClient *client) {
+    tcpRemote *remote = client->remote;
     int readlen = NET_IOBUF_LEN;
     int cfd = client->fd;
     int nread;
-    buffer_t tmp_buf = {0,0,0,NULL};
 
     // Read local client buffer
-    sdssetlen(client->buf, 0);
-    nread = read(cfd, client->buf, readlen);
+    nread = read(cfd, client->buf.data, readlen);
     if (nread == -1) {
-        if (errno == EAGAIN) goto end;
+        if (errno == EAGAIN) return;
 
-        LOGW("Local client [%s] stream read error: %s", client->dest_addr_info, strerror(errno));
+        LOGW("Tcp client [%s] read error: %s", client->client_addr_info, STRERR);
         goto error;
     } else if (nread == 0) {
-        LOGD("Local client [%s] stream closed connection", client->dest_addr_info);
+        LOGD("Tcp client [%s] closed connection", client->client_addr_info);
         goto error;
     }
-    sdsIncrLen(client->buf, nread);
+    client->buf.len = nread;
 
     // Do buffer encrypt
-    balloc(&tmp_buf, NET_IOBUF_LEN);
-    memcpy(tmp_buf.data, client->buf, sdslen(client->buf));
-    tmp_buf.len = sdslen(client->buf);
-
-    if (local.crypto->encrypt(&tmp_buf, client->e_ctx, NET_IOBUF_LEN))
-        LOGW("Local client encrypt stream buffer error");
+    if (app->crypto->encrypt(&client->buf, client->e_ctx, NET_IOBUF_LEN)) {
+        LOGW("Tcp client encrypt buffer error");
+        goto error;
+    }
 
     // Write to remote server
     int rfd = remote->re->id;
     int nwrite;
 
-    nwrite = write(rfd, tmp_buf.data, tmp_buf.len);
-    if (nwrite != (int)tmp_buf.len) {
-        LOGW("Local client [%s] write to remote server error", client->dest_addr_info);
+    nwrite = anetWrite(rfd, client->buf.data, client->buf.len);
+    if (nwrite != (int)client->buf.len) {
+        LOGW("Tcp remote [%s] write error: %s", client->remote_addr_info, STRERR);
         goto error;
     }
 
-    goto end;
+    return;
 
 error:
-    freeClient(client);
-    freeRemote(remote);
-end:
+    tcpConnectionFree(client);
+}
+
+/*
+ * Just Send Shadowsocks TCP Relay Header:
+ *
+ *    +------+----------+----------+
+ *    | ATYP | DST.ADDR | DST.PORT |
+ *    +------+----------+----------+
+ *    |  1   | Variable |    2     |
+ *    +------+----------+----------+
+ */
+static int shadowSocksHandshake(tcpClient *client) {
+    assert(client->addr_buf);
+
+    int ok = MODULE_OK;
+    buffer_t tmp_buf = {0,0,0,NULL};
+
+    balloc(&tmp_buf, NET_IOBUF_LEN);
+    memcpy(tmp_buf.data, client->addr_buf, sdslen(client->addr_buf));
+    tmp_buf.len = sdslen(client->addr_buf);
+
+    if (app->crypto->encrypt(&tmp_buf, client->e_ctx, NET_IOBUF_LEN))
+        LOGW("Tcp client encrypt buffer error");
+
+    int nwrite = write(client->remote->fd, tmp_buf.data, tmp_buf.len);
+    if (nwrite != (int)tmp_buf.len) {
+        LOGW("Tcp remote [%s] write error", client->remote_addr_info);
+        ok = MODULE_ERR;
+    }
+
     bfree(&tmp_buf);
-}
+    sdsfree(client->addr_buf);
+    client->addr_buf = NULL;
 
-void localClientReadHandler(event *e) {
-    localClient *client = e->data;
-
-    if (client->stage == STAGE_INIT) {
-        handleSocks5Auth(client);
-        return;
-    } else if (client->stage == STAGE_HANDSHAKE) {
-        handleSocks5Handshake(client);
-        return;
-    }
-
-    assert(client->stage == STAGE_STREAM);
-    handleSocks5Stream(client);
-}
-
-void acceptHandler(event* e) {
-    int cfd, cport;
-    char cip[NET_IP_MAX_STR_LEN];
-    char err[ANET_ERR_LEN];
-
-    cfd = anetTcpAccept(err, e->id, cip, sizeof(cip), &cport);
-    if (cfd == ANET_ERR) {
-        if (errno != EWOULDBLOCK)
-            LOGW("Accepting local client connection: %s", err);
-        return;
-    }
-    LOGD("Accepted local client %s:%d fd:%d", cip, cport, cfd);
-
-    newClient(cfd);
-}
-
-int main(int argc, char *argv[]) {
-    moduleHook hook = {initLocal, NULL, NULL};
-
-    moduleInit(MODULE_LOCAL, hook, &local, argc, argv);
-    moduleRun();
-    moduleExit();
-
-    return EXIT_SUCCESS;
+    return ok;
 }

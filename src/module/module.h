@@ -1,4 +1,7 @@
 
+#ifndef __MODULE_H
+#define __MODULE_H
+
 #include "../core/common.h"
 #include "../core/config.h"
 #include "../core/utils.h"
@@ -31,10 +34,15 @@ enum {
 enum {
     MODULE_REMOTE = 0,
     MODULE_SERVER = MODULE_REMOTE,
-    MODULE_LOCAL,
-    MODULE_TUNNEL,
+    MODULE_LOCAL = 1,
+    MODULE_CLIENT = MODULE_LOCAL,
+    MODULE_TUNNEL = 2,
 };
+
+extern module *app;
 
 void moduleInit(int type, moduleHook hook, module *m, int argc, char *argv[]);
 void moduleRun();
 void moduleExit();
+
+#endif /* __MODULE_H */

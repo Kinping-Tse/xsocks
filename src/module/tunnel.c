@@ -25,7 +25,7 @@ udp:
 */
 
 static module tunnel;
-static module *app = &tunnel;
+module *app = &tunnel;
 
 typedef struct localClient {
     int fd;
@@ -152,8 +152,9 @@ static void initTunnel() {
     getLogger()->syslog_ident = "xs-tunnel";
 
     if (app->config->mode & MODE_TCP_ONLY) {
-        LOGE("Only support UDP now!");
-        exit(EXIT_ERR);
+        LOGW("Only support UDP now!");
+        LOGW("Tcp mode is not working!");
+        // exit(EXIT_ERR);
     }
 
     if (app->config->tunnel_addr == NULL) {

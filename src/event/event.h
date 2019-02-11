@@ -13,6 +13,8 @@ enum {
 enum {
     EVENT_FLAG_READ = 0,
     EVENT_FLAG_WRITE = 1,
+    EVENT_FLAG_TIME_ONCE = 0,
+    EVENT_FLAG_TIME_REPEAT = 1
 };
 
 enum {

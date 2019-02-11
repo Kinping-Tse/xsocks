@@ -9,10 +9,24 @@ typedef struct eventLoopContext {
 } eventLoopContext;
 
 typedef struct eventContext {
-    struct ev_io e;
+    union {
+        struct ev_io io;
+        struct ev_timer t;
+    } w;
+    event *e;
 } eventContext;
 
-static void eventHandlerWrapper(EV_P_ struct ev_io *w, int revents) {
+static void eventIoHandler(EV_P_ struct ev_io *w, int revents) {
+#if EV_MULTIPLICITY
+    UNUSED(loop);
+#endif
+    UNUSED(revents);
+
+    event *e = w->data;
+    e->handler(e);
+}
+
+static void eventTimeHandler(EV_P_ struct ev_timer *w, int revents) {
 #if EV_MULTIPLICITY
     UNUSED(loop);
 #endif
@@ -40,14 +54,22 @@ static void eventApiFreeLoop(eventLoopContext *ctx) {
 
 static eventContext *eventApiNewEvent(event *e) {
     eventContext *ctx = xs_calloc(sizeof(*ctx));
-    int events = EV_UNDEF;
-    if (e->flags == EVENT_FLAG_READ)
-        events = EV_READ;
-    else if (e->flags == EVENT_FLAG_WRITE)
-        events = EV_WRITE;
 
-    ctx->e.data = e;
-    ev_io_init(&ctx->e, eventHandlerWrapper, e->id, events);
+    if (e->type == EVENT_TYPE_IO) {
+        int events = EV_UNDEF;
+        if (e->flags == EVENT_FLAG_READ)
+            events = EV_READ;
+        else if (e->flags == EVENT_FLAG_WRITE)
+            events = EV_WRITE;
+
+        ev_io_init(&ctx->w.io, eventIoHandler, e->id, events);
+        ctx->w.io.data = e;
+    } else if (e->type == EVENT_TYPE_TIME) {
+        int repeat = e->flags == EVENT_FLAG_TIME_ONCE ? 0 : e->id;
+        ev_timer_init(&ctx->w.t, eventTimeHandler, e->id, repeat);
+        ctx->w.t.data = e;
+    }
+    ctx->e = e;
 
     return ctx;
 }
@@ -57,13 +79,23 @@ static void eventApiFreeEvent(eventContext* ctx) {
 }
 
 static int eventApiAddEvent(eventLoopContext *elCtx, eventContext* eCtx) {
-    ev_io_start(elCtx->el, &eCtx->e);
+    event *e = eCtx->e;
+    if (e->type == EVENT_TYPE_IO)
+        ev_io_start(elCtx->el, &eCtx->w.io);
+    else if (e->type == EVENT_TYPE_TIME)
+        ev_timer_start(elCtx->el, &eCtx->w.t);
+    else
+        return EVENT_ERR;
 
     return EVENT_OK;
 }
 
 static void eventApiDelEvent(eventLoopContext *elCtx, eventContext* eCtx) {
-    ev_io_stop(elCtx->el, &eCtx->e);
+    event *e = eCtx->e;
+    if (e->type == EVENT_TYPE_IO)
+        ev_io_stop(elCtx->el, &eCtx->w.io);
+    else if (e->type == EVENT_TYPE_TIME)
+        ev_timer_stop(elCtx->el, &eCtx->w.t);
 }
 
 static void eventApiRun(eventLoopContext *ctx) {
