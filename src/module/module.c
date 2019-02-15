@@ -19,7 +19,6 @@ void moduleUsage(int module) {
         case MODULE_TUNNEL: eprintf("    xs-tunnel\n"); break;
         default:
             // eprintf("    xs-redir\n");
-            // eprintf("    xs-manager\n");
             break;
 
     }
@@ -33,9 +32,9 @@ void moduleUsage(int module) {
     eprintf("                                  aes-128-gcm, aes-192-gcm, aes-256-gcm,\n");
     eprintf("                                  aes-128-cfb, aes-192-cfb, aes-256-cfb,\n");
     eprintf("                                  aes-128-ctr, aes-192-ctr, aes-256-ctr,\n");
-    // eprintf("                                  camellia-128-cfb, camellia-192-cfb,\n");
-    // eprintf("                                  camellia-256-cfb, bf-cfb,\n");
-    // eprintf("                                  chacha20-ietf-poly1305,\n");
+    eprintf("                                  camellia-128-cfb, camellia-192-cfb,\n");
+    eprintf("                                  camellia-256-cfb, bf-cfb,\n");
+    eprintf("                                  chacha20-ietf-poly1305,\n");
 #ifdef FS_HAVE_XCHACHA20IETF
     // eprintf("                                  xchacha20-ietf-poly1305,\n");
 #endif

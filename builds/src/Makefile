@@ -30,7 +30,7 @@ endif
 
 EXT_CFLAGS = -I$(DEPS_PATH) $(LIBSODIUM_HEADER_CFLAGS) -I$(MBEDTLS_PATH)/include
 EXT_LDFLAGS =
-EXT_LIBS = -lm
+EXT_LIBS =
 
 ifeq ($(LINK_MODE), static)
 EXT_LIBS += $(REDIS_PATH)/libredis.a \
@@ -70,6 +70,8 @@ ifeq ($(EVENT), libev)
 		EXT_LIBS += -lev
 	endif
 endif
+
+EXT_LIBS += -lm
 
 XSOCKS_SERVER_NAME = xs-server
 XSOCKS_SERVER_OBJ = server.o module_tcp.o module_udp.o $(OBJS)
@@ -143,7 +145,7 @@ install-lib:
 ifeq ($(LINK_MODE), shared)
 install-lib:
 	@mkdir -p $(INSTALL_LIB)
-	$(MAKE) -C $(BUILD_DEPS_PATH) install-shared
+	$(MAKE) -C $(BUILD_DEPS_PATH) install-shared PREFIX="$(PREFIX)"
 endif
 
 clean:
@@ -152,5 +154,8 @@ clean:
 distclean: clean
 	$(MAKE) -C $(BUILD_DEPS_PATH) distclean
 	rm -rf .make-*
+
+valgrind:
+	$(MAKE) $(MFLAGS) OPTIMIZATION="-O0" MALLOC="libc"
 
 .PHONY: all install install-lib clean distclean persist-settings

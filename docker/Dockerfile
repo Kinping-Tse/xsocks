@@ -21,10 +21,12 @@ RUN set -xe \
         && make -j "$(getconf _NPROCESSORS_ONLN)" \
             PREFIX="$XSOCKS_PATH" \
             OPTIMIZATION=-O3 DEBUG= \
-            USE_JEMALLOC=no USE_LIBEV=no USE_SHARED=no \
+            USE_JEMALLOC=yes USE_LIBEV=no USE_SHARED=yes \
         && make install \
         && make distclean \
     ) \
+    && strip $XSOCKS_PATH/bin/* \
+    && strip $XSOCKS_PATH/lib/*.so \
     && apk del .build-deps \
     && rm -rf $TMP_XSOCKS
 
