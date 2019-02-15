@@ -27,6 +27,14 @@ RUN set -xe \
     ) \
     && strip $XSOCKS_PATH/bin/* \
     && strip $XSOCKS_PATH/lib/*.so \
+    && runDeps="$( \
+        scanelf --needed --nobanner --recursive $XSOCKS_PATH \
+            | awk '{ gsub(/,/, "\nso:", $2); print "so:" $2 }' \
+            | sort -u \
+            | xargs -r apk info --installed \
+            | sort -u \
+    )" \
+    && apk add --no-cache --virtual .run-deps $runDeps \
     && apk del .build-deps \
     && rm -rf $TMP_XSOCKS
 

@@ -60,6 +60,9 @@ shadowsocks-libev: libsodium mbedtls libbloom
 	cd $@ && $(MAKE) $(MFLAGS)
 
 LIBBLOOM_LDFLAGS = $(LDFLAGS)
+ifeq ($(uname_S), Linux)
+LIBBLOOM_LDFLAGS += -Wl,-rpath,$(INSTALL_LIB)
+endif
 ifeq ($(uname_S), Darwin)
 LIBBLOOM_LDFLAGS += -Wl,-install_name,$(INSTALL_LIB)/libbloom.dylib
 endif
