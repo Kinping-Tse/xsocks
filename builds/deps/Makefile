@@ -70,7 +70,7 @@ endif
 libbloom:
 	$(QUIET_MAKE)
 	@mkdir -p $@
-	cd $@ && $(MAKE) -C $(DEPS_PATH)/$@ $(MFLAGS) BUILD=$(LIBBLOOM_PATH) LDFLAGS="$(LIBBLOOM_LDFLAGS)"
+	cd $@ && $(MAKE) -C $(DEPS_PATH)/$@ $(MFLAGS) BUILD=$(LIBBLOOM_PATH) LDFLAGS="$(LIBBLOOM_LDFLAGS)" LD_SONAME=""
 
 MBEDTLS_LDFLAGS = $(LDFLAGS)
 ifeq ($(uname_S), Darwin)

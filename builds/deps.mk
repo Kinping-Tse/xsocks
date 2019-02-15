@@ -28,7 +28,7 @@ REDIS_PATH = $(BUILD_DEPS_PATH)/redis
 SHADOWSOCKS_LIBEV_PATH = $(BUILD_DEPS_PATH)/shadowsocks-libev
 JSONPARSER_PATH = $(BUILD_DEPS_PATH)/json-parser
 MBEDTLS_PATH = $(DEPS_PATH)/mbedtls
-LIBBLOOM_PATH = $(BUILD_DEPS_PATH)/libbloom/build
+LIBBLOOM_PATH = $(BUILD_DEPS_PATH)/libbloom
 LIBSODIUM_PATH = $(BUILD_DEPS_PATH)/libsodium/src/libsodium
 
 LIBSODIUM_HEADER_CFLAGS = -I$(DEPS_PATH)/libsodium/src/libsodium/include \
