@@ -203,8 +203,9 @@ static void handleSocks5Handshake(tcpClient* client) {
     if (request->cmd != SOCKS5_CMD_CONNECT) {
         LOGW("Local client request error, unsupported cmd: %d", request->cmd);
         resp.rep = SOCKS5_REP_CMD_NOT_SUPPORTED;
-        write(cfd, &resp, sizeof(resp));
-
+        if (write(cfd, &resp, sizeof(resp)) == -1) {
+            // Do nothing, just avoid warning
+        }
         goto error;
     }
 
@@ -218,7 +219,9 @@ static void handleSocks5Handshake(tcpClient* client) {
     if (socks5AddrParse(addr_buf, buf_len, &addr_type, addr, &addr_len, &port) == SOCKS5_ERR) {
         LOGW("Local client request error, long addrlen: %d or addrtype: %d", addr_len, addr_type);
         resp.rep = SOCKS5_REP_ADDRTYPE_NOT_SUPPORTED;
-        write(cfd, &resp, sizeof(resp));
+        if (write(cfd, &resp, sizeof(resp)) == -1) {
+            // Do nothing, just avoid warning
+        }
         goto error;
     }
 
@@ -256,6 +259,10 @@ static void handleSocks5Handshake(tcpClient* client) {
     // Prepare stream
     tcpRemote *remote = tcpRemoteNew(rfd);
     remote->client = client;
+
+    // Because of block connect
+    eventDel(remote->we);
+    ADD_EVENT(remote->re);
 
     client->remote = remote;
     client->stage = STAGE_STREAM;

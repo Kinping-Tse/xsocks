@@ -23,6 +23,7 @@ BUILD_ROOT = $(ROOT)/builds
 BUILD_DEPS_PATH = $(BUILD_ROOT)/deps
 
 JEMALLOC_PATH = $(BUILD_DEPS_PATH)/jemalloc
+JEMALLOC_SRC_PATH = $(DEPS_PATH)/jemalloc
 LIBEV_PATH = $(BUILD_DEPS_PATH)/libev
 REDIS_PATH = $(BUILD_DEPS_PATH)/redis
 SHADOWSOCKS_LIBEV_PATH = $(BUILD_DEPS_PATH)/shadowsocks-libev
@@ -30,6 +31,7 @@ JSONPARSER_PATH = $(BUILD_DEPS_PATH)/json-parser
 MBEDTLS_PATH = $(DEPS_PATH)/mbedtls
 LIBBLOOM_PATH = $(BUILD_DEPS_PATH)/libbloom
 LIBSODIUM_PATH = $(BUILD_DEPS_PATH)/libsodium/src/libsodium
+LIBSODIUM_SRC_PATH = $(DEPS_PATH)/libsodium
 
 LIBSODIUM_HEADER_CFLAGS = -I$(DEPS_PATH)/libsodium/src/libsodium/include \
 	-I$(DEPS_PATH)/libsodium/src/libsodium/include/sodium \

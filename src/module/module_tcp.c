@@ -17,10 +17,10 @@ tcpServer *tcpServerNew(int fd) {
     tcpServer *server = xs_calloc(sizeof(*server));
 
     server->fd = fd;
-    server->re = eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_READ, tcpServerReadHandler, server);
+    server->re = NEW_EVENT_READ(fd, tcpServerReadHandler, server);
 
     anetNonBlock(NULL, server->fd);
-    eventAdd(app->el, server->re);
+    ADD_EVENT(server->re);
 
     return server;
 }
@@ -78,10 +78,9 @@ tcpClient *tcpClientNew(int fd) {
     tcpClient *client = xs_calloc(sizeof(*client));
 
     client->fd = fd;
-    client->re = eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_READ, tcpClientReadHandler, client);
-    client->we = eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_WRITE, tcpClientWriteHandler, client);
-    client->te = eventNew(app->config->timeout, EVENT_TYPE_TIME, EVENT_FLAG_TIME_ONCE,
-                          tcpClientReadTimeHandler, client);
+    client->re = NEW_EVENT_READ(fd, tcpClientReadHandler, client);
+    client->we = NEW_EVENT_WRITE(fd, tcpClientWriteHandler, client);
+    client->te = NEW_EVENT_ONCE(app->config->timeout, tcpClientReadTimeHandler, client);
     client->server = NULL;
     client->remote = NULL;
     client->stage = STAGE_INIT;
@@ -93,8 +92,8 @@ tcpClient *tcpClientNew(int fd) {
     anetNonBlock(NULL, fd);
     anetEnableTcpNoDelay(NULL, fd);
 
-    eventAdd(app->el, client->re);
-    eventAdd(app->el, client->te);
+    ADD_EVENT(client->re);
+    ADD_EVENT(client->te);
 
     app->crypto->ctx_init(app->crypto->cipher, client->e_ctx, 1);
     app->crypto->ctx_init(app->crypto->cipher, client->d_ctx, 0);
@@ -132,17 +131,19 @@ static void tcpClientWriteHandler(event *e) {
     tcpRemote *remote = client->remote;
     int nwrite;
     int cfd = client->fd;
+    int write_len = remote->buf.len - remote->buf_off;
+    char *write_buf = remote->buf.data + remote->buf_off;
 
-    if (remote->buf.len - remote->buf_off == 0) {
+    if (write_len == 0) {
         remote->buf_off = 0;
         eventDel(client->we);
-        eventAdd(app->el, client->re);
-        eventAdd(app->el, remote->re);
+        ADD_EVENT(client->re);
+        ADD_EVENT(remote->re);
         return;
     }
 
-    nwrite = write(cfd, remote->buf.data, remote->buf.len);
-    if (nwrite <= (int)remote->buf.len-remote->buf_off) {
+    nwrite = write(cfd, write_buf, write_len);
+    if (nwrite <= write_len) {
         if (nwrite == -1) {
             if (errno == EAGAIN) return;
 
@@ -173,18 +174,17 @@ tcpRemote *tcpRemoteNew(int fd) {
     tcpRemote *remote = xs_calloc(sizeof(*remote));
 
     remote->fd = fd;
-    remote->re = eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_READ, tcpRemoteReadHandler, remote);
-    remote->we = eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_WRITE, tcpRemoteWriteHandler, remote);
-    remote->te = eventNew(app->config->timeout, EVENT_TYPE_TIME, EVENT_FLAG_TIME_ONCE,
-                          tcpRemoteConnectTimeHandler, remote);
+    remote->re = NEW_EVENT_READ(fd, tcpRemoteReadHandler, remote);
+    remote->we = NEW_EVENT_WRITE(fd, tcpRemoteWriteHandler, remote);
+    remote->te = NEW_EVENT_ONCE(app->config->timeout, tcpRemoteConnectTimeHandler, remote);
     remote->buf_off = 0;
 
     anetNonBlock(NULL, fd);
     anetEnableTcpNoDelay(NULL, fd);
     netNoSigPipe(NULL, fd);
 
-    eventAdd(app->el, remote->we);
-    eventAdd(app->el, remote->te);
+    ADD_EVENT(remote->we);
+    ADD_EVENT(remote->te);
 
     bzero(&remote->buf, sizeof(remote->buf));
     balloc(&remote->buf, NET_IOBUF_LEN);
@@ -244,26 +244,22 @@ static void tcpRemoteReadHandler(event *e) {
 
     // Write buffer to client
     nwrite = write(cfd, remote->buf.data, remote->buf.len);
-    if (nwrite != (int)remote->buf.len) {
-        if (nwrite == -1) {
-            if (errno == EAGAIN) {
-                eventDel(remote->re);
-                eventDel(client->re);
-                eventAdd(app->el, client->we);
+    if (nwrite == -1) {
+        if (errno == EAGAIN) goto write_again;
 
-                return;
-            }
-
-            LOGW("Tcp client [%s] write error: %s", client->client_addr_info, STRERR);
-            goto error;
-        }
-
+        LOGW("Tcp client [%s] write error: %s", client->client_addr_info, STRERR);
+        goto error;
+    } else if (nwrite < (int)remote->buf.len) {
         remote->buf_off = nwrite;
-        eventDel(remote->re);
-        eventDel(client->re);
-        eventAdd(app->el, client->we);
+        goto write_again;
     }
 
+    return;
+
+write_again:
+    eventDel(remote->re);
+    eventDel(client->re);
+    ADD_EVENT(client->we);
     return;
 
 error:
@@ -275,8 +271,8 @@ static void tcpRemoteWriteHandler(event *e) {
     tcpClient *client = remote->client;
 
     eventDel(remote->we);
-    eventAdd(app->el, remote->re);
-    eventAdd(app->el, client->re);
+    ADD_EVENT(remote->re);
+    ADD_EVENT(client->re);
 
     if (client->buf.len - client->buf_off == 0) return;
 

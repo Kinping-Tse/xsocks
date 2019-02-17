@@ -99,9 +99,14 @@ clean:
 	-($(MAKE) -C $(DEPS_PATH)/mbedtls clean)
 	-($(MAKE) -C libsodium maintainer-clean)
 
+LIBSODIUM_CONFIG_FILE = m4/argz.m4 m4/libtool.m4 m4/ltoptions.m4 m4/ltsugar.m4 m4/ltversion.m4 m4/lt~obsolete.m4 configure aclocal.m4 build-aux autom4te.cache
+
 distclean: clean
 	rm -rf $(GIT_SUBMODULE_INIT_FILE) $(GIT_SUBMODULE_DEPS) json-parser
 	rm -rf .make-*
+	rm -rf $(JEMALLOC_SRC_PATH)/configure
+	cd $(LIBSODIUM_SRC_PATH) && rm -rf $(LIBSODIUM_CONFIG_FILE) \
+		&& find . -type f -name "Makefile.in" -exec rm -f {} \;
 
 install: install-shared
 install-shared:

@@ -41,6 +41,13 @@ enum {
 
 extern module *app;
 
+#define NEW_EVENT_READ(fd, handler, data) eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_READ, handler, data)
+#define NEW_EVENT_WRITE(fd, handler, data) eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_WRITE, handler, data)
+#define NEW_EVENT_ONCE(timeout, handler, data) eventNew(timeout, EVENT_TYPE_TIME, EVENT_FLAG_TIME_ONCE, handler, data)
+#define NEW_EVENT_REPEAT(timeout, handler, data) eventNew(timeout, EVENT_TYPE_TIME, EVENT_FLAG_TIME_REPEAT, handler, data)
+#define ADD_EVENT(e) eventAdd(app->el, e)
+#define DEL_EVENT(e) eventDel(e)
+
 void moduleInit(int type, moduleHook hook, module *m, int argc, char *argv[]);
 void moduleRun();
 void moduleExit();
