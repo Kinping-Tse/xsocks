@@ -28,7 +28,7 @@ $(GIT_SUBMODULE_INIT_FILE):
 libev:
 	$(QUIET_MAKE)
 	@mkdir -p $@
-	cd $@ && $(DEPS_PATH)/$@/configure --prefix=$(PREFIX)
+	cd $@ && $(DEPS_PATH)/$@/configure --host=$(HOST) --prefix=$(PREFIX)
 	cd $@ && $(MAKE) $(MFLAGS)
 
 JEMALLOC_VERSION := 5.1.0-0-g0
@@ -37,7 +37,7 @@ jemalloc:
 	$(QUIET_MAKE)
 	@mkdir -p $@
 	cd $(DEPS_PATH)/$@ && autoconf -f
-	cd $@ && $(DEPS_PATH)/$@/configure --enable-autogen --prefix=$(PREFIX) --with-version=$(JEMALLOC_VERSION) --with-jemalloc-prefix=je_
+	cd $@ && $(DEPS_PATH)/$@/configure --enable-autogen --host=$(HOST) --prefix=$(PREFIX) --with-version=$(JEMALLOC_VERSION) --with-jemalloc-prefix=je_
 	cd $@ && $(MAKE) $(MFLAGS)
 
 redis: $(REDIS_DEPS)
@@ -52,7 +52,7 @@ endif
 json-parser:
 	$(QUIET_MAKE)
 	@mkdir -p $@
-	cd $@ && $(DEPS_PATH)/$@/configure --prefix=$(PREFIX)
+	cd $@ && $(DEPS_PATH)/$@/configure --host=$(HOST) --prefix=$(PREFIX)
 	cd $@ && $(MAKE) $(MFLAGS) LDFLAGS='$(JSONPARSER_LDFLAGS)'
 
 shadowsocks-libev: libsodium mbedtls libbloom
@@ -70,7 +70,7 @@ endif
 libbloom:
 	$(QUIET_MAKE)
 	@mkdir -p $@
-	cd $@ && $(MAKE) -C $(DEPS_PATH)/$@ $(MFLAGS) BUILD=$(LIBBLOOM_PATH) LDFLAGS="$(LIBBLOOM_LDFLAGS)" LD_SONAME=""
+	cd $@ && $(MAKE) -C $(DEPS_PATH)/$@ $(MFLAGS) CC=$(CC) BITS=default BUILD=$(LIBBLOOM_PATH) LDFLAGS="$(LIBBLOOM_LDFLAGS)" LD_SONAME=""
 
 MBEDTLS_LDFLAGS = $(LDFLAGS)
 ifeq ($(uname_S), Darwin)
@@ -80,13 +80,13 @@ endif
 mbedtls:
 	$(QUIET_MAKE)
 	@mkdir -p $@
-	cd $@ && $(MAKE) -C $(DEPS_PATH)/$@ $(MFLAGS) lib LDFLAGS='$(MBEDTLS_LDFLAGS)' SHARED=1
+	cd $@ && $(MAKE) -C $(DEPS_PATH)/$@ $(MFLAGS) lib CC=$(CC) AR=$(AR) LDFLAGS='$(MBEDTLS_LDFLAGS)' SHARED=1
 
 libsodium:
 	$(QUIET_MAKE)
 	@mkdir -p $@
 	cd $(DEPS_PATH)/$@ && sh autogen.sh
-	cd $@ && $(DEPS_PATH)/$@/configure --prefix=$(PREFIX)
+	cd $@ && $(DEPS_PATH)/$@/configure --host=$(HOST) --prefix=$(PREFIX)
 	cd $@ && $(MAKE) $(MFLAGS)
 
 clean:
@@ -116,7 +116,7 @@ install-shared:
 	$(MAKE) -C redis install-shared
 	$(MAKE) -C shadowsocks-libev install-shared
 	$(MAKE) -C libsodium install-exec
-	$(MAKE) -C $(DEPS_PATH)/mbedtls install DESTDIR=$(PREFIX) PREFIX=mbedtls_
+	$(MAKE) -C $(DEPS_PATH)/mbedtls install CC=$(CC) DESTDIR=$(PREFIX) PREFIX=mbedtls_
 	$(COMMON_INSTALL) $(LIBBLOOM_PATH)/libbloom.$(DYLIB_SUFFIX) $(INSTALL_LIB)
 	rm -rf $(INSTALL_LIB)/*.a $(INSTALL_LIB)/*.la $(INSTALL_INC) $(INSTALL_DATA)
 	rm -rf $(INSTALL_BIN)/mbedtls_* $(INSTALL_LIB)/libmbedx509* $(INSTALL_LIB)/libmbedtls*

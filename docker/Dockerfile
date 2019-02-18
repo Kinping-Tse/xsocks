@@ -22,11 +22,9 @@ RUN set -xe \
             PREFIX="$XSOCKS_PATH" \
             OPTIMIZATION=-O3 DEBUG= \
             USE_JEMALLOC=yes USE_LIBEV=no USE_SHARED=yes \
-        && make install \
+        && make install USE_STRIP=yes \
         && make distclean \
     ) \
-    && strip $XSOCKS_PATH/bin/* \
-    && strip $XSOCKS_PATH/lib/*.so \
     && runDeps="$( \
         scanelf --needed --nobanner --recursive $XSOCKS_PATH \
             | awk '{ gsub(/,/, "\nso:", $2); print "so:" $2 }' \

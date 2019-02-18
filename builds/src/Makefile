@@ -93,6 +93,7 @@ Makefile.dep:
 
 persist-settings: distclean
 	@printf "Set env to to %b\n" $(COLOR_INFO)$(BUILD_ROOT)/src/.make-settings$(ENDCOLOR)
+	@echo HOST=$(HOST) >> .make-settings
 	@echo STD=$(STD) >> .make-settings
 	@echo WARN=$(WARN) >> .make-settings
 	@echo OPT=$(OPT) >> .make-settings
@@ -139,6 +140,9 @@ install: all install-lib
 	$(COMMON_INSTALL) $(XSOCKS_MODULE_EXE) $(INSTALL_BIN)
 	$(COMMON_INSTALL) $(ROOT)/config.json $(INSTALL_ETC)
 	@printf "\nInstall to %b\n\n" $(COLOR_INFO)$(PREFIX)$(ENDCOLOR)
+ifeq ($(USE_STRIP), yes)
+	@$(STRIP) $(INSTALL_BIN)/*
+endif
 
 install-lib:
 
@@ -146,6 +150,9 @@ ifeq ($(LINK_MODE), shared)
 install-lib:
 	@mkdir -p $(INSTALL_LIB)
 	$(MAKE) -C $(BUILD_DEPS_PATH) install-shared PREFIX="$(PREFIX)"
+ifeq ($(USE_STRIP), yes)
+	@$(STRIP) $(INSTALL_LIB)/*
+endif
 endif
 
 clean:
