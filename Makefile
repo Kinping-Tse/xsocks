@@ -10,4 +10,7 @@ install:
 docker:
 	$(MAKE) -C builds/docker $@
 
-.PHONY: install docker
+asuswrt-merlin.ng:
+	$(MAKE) -C builds/asuswrt-merlin.ng
+
+.PHONY: install docker asuswrt-merlin.ng

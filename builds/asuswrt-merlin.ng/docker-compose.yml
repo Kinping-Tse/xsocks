@@ -1,0 +1,23 @@
+version: "3"
+
+services:
+  xs-server:
+    build: .
+    image: xsocks/builds/asuswrt-merlin.ng:${XSOCKS_VERSION}
+    deploy:
+      resources:
+        limits:
+          cpus: '0.8'
+        reservations:
+          cpus: '0.5'
+    privileged: true
+    restart: on-failure:0
+    volumes:
+      - /etc/localtime:/etc/localtime
+      - ${ROOT}:/tmp/xsocks
+      - ${AM_TOOLCHAINS_PATH}:/tmp/am-toolchains
+    working_dir: /tmp/xsocks
+    environment:
+      - HOST=${HOST}
+      - ROOT=/tmp/xsocks
+    command: /tmp/xsocks/builds/asuswrt-merlin.ng/build.sh

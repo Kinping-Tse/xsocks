@@ -1,7 +1,7 @@
 
 ROOT = $(realpath ../..)
 
-VERSION = $(shell grep XS_VERSION $(ROOT)/src/core/version.h |awk -F \" '{print $$2}')
+VERSION = $(shell grep XS_VERSION $(ROOT)/src/core/version.h | awk -F \" '{print $$2}')
 default: docker
 
 docker:
