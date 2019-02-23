@@ -8,6 +8,7 @@ static void udpServerReadHandler(event *e);
 
 static udpRemote *udpRemoteNew(int fd);
 static void udpRemoteReadHandler(event *e);
+static void udpRemoteReadTimeHandler(event *e);
 
 udpServer *udpServerNew(int fd) {
     udpServer *server = xs_calloc(sizeof(*server));
@@ -100,6 +101,9 @@ static void udpServerReadHandler(event *e) {
         goto error;
     }
 
+    server->remote_count++;
+    LOGD("Udp remote current count: %d", server->remote_count);
+
     goto end;
 
 error:
@@ -131,11 +135,13 @@ udpRemote *udpRemoteNew(int fd) {
     udpRemote *remote = xs_calloc(sizeof(*remote));
 
     remote->fd = fd;
-    remote->re = eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_READ, udpRemoteReadHandler, remote);
+    remote->re = NEW_EVENT_READ(fd, udpRemoteReadHandler, remote);
+    remote->te = NEW_EVENT_ONCE(app->config->timeout, udpRemoteReadTimeHandler, remote);
 
     anetNonBlock(NULL, remote->fd);
-    eventAdd(app->el, remote->re);
     netSockAddrExInit(&remote->sa_client);
+    ADD_EVENT(remote->re);
+    ADD_EVENT(remote->te);
 
     return remote;
 }
@@ -143,8 +149,13 @@ udpRemote *udpRemoteNew(int fd) {
 void udpRemoteFree(udpRemote *remote) {
     if (!remote) return;
 
+    remote->server->remote_count--;
+    LOGD("Udp remote current count: %d", remote->server->remote_count);
+
     eventDel(remote->re);
+    eventDel(remote->te);
     eventFree(remote->re);
+    eventFree(remote->te);
     close(remote->fd);
 
     xs_free(remote);
@@ -207,4 +218,12 @@ end:
     udpRemoteFree(remote);
     sdsfree(sbuf);
     bfree(&tmp_buf);
+}
+
+static void udpRemoteReadTimeHandler(event *e) {
+    udpRemote *remote = e->data;
+
+    LOGD("Udp remote read timeout");
+
+    udpRemoteFree(remote);
 }

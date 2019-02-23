@@ -141,7 +141,7 @@ install: all install-lib
 	$(COMMON_INSTALL) $(ROOT)/config.json $(INSTALL_ETC)
 	@printf "\nInstall to %b\n\n" $(COLOR_INFO)$(PREFIX)$(ENDCOLOR)
 ifeq ($(USE_STRIP), yes)
-	@$(STRIP) $(INSTALL_BIN)/*
+	$(STRIP) $(INSTALL_BIN)/*
 endif
 
 install-lib:
@@ -151,7 +151,7 @@ install-lib:
 	@mkdir -p $(INSTALL_LIB)
 	$(MAKE) -C $(BUILD_DEPS_PATH) install-shared PREFIX="$(PREFIX)"
 ifeq ($(USE_STRIP), yes)
-	@$(STRIP) $(INSTALL_LIB)/*
+	$(STRIP) $(INSTALL_LIB)/*
 endif
 endif
 

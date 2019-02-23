@@ -14,5 +14,5 @@ export PATH=$PATH:$AARCH64_CROSSTOOLS/usr/bin
 ln -sf /tmp/am-toolchains/brcm-arm-hnd $TOOLCHAIN_BASE
 
 make -C $ROOT distclean
-make -C $ROOT -j $(nproc) HOST=$HOST OPTIMIZATION=-O3 DEBUG= USE_JEMALLOC=no USE_LIBEV=no USE_SHARED=no V=1
+make -C $ROOT -j $(nproc) HOST=$HOST OPTIMIZATION=-O3 DEBUG= USE_JEMALLOC=no USE_LIBEV=no USE_SHARED=no
 make -C $ROOT install USE_STRIP=yes

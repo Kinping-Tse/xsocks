@@ -5,11 +5,13 @@
 typedef struct udpServer {
     int fd;
     event *re;
+    int remote_count;
 } udpServer;
 
 typedef struct udpRemote {
     int fd;
     event *re;
+    event *te;
     sockAddrEx sa_client;
     sockAddrEx sa_remote;
     udpServer *server;

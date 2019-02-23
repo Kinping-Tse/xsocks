@@ -33,6 +33,7 @@ typedef struct localClient {
     sds buf;
     sds addr_buf;
     sockAddrEx remote_server_sa;
+    int remote_count;
 } localClient;
 
 static localClient *localTunnelServer;
@@ -40,12 +41,15 @@ static localClient *localTunnelServer;
 typedef struct remoteServer {
     int fd;
     event *re;
+    event *te;
     sockAddrEx local_client_sa;
     localClient *client;
 } remoteServer;
 
 void remoteServerReadHandler(event *e);
 void localClientReadHandler(event *e);
+
+static void udpRemoteReadTimeHandler(event *e);
 
 localClient *newClient(int fd) {
     localClient *client = xs_calloc(sizeof(*client));
@@ -80,15 +84,14 @@ void freeClient(localClient *client) {
 remoteServer *newRemote(int fd) {
     remoteServer *remote = xs_calloc(sizeof(*remote));
 
-    anetNonBlock(NULL, fd);
-
-    event *re = eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_READ, remoteServerReadHandler, remote);
-    eventAdd(app->el, re);
-
-    remote->re = re;
     remote->fd = fd;
+    remote->re = NEW_EVENT_READ(fd, remoteServerReadHandler, remote);
+    remote->te = NEW_EVENT_ONCE(app->config->timeout, udpRemoteReadTimeHandler, remote);
 
+    anetNonBlock(NULL, fd);
     netSockAddrExInit(&remote->local_client_sa);
+    ADD_EVENT(remote->re);
+    ADD_EVENT(remote->te);
 
     return remote;
 }
@@ -96,8 +99,13 @@ remoteServer *newRemote(int fd) {
 void freeRemote(remoteServer *remote) {
     if (!remote) return;
 
+    remote->client->remote_count--;
+    LOGD("Udp remote current count: %d", remote->client->remote_count);
+
     eventDel(remote->re);
+    eventDel(remote->te);
     eventFree(remote->re);
+    eventFree(remote->te);
     close(remote->fd);
 
     xs_free(remote);
@@ -225,6 +233,14 @@ end:
     bfree(&tmp_buf);
 }
 
+static void udpRemoteReadTimeHandler(event *e) {
+    remoteServer *remote = e->data;
+
+    LOGD("Udp remote read timeout");
+
+    freeRemote(remote);
+}
+
 void localClientReadHandler(event *e) {
     localClient *client = e->data;
     remoteServer *remote = NULL;
@@ -279,6 +295,9 @@ void localClientReadHandler(event *e) {
         LOGW("Remote server UDP send buffer error: %s", strerror(errno));
         goto error;
     }
+
+    client->remote_count++;
+    LOGD("Udp remote current count: %d", client->remote_count);
 
     goto end;
 
