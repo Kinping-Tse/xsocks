@@ -147,7 +147,7 @@ static void tcpClientWriteHandler(event *e) {
         if (nwrite == -1) {
             if (errno == EAGAIN) return;
 
-            LOGW("Tcp client [%s] write error: %s", client->client_addr_info, STRERR);
+            LOGW("Tcp client [%s] write error: %s", client->remote_addr_info, STRERR);
             goto error;
         }
 
@@ -164,7 +164,7 @@ static void tcpClientReadTimeHandler(event *e) {
     tcpClient *client = e->data;
 
     if (client->stage != STAGE_STREAM) {
-        LOGD("Tcp client (%d) [%s] read timeout", client->fd, client->client_addr_info);
+        LOGN("Tcp client (%d) [%s] read timeout", client->fd, client->client_addr_info);
 
         tcpConnectionFree(client);
     }
@@ -297,7 +297,7 @@ static void tcpRemoteConnectTimeHandler(event *e) {
     tcpClient *client = remote->client;
 
     if (client->stage != STAGE_STREAM) {
-        LOGD("Tcp remote [%s] connect timeout", client->remote_addr_info);
+        LOGN("Tcp remote [%s] connect timeout", client->remote_addr_info);
 
         tcpConnectionFree(client);
     }

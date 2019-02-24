@@ -2,9 +2,28 @@
 #include "common.h"
 #include "utils.h"
 
-#include <stdarg.h>
 #include <ctype.h>
+#include <fcntl.h>
+#include <stdarg.h>
 #include <sys/time.h>
+#include <sys/stat.h>
+
+void xs_daemonize() {
+    int fd;
+
+    if (fork() != 0) exit(0);
+
+    umask(0);
+    setsid();
+    // chdir("/");
+
+    if ((fd = open("/dev/null", O_RDWR, 0)) != -1) {
+        dup2(fd, STDIN_FILENO);
+        dup2(fd, STDOUT_FILENO);
+        dup2(fd, STDERR_FILENO);
+        if (fd > STDERR_FILENO) close(fd);
+    }
+}
 
 void hexdump(const void *memory, size_t bytes) {
     const unsigned char * p, * q;
@@ -79,16 +98,16 @@ int isIPv6Addr(char *ip) {
 
 uint64_t timerStart() {
     struct timeval time;
-    if (gettimeofday(&time, NULL) == -1)
-        return 0;
+
+    if (gettimeofday(&time, NULL) == -1) return 0;
 
     return time.tv_sec * MICROSECOND_UNIT + time.tv_usec;
 }
 
 double timerStop(uint64_t start_time, uint64_t *stop_time) {
     struct timeval time;
-    if (gettimeofday(&time, NULL) == -1)
-        return 0;
+
+    if (gettimeofday(&time, NULL) == -1) return 0;
 
     uint64_t t = time.tv_sec * MICROSECOND_UNIT + time.tv_usec;
     if (stop_time) *stop_time = t;

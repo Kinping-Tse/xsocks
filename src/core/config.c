@@ -47,6 +47,8 @@ enum {
 xsocksConfig *configNew() {
     xsocksConfig *config = xs_calloc(sizeof(*config));
 
+    config->pidfile = NULL;
+    config->daemonize = CONFIG_DEFAULT_DAEMONIZE;
     config->remote_addr = "127.0.0.1";
     config->remote_port = 8388;
     config->local_addr = "127.0.0.1";
@@ -54,20 +56,20 @@ xsocksConfig *configNew() {
     config->password = "xsocks";
     config->tunnel_address = NULL;
     config->key = NULL;
-    config->method = "aes-256-cfb";
-    config->timeout = 60;
+    config->method = CONFIG_DEFAULT_METHOD;
+    config->timeout = CONFIG_DEFAULT_TIMEOUT;
     config->fast_open = 0;
     config->reuse_port = 0;
-    config->mode = MODE_TCP_ONLY;
-    config->mtu = 0;
-    config->loglevel = LOGLEVEL_NOTICE;
+    config->mode = CONFIG_DEFAULT_MODE;
+    config->mtu = CONFIG_DEFAULT_MTU;
+    config->loglevel = CONFIG_DEFAULT_LOGLEVEL;
     config->logfile = NULL;
     config->logfile_line = 0;
+    config->use_syslog = CONFIG_DEFAULT_SYSLOG_ENABLED;
     config->ipv6_first = 0;
     config->ipv6_only = 1;
-
     config->no_delay = 0;
-    config->help = 0;
+
     return config;
 }
 
@@ -150,7 +152,6 @@ void configLoad(xsocksConfig *config, char *filename) {
         } else if (strcmp(name, "server_port") == 0) {
             config->remote_port = to_integer(value);
         } else if (strcmp(name, "port_password") == 0) {
-
         } else if (strcmp(name, "local_address") == 0) {
             config->local_addr = to_string(value);
         } else if (strcmp(name, "local_port") == 0) {
@@ -187,6 +188,12 @@ void configLoad(xsocksConfig *config, char *filename) {
             check_json_value_type(value, json_boolean,
                                   "invalid config file: option 'logfile_line' must be a boolean");
             config->logfile_line = to_integer(value);
+        } else if (strcmp(name, "pidfile") == 0) {
+            config->pidfile = to_string(value);
+        } else if (strcmp(name, "daemonize") == 0) {
+            check_json_value_type(value, json_boolean,
+                                  "invalid config file: option 'daemonize' must be a boolean");
+            config->daemonize = to_integer(value);
         } else if (strcmp(name, "tunnel_address") == 0) {
             config->tunnel_address = to_string(value);
         } else if (strcmp(name, "mode") == 0) {
@@ -256,46 +263,64 @@ int configParse(xsocksConfig* config, int argc, char *argv[]) {
     };
 
     char *conf_path = NULL;
+    int fast_open = -1;
+    int mtu = -1;
+    int no_delay = -1;
+    int reuse_port = -1;
+    int loglevel = -1;
+    char *key = NULL;
+    char *logfile = NULL;
+    char *remote_addr = NULL;
+    int remote_port = -1;
+    char *local_addr = NULL;
+    int local_port = -1;
+    char *tunnel_address = NULL;
+    char *password = password;
+    char *pidfile = NULL;
+    int daemonize = -1;
+    int timeout = -1;
+    char *method = NULL;
+    int mode = -1;
+    int ipv6_first = -1;
+    int help = 0;
+
     char *err = NULL;
     int c;
+
     while ((c = getopt_long(argc, argv, "f:s:p:l:L:k:t:m:i:c:b:a:n:huUv6A",
                             long_options, NULL)) != -1) {
         switch (c) {
-            case GETOPT_VAL_FAST_OPEN: config->fast_open = 1; break;
-            case GETOPT_VAL_MTU: config->mtu = atoi(optarg);
-                break;
-            case GETOPT_VAL_NODELAY: config->no_delay = 1; break;
-            case GETOPT_VAL_KEY: config->key = optarg; break;
-            case GETOPT_VAL_REUSE_PORT: config->reuse_port = 1; break;
+            case GETOPT_VAL_FAST_OPEN: fast_open = 1; break;
+            case GETOPT_VAL_MTU: mtu = atoi(optarg); break;
+            case GETOPT_VAL_NODELAY: no_delay = 1; break;
+            case GETOPT_VAL_KEY: key = optarg; break;
+            case GETOPT_VAL_REUSE_PORT: reuse_port = 1; break;
             case GETOPT_VAL_LOGLEVEL:
-                config->loglevel = configEnumGetValue(loglevel_enum, optarg);
-                if (config->loglevel == INT_MIN)
+                loglevel = configEnumGetValue(loglevel_enum, optarg);
+                if (loglevel == INT_MIN)
                     err = "Invalid log level. "
                           "Must be one of debug, info, notice, warning, error";
                 break;
-            case GETOPT_VAL_LOGFILE:
-                config->logfile = optarg;
-                testLogfile(&err, config->logfile);
-                break;
-            case 's': config->remote_addr = optarg; break;
-            case 'p': config->remote_port = atoi(optarg); break;
-            case 'b': config->local_addr = optarg; break;
-            case 'l': config->local_port = atoi(optarg); break;
-            case 'L': config->tunnel_address = optarg; break;
+            case GETOPT_VAL_LOGFILE: logfile = optarg; testLogfile(&err, logfile); break;
+            case 's': remote_addr = optarg; break;
+            case 'p': remote_port = atoi(optarg); break;
+            case 'b': local_addr = optarg; break;
+            case 'l': local_port = atoi(optarg); break;
+            case 'L': tunnel_address = optarg; break;
             case GETOPT_VAL_PASSWORD:
             case 'k':
-                config->password = optarg;
+                password = optarg;
                 break;
-            // case 'f': pid_flags = 1; pid_path  = optarg; break;
-            case 't': config->timeout = atoi(optarg); break;
-            case 'm': config->method = optarg; break;
+            case 'f': daemonize = 1; pidfile = optarg; break;
+            case 't': timeout = atoi(optarg); break;
+            case 'm': method = optarg; break;
             case 'c': conf_path = optarg; break;
-            case 'u': config->mode = MODE_TCP_AND_UDP; break;
-            case 'U': config->mode = MODE_UDP_ONLY; break;
-            case 'v': config->loglevel = LOGLEVEL_DEBUG; break;
+            case 'u': mode = MODE_TCP_AND_UDP; break;
+            case 'U': mode = MODE_UDP_ONLY; break;
+            case 'v': loglevel = LOGLEVEL_DEBUG; break;
             case 'h':
-            case GETOPT_VAL_HELP: config->help = 1; break;
-            case '6': config->ipv6_first = 1; break;
+            case GETOPT_VAL_HELP: help = 1; break;
+            case '6': ipv6_first = 1; break;
             case '?':
                 // The option character is not recognized.
                 err = "Unrecognized option";
@@ -303,22 +328,38 @@ int configParse(xsocksConfig* config, int argc, char *argv[]) {
         }
     }
 
-    if (conf_path != NULL) {
-        configLoad(config, conf_path);
-    }
+    if (conf_path != NULL) configLoad(config, conf_path);
 
-    char *tunnel_address = config->tunnel_address;
+    if (key) config->key = key;
+    if (loglevel > -1) config->loglevel = loglevel;
+    if (logfile) config->logfile = logfile;
+    if (remote_addr) config->remote_addr = remote_addr;
+    if (remote_port > -1) config->remote_port = remote_port;
+    if (local_addr) config->local_addr = local_addr;
+    if (local_port > -1) config->local_port = local_port;
+    if (tunnel_address) config->tunnel_address = tunnel_address;
+    if (password) config->password = password;
+    if (pidfile) config->pidfile = pidfile;
+    if (daemonize > -1) config->daemonize = daemonize;
+    if (timeout > -1) config->timeout = timeout;
+    if (method) config->method = method;
+    if (mode > -1) config->mode = mode;
+    if (ipv6_first > -1) config->ipv6_first = ipv6_first;
+    if (reuse_port > -1) config->reuse_port = reuse_port;
+    if (no_delay > -1) config->no_delay = no_delay;
+    if (mtu > -1) config->mtu = mtu;
+    if (fast_open > -1) config->fast_open = fast_open;
+
+    char *temp_tunnel_addr = config->tunnel_address;
     char *tunnel_addr;
-    if (tunnel_address && (tunnel_addr = strrchr(tunnel_address, ':'))) {
-        config->tunnel_addr = strndup(tunnel_address, tunnel_addr-tunnel_address);
+    if (temp_tunnel_addr && (tunnel_addr = strrchr(temp_tunnel_addr, ':'))) {
+        config->tunnel_addr = strndup(temp_tunnel_addr, tunnel_addr - temp_tunnel_addr);
         config->tunnel_port = atoi(tunnel_addr+1);
     }
 
-    if (err != NULL) {
-        LOGE(err);
-        return CONFIG_ERR;
-    }
-    return CONFIG_OK;
+    if (err != NULL) FATAL(err);
+
+    return help ? CONFIG_ERR : CONFIG_OK;
 }
 
 void configFree(xsocksConfig* config) {

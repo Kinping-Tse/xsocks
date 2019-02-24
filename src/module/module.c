@@ -8,10 +8,9 @@ static module *mod;
 #define eprintf(...) fprintf(stderr, __VA_ARGS__)
 
 void moduleUsage(int module) {
-    eprintf("\n");
-    eprintf("xsocks %s\n\n", XS_VERSION);
+    eprintf("xsocks %s\n", XS_VERSION);
     eprintf("  maintained by XJP09_HK <jianping_xie@aliyun.com>\n\n");
-    eprintf("  usage:\n\n");
+    eprintf("  usage:\n");
 
     switch (module) {
         case MODULE_LOCAL: eprintf("    xs-local\n"); break;
@@ -23,7 +22,6 @@ void moduleUsage(int module) {
 
     }
 
-    eprintf("\n");
     eprintf("       -s <server_host>           Host name or IP address of your remote server.\n");
     eprintf("       -p <server_port>           Port number of your remote server.\n");
     eprintf("       -l <local_port>            Port number of your local server.\n");
@@ -36,7 +34,7 @@ void moduleUsage(int module) {
     eprintf("                                  camellia-256-cfb, bf-cfb,\n");
     eprintf("                                  chacha20-ietf-poly1305,\n");
 #ifdef FS_HAVE_XCHACHA20IETF
-    // eprintf("                                  xchacha20-ietf-poly1305,\n");
+    eprintf("                                  xchacha20-ietf-poly1305,\n");
 #endif
     eprintf("                                  salsa20, chacha20 and chacha20-ietf.\n");
     eprintf("                                  The default cipher is aes-256-cfb.\n");
@@ -47,7 +45,7 @@ void moduleUsage(int module) {
             "                                  for local port forwarding.\n");
     }
     // eprintf("       [-a <user>]                Run as another user.\n");
-    // eprintf("       [-f <pid_file>]            The file path to store pid.\n");
+    eprintf("       [-f <pid_file>]            The file path to store pid.\n");
     eprintf("       [-t <timeout>]             Socket timeout in seconds.\n");
     eprintf("       [-c <config_file>]         The path to config file.\n");
     // eprintf("       [-n <number>]              Max number of open files.\n");
@@ -63,9 +61,9 @@ void moduleUsage(int module) {
     eprintf("       [-U]                       Enable UDP relay and disable TCP relay.\n");
     eprintf("       [-6]                       Use IPv6 address first.\n");
     eprintf("\n");
-    if (module == MODULE_REMOTE)
-        eprintf(
-            "       [-d <addr>]                Name servers for internal DNS resolver.\n");
+    // if (module == MODULE_REMOTE)
+        // eprintf(
+            // "       [-d <addr>]                Name servers for internal DNS resolver.\n");
 
     // eprintf("       [--reuse-port]             Enable port reuse.\n");
 #if defined(MODULE_REMOTE) || defined(MODULE_LOCAL) || defined(MODULE_REDIR)
@@ -87,7 +85,7 @@ void moduleUsage(int module) {
 #endif
 #ifndef MODULE_MANAGER
     // eprintf("       [--no-delay]               Enable TCP_NODELAY.\n");
-    // eprintf("       [--key <key_in_base64>]    Key of your remote server.\n");
+    eprintf("       [--key <key_in_base64>]    Key of your remote server.\n");
 #endif
     // eprintf("       [--plugin <name>]          Enable SIP003 plugin. (Experimental)\n");
     // eprintf("       [--plugin-opts <options>]  Set SIP003 plugin options. (Experimental)\n");
@@ -118,6 +116,19 @@ static void initLogger() {
     // log->syslog_facility = LOG_USER;
 }
 
+static void createPidFile() {
+    char *pidfile = mod->config->pidfile;
+
+    if (pidfile && pidfile[0] != '\0') {
+        FILE *fp;
+
+        if (!(fp = fopen(pidfile, "w"))) FATAL("Invalid pidfile: %s", STRERR);
+
+        fprintf(fp, "%d\n", getpid());
+        fclose(fp);
+    }
+}
+
 void moduleInit(int type, moduleHook hook, module *m, int argc, char *argv[]) {
     mod = m;
     mod->type = type;
@@ -126,16 +137,18 @@ void moduleInit(int type, moduleHook hook, module *m, int argc, char *argv[]) {
     setLogger(loggerNew());
 
     xsocksConfig *config = configNew();
-    if (configParse(config, argc, argv) == CONFIG_ERR) FATAL("Parse config error");
-    if (config->help) {
+    if (configParse(config, argc, argv) == CONFIG_ERR) {
         moduleUsage(type);
         exit(EXIT_SUCCESS);
     }
 
     mod->config = config;
 
-    initCrypto();
     initLogger();
+    if (config->daemonize) xs_daemonize();
+    createPidFile();
+
+    initCrypto();
     mod->el = eventLoopNew();
 
     signal(SIGPIPE, SIG_IGN);
@@ -159,6 +172,9 @@ void moduleRun() {
     LOGI("Use local addr: %s:%d", config->local_addr, config->local_port);
     LOGI("Use remote addr: %s:%d", config->remote_addr, config->remote_port);
     LOGI("Start event loop with: %s", eventGetApiName());
+    if (config->pidfile) LOGI("Process id save in file: %s", config->pidfile);
+    if (config->daemonize) LOGI("Enable daemonize");
+    if (config->use_syslog) LOGI("Enable syslog");
 
     if (mod->hook.run) mod->hook.run();
 

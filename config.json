@@ -11,5 +11,7 @@
     "logfile": "",
     "loglevel": "notice",
     "logfile_line": false,
+    "pidfile": "",
+    "daemonize": false,
     "use_syslog": true
 }

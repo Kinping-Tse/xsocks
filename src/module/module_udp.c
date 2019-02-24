@@ -223,7 +223,7 @@ end:
 static void udpRemoteReadTimeHandler(event *e) {
     udpRemote *remote = e->data;
 
-    LOGD("Udp remote read timeout");
+    LOGN("Udp remote read timeout");
 
     udpRemoteFree(remote);
 }

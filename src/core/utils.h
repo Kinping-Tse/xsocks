@@ -17,6 +17,8 @@
 
 #define STRERR (strerror(errno))
 
+void xs_daemonize();
+
 void hexdump(const void *memory, size_t bytes);
 char *xs_itoa(int i);
 void xs_error(char *err, const char *fmt, ...);

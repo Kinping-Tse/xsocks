@@ -50,7 +50,7 @@ module *app = (module *)&s;
 eventHandler tcpClientReadHandler = _tcpClientReadHandler;
 
 int main(int argc, char *argv[]) {
-    moduleHook hook = {serverInit, serverRun, serverExit};
+    moduleHook hook = { .init = serverInit, .run = serverRun, .exit = serverExit, };
 
     moduleInit(MODULE_SERVER, hook, app, argc, argv);
     moduleRun();

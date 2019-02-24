@@ -236,7 +236,7 @@ end:
 static void udpRemoteReadTimeHandler(event *e) {
     remoteServer *remote = e->data;
 
-    LOGD("Udp remote read timeout");
+    LOGN("Udp remote read timeout");
 
     freeRemote(remote);
 }

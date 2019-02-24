@@ -14,7 +14,17 @@ enum {
     MODE_TCP_AND_UDP = MODE_TCP_ONLY|MODE_UDP_ONLY,
 };
 
+#define CONFIG_DEFAULT_DAEMONIZE 0
+#define CONFIG_DEFAULT_METHOD "aes-256-cfb"
+#define CONFIG_DEFAULT_TIMEOUT 60
+#define CONFIG_DEFAULT_MODE MODE_TCP_ONLY
+#define CONFIG_DEFAULT_MTU 0
+#define CONFIG_DEFAULT_LOGLEVEL LOGLEVEL_NOTICE
+#define CONFIG_DEFAULT_SYSLOG_ENABLED 1
+
 typedef struct xsocksConfig {
+    char *pidfile;
+    int daemonize;
     char *remote_addr;
     int remote_port;
     char *local_addr;
@@ -37,7 +47,6 @@ typedef struct xsocksConfig {
     char *logfile;
     int logfile_line;
     int use_syslog;
-    int help;
     int ipv6_first;
     int ipv6_only;
     int no_delay;
