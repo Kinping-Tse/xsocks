@@ -258,6 +258,11 @@ static void handleSocks5Handshake(tcpClient* client) {
 
     // Prepare stream
     tcpRemote *remote = tcpRemoteNew(rfd);
+    if (!remote) {
+        LOGW("Tcp remote is NULL, please check the memory");
+        goto error;
+    }
+
     remote->client = client;
 
     // Because of block connect

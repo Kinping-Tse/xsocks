@@ -51,6 +51,10 @@ static void tcpServerReadHandler(event* e) {
     }
 
     tcpClient *client = tcpClientNew(cfd);
+    if (!client) {
+        LOGW("Tcp client is NULL, please check the memory");
+        return;
+    }
 
     client->server = server;
     snprintf(client->client_addr_info, ADDR_INFO_STR_LEN, "%s:%d", cip, cport);
@@ -62,6 +66,7 @@ static void tcpServerReadHandler(event* e) {
 }
 
 void tcpConnectionFree(tcpClient *client) {
+    assert(client != NULL);
     tcpServer *server = client->server;
 
     server->client_count--;
@@ -76,6 +81,7 @@ void tcpConnectionFree(tcpClient *client) {
 
 tcpClient *tcpClientNew(int fd) {
     tcpClient *client = xs_calloc(sizeof(*client));
+    if (!client) return NULL;
 
     client->fd = fd;
     client->re = NEW_EVENT_READ(fd, tcpClientReadHandler, client);
@@ -172,6 +178,7 @@ static void tcpClientReadTimeHandler(event *e) {
 
 tcpRemote *tcpRemoteNew(int fd) {
     tcpRemote *remote = xs_calloc(sizeof(*remote));
+    if (!remote) return NULL;
 
     remote->fd = fd;
     remote->re = NEW_EVENT_READ(fd, tcpRemoteReadHandler, remote);

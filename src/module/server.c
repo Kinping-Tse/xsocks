@@ -192,6 +192,11 @@ int tcpShadowSocksHandshake(tcpClient *client) {
 
     // Prepare stream
     tcpRemote *remote = tcpRemoteNew(rfd);
+    if (!remote) {
+        LOGW("Tcp remote is NULL, please check the memory");
+        return -1;
+    }
+
     remote->client = client;
 
     client->remote = remote;
