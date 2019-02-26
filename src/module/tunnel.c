@@ -316,9 +316,5 @@ static void runTunnel() {
 int main(int argc, char *argv[]) {
     moduleHook hook = {initTunnel, runTunnel, NULL};
 
-    moduleInit(MODULE_TUNNEL, hook, &tunnel, argc, argv);
-    moduleRun();
-    moduleExit();
-
-    return EXIT_OK;
+    return moduleMain(MODULE_TUNNEL, hook, &tunnel, argc, argv);
 }

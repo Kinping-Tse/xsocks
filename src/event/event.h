@@ -8,6 +8,7 @@ typedef void (*eventHandler)(struct event* e);
 enum {
     EVENT_TYPE_IO = 0,
     EVENT_TYPE_TIME = 1,
+    EVENT_TYPE_SIGNAL = 2,
 };
 
 enum {

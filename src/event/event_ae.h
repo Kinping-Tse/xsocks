@@ -3,6 +3,8 @@
 
 #include "redis/ae.h"
 
+#include <signal.h>
+
 typedef struct eventLoopContext {
     aeEventLoop *el;
 } eventLoopContext;
@@ -11,6 +13,10 @@ typedef struct eventContext {
     event* e;
     int mask;
 } eventContext;
+
+#define _MAX_SIGNUM NSIG
+
+static void *signals[_MAX_SIGNUM] = {NULL};
 
 static void eventIoHandler(aeEventLoop *el, int fd, void *data, int mask) {
     UNUSED(el);
@@ -29,6 +35,15 @@ static int eventTimeHandler(aeEventLoop *el, long long id, void *data) {
     e->handler(e);
 
     return e->flags == EVENT_FLAG_TIME_ONCE ? AE_NOMORE : e->id*1000;
+}
+
+static void eventSignalHandler(int signal, siginfo_t *siginfo, void *data) {
+    UNUSED(signal);
+    UNUSED(siginfo);
+    UNUSED(data);
+
+    event *e = signals[signal];
+    e->handler(e);
 }
 
 static eventLoopContext *eventApiNewLoop() {
@@ -70,19 +85,30 @@ static int eventApiAddEvent(eventLoopContext *elCtx, eventContext* eCtx) {
             return EVENT_ERR;
     } else if (e->type == EVENT_TYPE_TIME)
         eCtx->mask = aeCreateTimeEvent(elCtx->el, e->id*1000, eventTimeHandler, e, NULL);
-    else
+    else if (e->type == EVENT_TYPE_SIGNAL) {
+        if (signals[e->id]) return EVENT_ERR;
+
+        struct sigaction act;
+        sigemptyset(&act.sa_mask);
+        act.sa_flags = SA_SIGINFO;
+        act.sa_sigaction = eventSignalHandler;
+
+        if (sigaction(e->id, &act, NULL) == -1) return EVENT_ERR;
+        signals[e->id] = e;
+    } else
         return EVENT_ERR;
 
     return EVENT_OK;
 }
 
 static void eventApiDelEvent(eventLoopContext *elCtx, eventContext* eCtx) {
-    if (eCtx->e->type == EVENT_TYPE_IO)
-        aeDeleteFileEvent(elCtx->el, eCtx->e->id, eCtx->mask);
-    else if (eCtx->e->type == EVENT_TYPE_TIME)
-        aeDeleteTimeEvent(elCtx->el, eCtx->mask);
-    else
-        assert("Invalid event type");
+    event *e = eCtx->e;
+    switch (e->type) {
+        case EVENT_TYPE_IO: aeDeleteFileEvent(elCtx->el, e->id, eCtx->mask); break;
+        case EVENT_TYPE_TIME: aeDeleteTimeEvent(elCtx->el, eCtx->mask); break;
+        case EVENT_TYPE_SIGNAL: signals[e->id] = NULL; signal(e->id, SIG_DFL); break;
+        default: assert(false); break;
+    }
 }
 
 static void eventApiRun(eventLoopContext *ctx) {
@@ -90,7 +116,7 @@ static void eventApiRun(eventLoopContext *ctx) {
 }
 
 static void eventApiStop(eventLoopContext *ctx) {
-    UNUSED(ctx);
+    aeStop(ctx->el);
 }
 
 static char *eventApiName() {

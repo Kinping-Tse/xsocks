@@ -12,6 +12,7 @@ typedef struct eventContext {
     union {
         struct ev_io io;
         struct ev_timer t;
+        struct ev_signal sig;
     } w;
     event *e;
 } eventContext;
@@ -34,6 +35,16 @@ static void eventTimeHandler(EV_P_ struct ev_timer *w, int revents) {
 
     event *e = w->data;
     e->handler(e);
+}
+
+static void eventSignalHandler(EV_P_ struct ev_signal *w, int revents) {
+#if EV_MULTIPLICITY
+    UNUSED(loop);
+#endif
+    if (revents & EV_SIGNAL) {
+        event *e = w->data;
+        e->handler(e);
+    }
 }
 
 static eventLoopContext *eventApiNewLoop() {
@@ -68,6 +79,9 @@ static eventContext *eventApiNewEvent(event *e) {
         int repeat = e->flags == EVENT_FLAG_TIME_ONCE ? 0 : e->id;
         ev_timer_init(&ctx->w.t, eventTimeHandler, e->id, repeat);
         ctx->w.t.data = e;
+    } else if (e->type == EVENT_TYPE_SIGNAL) {
+        ev_signal_init(&ctx->w.sig, eventSignalHandler, e->id);
+        ctx->w.sig.data = e;
     }
     ctx->e = e;
 
@@ -84,6 +98,8 @@ static int eventApiAddEvent(eventLoopContext *elCtx, eventContext* eCtx) {
         ev_io_start(elCtx->el, &eCtx->w.io);
     else if (e->type == EVENT_TYPE_TIME)
         ev_timer_start(elCtx->el, &eCtx->w.t);
+    else if (e->type == EVENT_TYPE_SIGNAL)
+        ev_signal_start(elCtx->el, &eCtx->w.sig);
     else
         return EVENT_ERR;
 
@@ -96,6 +112,8 @@ static void eventApiDelEvent(eventLoopContext *elCtx, eventContext* eCtx) {
         ev_io_stop(elCtx->el, &eCtx->w.io);
     else if (e->type == EVENT_TYPE_TIME)
         ev_timer_stop(elCtx->el, &eCtx->w.t);
+    else if (e->type == EVENT_TYPE_SIGNAL)
+        ev_signal_stop(elCtx->el, &eCtx->w.sig);
 }
 
 static void eventApiRun(eventLoopContext *ctx) {
@@ -103,7 +121,7 @@ static void eventApiRun(eventLoopContext *ctx) {
 }
 
 static void eventApiStop(eventLoopContext *ctx) {
-    UNUSED(ctx);
+    ev_break(ctx->el, EVUNLOOP_ALL);
 }
 
 static char *eventApiName() {

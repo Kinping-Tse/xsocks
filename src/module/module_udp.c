@@ -25,8 +25,7 @@ udpServer *udpServerNew(int fd) {
 void udpServerFree(udpServer *server) {
     if (!server) return;
 
-    eventDel(server->re);
-    eventFree(server->re);
+    CLR_EVENT(server->re);
     close(server->fd);
 
     xs_free(server);
@@ -152,10 +151,8 @@ void udpRemoteFree(udpRemote *remote) {
     remote->server->remote_count--;
     LOGD("Udp remote current count: %d", remote->server->remote_count);
 
-    eventDel(remote->re);
-    eventDel(remote->te);
-    eventFree(remote->re);
-    eventFree(remote->te);
+    CLR_EVENT(remote->re);
+    CLR_EVENT(remote->te);
     close(remote->fd);
 
     xs_free(remote);

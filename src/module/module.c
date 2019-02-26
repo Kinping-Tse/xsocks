@@ -2,12 +2,95 @@
 #include "module.h"
 
 #include <signal.h>
+#include <libev/ev.h>
 
 static module *mod;
 
 #define eprintf(...) fprintf(stderr, __VA_ARGS__)
 
-void moduleUsage(int module) {
+static void moduleInit();
+static void moduleRun();
+static void moduleExit();
+
+static void moduleUsage();
+static void initLogger();
+static void initCrypto();
+static void createPidFile();
+static void setupSignalHandlers();
+static void signalExitHandler(event *e);
+static void signalEventFreeHandler(void *e);
+
+int moduleMain(int type, moduleHook hook, module *m, int argc, char *argv[]) {
+    moduleInit(type, hook, m, argc, argv);
+    moduleRun();
+    moduleExit();
+
+    return EXIT_OK;
+}
+
+static void moduleInit(int type, moduleHook hook, module *m, int argc, char *argv[]) {
+    mod = m;
+    mod->type = type;
+    mod->hook = hook;
+
+    setLogger(loggerNew());
+
+    xsocksConfig *config = configNew();
+    if (configParse(config, argc, argv) == CONFIG_ERR) {
+        moduleUsage();
+        exit(EXIT_SUCCESS);
+    }
+
+    mod->config = config;
+
+    initLogger();
+    if (config->daemonize) xs_daemonize();
+    createPidFile();
+
+    mod->el = eventLoopNew();
+    setupSignalHandlers();
+    initCrypto();
+
+    if (mod->hook.init) mod->hook.init();
+}
+
+static void moduleRun() {
+    xsocksConfig* config = mod->config;
+
+    LOGN("Use crypto method: %s", config->method);
+    LOGN("Use crypto password: %s", config->password);
+    LOGN("Use crypto key: %s", config->key);
+    if (config->mode & MODE_TCP_ONLY) LOGI("Enable TCP mode");
+    if (config->mode & MODE_UDP_ONLY) LOGI("Enable UDP mode");
+    if (config->mtu) LOGI("Set MTU to %d", config->mtu);
+    if (config->no_delay) LOGI("Enable TCP no-delay");
+    if (config->ipv6_first) LOGI("Use IPv6 address first");
+    // if (config->ipv6_only) LOGI("Use IPv6 address only");
+    if (config->timeout) LOGI("Use timeout: %d", config->timeout);
+    LOGI("Use local addr: %s:%d", config->local_addr, config->local_port);
+    LOGI("Use remote addr: %s:%d", config->remote_addr, config->remote_port);
+    LOGI("Start event loop with: %s", eventGetApiName());
+    if (config->pidfile) LOGI("Process id save in file: %s", config->pidfile);
+    if (config->daemonize) LOGI("Enable daemonize");
+    if (config->use_syslog) LOGI("Enable syslog");
+
+    if (mod->hook.run) mod->hook.run();
+
+    eventLoopRun(mod->el);
+}
+
+static void moduleExit() {
+    if (mod->hook.exit) mod->hook.exit();
+
+    listRelease(mod->sigexit_events);
+    eventLoopFree(mod->el);
+    configFree(mod->config);
+    loggerFree(getLogger());
+}
+
+static void moduleUsage() {
+    int module = mod->type;
+
     eprintf("xsocks %s\n", XS_VERSION);
     eprintf("  maintained by XJP09_HK <jianping_xie@aliyun.com>\n\n");
     eprintf("  usage:\n");
@@ -97,13 +180,6 @@ void moduleUsage(int module) {
     eprintf("\n");
 }
 
-static void initCrypto() {
-    crypto_t *crypto = crypto_init(mod->config->password, mod->config->key, mod->config->method);
-    if (crypto == NULL) FATAL("Failed to initialize ciphers");
-
-    mod->crypto =crypto;
-}
-
 static void initLogger() {
     logger *log = getLogger();
     xsocksConfig *config = mod->config;
@@ -114,6 +190,13 @@ static void initLogger() {
     log->syslog_enabled = config->use_syslog;
     log->file_line_enabled = config->logfile_line;
     // log->syslog_facility = LOG_USER;
+}
+
+static void initCrypto() {
+    crypto_t *crypto = crypto_init(mod->config->password, mod->config->key, mod->config->method);
+    if (crypto == NULL) FATAL("Failed to initialize ciphers");
+
+    mod->crypto =crypto;
 }
 
 static void createPidFile() {
@@ -129,61 +212,39 @@ static void createPidFile() {
     }
 }
 
-void moduleInit(int type, moduleHook hook, module *m, int argc, char *argv[]) {
-    mod = m;
-    mod->type = type;
-    mod->hook = hook;
-
-    setLogger(loggerNew());
-
-    xsocksConfig *config = configNew();
-    if (configParse(config, argc, argv) == CONFIG_ERR) {
-        moduleUsage(type);
-        exit(EXIT_SUCCESS);
-    }
-
-    mod->config = config;
-
-    initLogger();
-    if (config->daemonize) xs_daemonize();
-    createPidFile();
-
-    initCrypto();
-    mod->el = eventLoopNew();
-
+static void setupSignalHandlers() {
+    signal(SIGHUP, SIG_IGN);
     signal(SIGPIPE, SIG_IGN);
 
-    if (mod->hook.init) mod->hook.init();
+    mod->sigexit_events = listCreate();
+    listSetFreeMethod(mod->sigexit_events, signalEventFreeHandler);
+
+    event *ev_sigint = NEW_EVENT_SIGNAL(SIGINT, signalExitHandler, NULL);
+    event *ev_sigterm = NEW_EVENT_SIGNAL(SIGTERM, signalExitHandler, NULL);
+    event *ev_sigquit = NEW_EVENT_SIGNAL(SIGQUIT, signalExitHandler, NULL);
+    ADD_EVENT(ev_sigint);
+    ADD_EVENT(ev_sigterm);
+    ADD_EVENT(ev_sigquit);
+
+    listAddNodeTail(mod->sigexit_events, ev_sigint);
+    listAddNodeTail(mod->sigexit_events, ev_sigterm);
+    listAddNodeTail(mod->sigexit_events, ev_sigquit);
 }
 
-void moduleRun() {
-    xsocksConfig* config = mod->config;
+static void signalExitHandler(event *e) {
+    int signal = e->id;
+    char *msg;
+    switch (signal) {
+        case SIGINT: msg = "Received SIGINT scheduling shutdown..."; break;
+        case SIGTERM: msg = "Received SIGTERM scheduling shutdown..."; break;
+        case SIGQUIT: msg = "Received SIGQUIT scheduling shutdown..."; break;
+        default: msg = "Received shutdown signal, scheduling shutdown..."; break;
+    };
+    LOGW(msg);
 
-    LOGN("Use crypto method: %s", config->method);
-    LOGN("Use crypto password: %s", config->password);
-    LOGN("Use crypto key: %s", config->key);
-    if (config->mode & MODE_TCP_ONLY) LOGI("Enable TCP mode");
-    if (config->mode & MODE_UDP_ONLY) LOGI("Enable UDP mode");
-    if (config->mtu) LOGI("Set MTU to %d", config->mtu);
-    if (config->no_delay) LOGI("Enable TCP no-delay");
-    if (config->ipv6_first) LOGI("Use IPv6 address first");
-    // if (config->ipv6_only) LOGI("Use IPv6 address only");
-    if (config->timeout) LOGI("Use timeout: %d", config->timeout);
-    LOGI("Use local addr: %s:%d", config->local_addr, config->local_port);
-    LOGI("Use remote addr: %s:%d", config->remote_addr, config->remote_port);
-    LOGI("Start event loop with: %s", eventGetApiName());
-    if (config->pidfile) LOGI("Process id save in file: %s", config->pidfile);
-    if (config->daemonize) LOGI("Enable daemonize");
-    if (config->use_syslog) LOGI("Enable syslog");
-
-    if (mod->hook.run) mod->hook.run();
-
-    eventLoopRun(mod->el);
+    eventLoopStop(mod->el);
 }
 
-void moduleExit() {
-    if (mod->hook.exit) mod->hook.exit();
-
-    eventLoopFree(mod->el);
-    loggerFree(getLogger());
+static void signalEventFreeHandler(void *e) {
+    CLR_EVENT(e);
 }

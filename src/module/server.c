@@ -52,11 +52,7 @@ eventHandler tcpClientReadHandler = _tcpClientReadHandler;
 int main(int argc, char *argv[]) {
     moduleHook hook = { .init = serverInit, .run = serverRun, .exit = serverExit, };
 
-    moduleInit(MODULE_SERVER, hook, app, argc, argv);
-    moduleRun();
-    moduleExit();
-
-    return EXIT_SUCCESS;
+    return moduleMain(MODULE_SERVER, hook, app, argc, argv);
 }
 
 static void serverInit() {

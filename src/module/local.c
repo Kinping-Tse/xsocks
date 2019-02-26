@@ -50,11 +50,7 @@ eventHandler tcpClientReadHandler = _tcpClientReadHandler;
 int main(int argc, char *argv[]) {
     moduleHook hook = {localInit, localRun, localExit};
 
-    moduleInit(MODULE_LOCAL, hook, app, argc, argv);
-    moduleRun();
-    moduleExit();
-
-    return EXIT_SUCCESS;
+    return moduleMain(MODULE_LOCAL, hook, app, argc, argv);
 }
 
 static void localInit() {

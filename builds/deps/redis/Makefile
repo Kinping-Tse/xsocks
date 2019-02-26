@@ -5,7 +5,7 @@ include $(ROOT)/builds/deps.mk
 
 VPATH = $(DEPS_PATH)/redis
 
-OBJS = anet.o zmalloc.o ae.o sds.o
+OBJS = anet.o zmalloc.o ae.o sds.o adlist.o
 LIBNAME = libredis
 DYLIBNAME = $(LIBNAME).$(DYLIB_SUFFIX)
 STLIBNAME = $(LIBNAME).$(STLIB_SUFFIX)

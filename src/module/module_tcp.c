@@ -116,12 +116,9 @@ void tcpClientFree(tcpClient *client) {
     bfree(&client->buf);
     sdsfree(client->addr_buf);
 
-    eventDel(client->re);
-    eventDel(client->we);
-    eventDel(client->te);
-    eventFree(client->re);
-    eventFree(client->we);
-    eventFree(client->te);
+    CLR_EVENT(client->re);
+    CLR_EVENT(client->we);
+    CLR_EVENT(client->te);
     close(client->fd);
 
     app->crypto->ctx_release(client->e_ctx);
@@ -204,12 +201,9 @@ void tcpRemoteFree(tcpRemote *remote) {
 
     bfree(&remote->buf);
 
-    eventDel(remote->re);
-    eventDel(remote->we);
-    eventDel(remote->te);
-    eventFree(remote->re);
-    eventFree(remote->we);
-    eventFree(remote->te);
+    CLR_EVENT(remote->re);
+    CLR_EVENT(remote->we);
+    CLR_EVENT(remote->te);
     close(remote->fd);
 
     xs_free(remote);
