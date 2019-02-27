@@ -4,20 +4,48 @@
 
 #include "redis/anet.h"
 
+typedef struct udpRemote {
+    int fd;
+    event *re;
+    event *te;
+    sockAddrEx sa_client;
+    sockAddrEx sa_remote;
+    udpServer *server;
+} udpRemote;
+
 static void udpServerReadHandler(event *e);
 
+static udpRemote *udpRemoteCreate();
 static udpRemote *udpRemoteNew(int fd);
+static void udpRemoteFree(udpRemote *remote);
 static void udpRemoteReadHandler(event *e);
 static void udpRemoteReadTimeHandler(event *e);
+
+udpServer *udpServerCreate(char *host, int port) {
+    char err[ANET_ERR_LEN];
+    int fd;
+
+    if ((host && isIPv6Addr(host)))
+        fd = netUdp6Server(err, port, host);
+    else
+        fd = netUdpServer(err, port, host);
+
+    if (fd == ANET_ERR) {
+        LOGE("UDP server create error %s:%d: %s", host ? host : "*", port, err);
+        return NULL;
+    }
+
+    return udpServerNew(fd);
+}
 
 udpServer *udpServerNew(int fd) {
     udpServer *server = xs_calloc(sizeof(*server));
 
     server->fd = fd;
-    server->re = eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_READ, udpServerReadHandler, server);
+    server->re = NEW_EVENT_READ(fd, udpServerReadHandler, server);
 
     anetNonBlock(NULL, server->fd);
-    eventAdd(app->el, server->re);
+    ADD_EVENT(server->re);
 
     return server;
 }
@@ -35,21 +63,22 @@ static void udpServerReadHandler(event *e) {
     udpServer *server = e->data;
     udpRemote *remote = NULL;
 
-    int readlen = NET_IOBUF_LEN;
+    int buflen = NET_IOBUF_LEN;
     int sfd = server->fd;
     int nread;
 
     sockAddrEx caddr;
-    buffer_t tmp_buf = {0,0,0,NULL};
+    buffer_t tmp_buf;
 
-    balloc(&tmp_buf, NET_IOBUF_LEN);
+    bzero(&tmp_buf, sizeof(tmp_buf));
+    balloc(&tmp_buf, buflen);
     netSockAddrExInit(&caddr);
 
-    // Read local client buffer
-    nread = recvfrom(sfd, tmp_buf.data, readlen, 0,
-                    (sockAddr *)&caddr.sa, &caddr.sa_len);
+    // Read client buffer
+    nread = recvfrom(sfd, tmp_buf.data, buflen, 0,
+                     (sockAddr *)&caddr.sa, &caddr.sa_len);
     if (nread == -1) {
-        LOGW("Local server read UDP error: %s", strerror(errno));
+        LOGW("UDP server read error: %s", STRERR);
         goto error;
     }
     tmp_buf.len = nread;
@@ -57,39 +86,40 @@ static void udpServerReadHandler(event *e) {
     char cip[HOSTNAME_MAX_LEN];
     int cport;
 
-    netIpPresentBySockAddr(NULL, cip, HOSTNAME_MAX_LEN, &cport, &caddr);
-    LOGD("Local server read UDP from [%s:%d]", cip, cport);
+    netIpPresentBySockAddr(NULL, cip, sizeof(cip), &cport, &caddr);
+    LOGD("UDP server read from [%s:%d]", cip, cport);
 
-    // Decrypt local client buffer
-    if (app->crypto->decrypt_all(&tmp_buf, app->crypto->cipher, NET_IOBUF_LEN)) {
-        LOGW("Local server decrypt UDP buffer error");
+    // Decrypt client buffer
+    if (app->crypto->decrypt_all(&tmp_buf, app->crypto->cipher, buflen)) {
+        LOGW("UDP server decrypt buffer error");
         goto error;
     }
 
     // Validate the buffer
     char rip[HOSTNAME_MAX_LEN];
-    int rip_len = HOSTNAME_MAX_LEN;
+    int rip_len = sizeof(rip);
     int rport;
     int raddr_len;
 
     if ((raddr_len= socks5AddrParse(tmp_buf.data, tmp_buf.len, NULL, rip, &rip_len, &rport)) == -1) {
-        LOGW("Local server parse UDP buffer error");
+        LOGW("UDP server parse buffer error");
         goto error;
     }
 
     char raddr_info[ADDR_INFO_STR_LEN];
     anetFormatAddr(raddr_info, ADDR_INFO_STR_LEN, rip, rport);
-    LOGI("Local client request UDP addr: %s", raddr_info);
+    LOGI("UDP client request addr: %s", raddr_info);
 
-    // Write to remote server
+    // Write to udp remote
     sockAddrEx raddr;
     char err[ANET_ERR_LEN];
     if (netUdpGetSockAddrEx(err, rip, rport, app->config->ipv6_first, &raddr) == NET_ERR) {
-        LOGW("Remote server get sockaddr error: %s", err);
+        LOGW("Get UDP remote sockaddr error: %s", err);
         goto error;
     }
 
-    remote = udpRemoteCreate(rip);
+    if ((remote = udpRemoteCreate()) == NULL) goto error;
+
     remote->server = server;
     memcpy(&remote->sa_client, &caddr, sizeof(caddr));
 
@@ -112,19 +142,16 @@ end:
     bfree(&tmp_buf);
 }
 
-udpRemote *udpRemoteCreate(char *host) {
+udpRemote *udpRemoteCreate() {
     char err[ANET_ERR_LEN];
-    int port = 0;
-    int fd;
+    int fd = ANET_ERR;
 
-    if (host && isIPv6Addr(host))
-        fd = netUdp6Server(err, 0, NULL);
-    else
-        fd = netUdpServer(err, 0, NULL);
+    if (app->config->ipv6_first) fd = netUdp6Server(err, 0, NULL);
+    if (fd == ANET_ERR) fd = netUdpServer(err, 0, NULL);
 
     if (fd == ANET_ERR) {
-        FATAL("Could not create remote server UDP socket %s:%d: %s",
-              host, port, err);
+        LOGW("UDP remote create error: %s", err);
+        return NULL;
     }
 
     return udpRemoteNew(fd);
@@ -139,6 +166,7 @@ udpRemote *udpRemoteNew(int fd) {
 
     anetNonBlock(NULL, remote->fd);
     netSockAddrExInit(&remote->sa_client);
+    netSockAddrExInit(&remote->sa_remote);
     ADD_EVENT(remote->re);
     ADD_EVENT(remote->te);
 

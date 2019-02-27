@@ -1,6 +1,8 @@
 
 #include "module.h"
 
+#include "shadowsocks-libev/ppbloom.h"
+
 #include <signal.h>
 #include <libev/ev.h>
 
@@ -14,7 +16,7 @@ static void moduleExit();
 
 static void moduleUsage();
 static void initLogger();
-static void initCrypto();
+static void freeCrypto(crypto_t *crypto);
 static void createPidFile();
 static void setupSignalHandlers();
 static void signalExitHandler(event *e);
@@ -38,7 +40,7 @@ static void moduleInit(int type, moduleHook hook, module *m, int argc, char *arg
     xsocksConfig *config = configNew();
     if (configParse(config, argc, argv) == CONFIG_ERR) {
         moduleUsage();
-        exit(EXIT_SUCCESS);
+        exit(EXIT_OK);
     }
 
     mod->config = config;
@@ -49,7 +51,9 @@ static void moduleInit(int type, moduleHook hook, module *m, int argc, char *arg
 
     mod->el = eventLoopNew();
     setupSignalHandlers();
-    initCrypto();
+
+    mod->crypto = crypto_init(mod->config->password, mod->config->key, mod->config->method);
+    if (!mod->crypto) FATAL("Failed to initialize ciphers");
 
     if (mod->hook.init) mod->hook.init();
 }
@@ -82,6 +86,8 @@ static void moduleRun() {
 static void moduleExit() {
     if (mod->hook.exit) mod->hook.exit();
 
+    if (mod->config->pidfile) unlink(mod->config->pidfile);
+    freeCrypto(mod->crypto);
     listRelease(mod->sigexit_events);
     eventLoopFree(mod->el);
     configFree(mod->config);
@@ -192,11 +198,10 @@ static void initLogger() {
     // log->syslog_facility = LOG_USER;
 }
 
-static void initCrypto() {
-    crypto_t *crypto = crypto_init(mod->config->password, mod->config->key, mod->config->method);
-    if (crypto == NULL) FATAL("Failed to initialize ciphers");
-
-    mod->crypto =crypto;
+static void freeCrypto(crypto_t *crypto) {
+    ppbloom_free();
+    free(crypto->cipher);
+    free(crypto);
 }
 
 static void createPidFile() {

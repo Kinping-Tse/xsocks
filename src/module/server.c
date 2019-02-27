@@ -83,7 +83,7 @@ static void tcpServerInit() {
     int backlog = 256;
     int fd;
 
-    if (app->config->ipv6_first || (host && isIPv6Addr(host)))
+    if ((host && isIPv6Addr(host)))
         fd = anetTcp6Server(err, port, host, backlog);
     else
         fd = anetTcpServer(err, port, host, backlog);
@@ -209,22 +209,7 @@ int tcpShadowSocksHandshake(tcpClient *client) {
 }
 
 static void udpServerInit() {
-    char err[ANET_ERR_LEN];
-    char *host = app->config->remote_addr;
-    int port = app->config->remote_port;
-    int fd;
-
-    if (app->config->ipv6_first || (host && isIPv6Addr(host)))
-        fd = netUdp6Server(err, port, host);
-    else
-        fd = netUdpServer(err, port, host);
-
-    if (fd == ANET_ERR) {
-        FATAL("Could not create local server UDP socket %s:%d: %s",
-              host ? host : "*", port, err);
-    }
-
-    s.us = udpServerNew(fd);
+    s.us = udpServerCreate(app->config->remote_addr, app->config->remote_port);
 }
 
 static void udpServerExit() {

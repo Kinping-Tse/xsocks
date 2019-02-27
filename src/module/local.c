@@ -82,7 +82,7 @@ static void tcpServerInit() {
     int backlog = 256;
     int fd;
 
-    if (app->config->ipv6_first || (host && isIPv6Addr(host)))
+    if ((host && isIPv6Addr(host)))
         fd = anetTcp6Server(err, port, host, backlog);
     else
         fd = anetTcpServer(err, port, host, backlog);
@@ -262,7 +262,7 @@ static void handleSocks5Handshake(tcpClient* client) {
     remote->client = client;
 
     // Because of block connect
-    eventDel(remote->we);
+    DEL_EVENT(remote->we);
     ADD_EVENT(remote->re);
 
     client->remote = remote;

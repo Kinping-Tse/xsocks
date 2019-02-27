@@ -21,6 +21,14 @@ configEnum loglevel_enum[] = {
     {NULL, 0}
 };
 
+#define configStringDup(d, s) \
+    do { \
+        char *_s = s; \
+        if (_s) { xs_free(d); d = xs_strdup(_s); } \
+    } while (0)
+
+#define configIntDup(d, s) do { if (s > -1) d = s; } while (0)
+
 /* Get enum value from name. If there is no match INT_MIN is returned. */
 int configEnumGetValue(configEnum *ce, char *name) {
     while (ce->name != NULL) {
@@ -49,14 +57,14 @@ xsocksConfig *configNew() {
 
     config->pidfile = NULL;
     config->daemonize = CONFIG_DEFAULT_DAEMONIZE;
-    config->remote_addr = "127.0.0.1";
+    config->remote_addr = NULL;
     config->remote_port = 8388;
-    config->local_addr = "127.0.0.1";
+    config->local_addr = NULL;
     config->local_port = 1080;
-    config->password = "xsocks";
+    config->password = NULL;
     config->tunnel_address = NULL;
     config->key = NULL;
-    config->method = CONFIG_DEFAULT_METHOD;
+    configStringDup(config->method, CONFIG_DEFAULT_METHOD);
     config->timeout = CONFIG_DEFAULT_TIMEOUT;
     config->fast_open = 0;
     config->reuse_port = 0;
@@ -147,6 +155,7 @@ void configLoad(xsocksConfig *config, char *filename) {
     for (uint64_t i = 0; i < obj->u.object.length; i++) {
         char *name        = obj->u.object.values[i].name;
         json_value *value = obj->u.object.values[i].value;
+
         if (strcmp(name, "server") == 0) {
             config->remote_addr = to_string(value);
         } else if (strcmp(name, "server_port") == 0) {
@@ -161,6 +170,7 @@ void configLoad(xsocksConfig *config, char *filename) {
         } else if (strcmp(name, "key") == 0) {
             config->key = to_string(value);
         } else if (strcmp(name, "method") == 0) {
+            xs_free(config->method);
             config->method = to_string(value);
         } else if (strcmp(name, "timeout") == 0) {
             config->timeout = to_integer(value);
@@ -178,7 +188,10 @@ void configLoad(xsocksConfig *config, char *filename) {
             config->logfile = to_string(value);
             if (testLogfile(&err, config->logfile) == CONFIG_ERR) goto loaderr;
         } else if (strcmp(name, "loglevel") == 0) {
-            config->loglevel = configEnumGetValue(loglevel_enum, to_string(value));
+            char *loglevel = to_string(value);
+            config->loglevel = configEnumGetValue(loglevel_enum, loglevel);
+            xs_free(loglevel);
+
             if (config->loglevel == INT_MIN) {
                 err = "Invalid log level. "
                       "Must be one of debug, info, notice, warning, error";
@@ -330,32 +343,37 @@ int configParse(xsocksConfig* config, int argc, char *argv[]) {
 
     if (conf_path != NULL) configLoad(config, conf_path);
 
-    if (key) config->key = key;
-    if (loglevel > -1) config->loglevel = loglevel;
-    if (logfile) config->logfile = logfile;
-    if (remote_addr) config->remote_addr = remote_addr;
-    if (remote_port > -1) config->remote_port = remote_port;
-    if (local_addr) config->local_addr = local_addr;
-    if (local_port > -1) config->local_port = local_port;
-    if (tunnel_address) config->tunnel_address = tunnel_address;
-    if (password) config->password = password;
-    if (pidfile) config->pidfile = pidfile;
-    if (daemonize > -1) config->daemonize = daemonize;
-    if (timeout > -1) config->timeout = timeout;
-    if (method) config->method = method;
-    if (mode > -1) config->mode = mode;
-    if (ipv6_first > -1) config->ipv6_first = ipv6_first;
-    if (reuse_port > -1) config->reuse_port = reuse_port;
-    if (no_delay > -1) config->no_delay = no_delay;
-    if (mtu > -1) config->mtu = mtu;
-    if (fast_open > -1) config->fast_open = fast_open;
+    configStringDup(config->key, key);
+    configStringDup(config->logfile, logfile);
+    configStringDup(config->remote_addr, remote_addr);
+    configStringDup(config->local_addr, local_addr);
+    configStringDup(config->tunnel_address, tunnel_address);
+    configStringDup(config->password, password);
+    configStringDup(config->pidfile, pidfile);
+    configStringDup(config->method, method);
+    configIntDup(config->loglevel, loglevel);
+    configIntDup(config->remote_port, remote_port);
+    configIntDup(config->local_port, local_port);
+    configIntDup(config->daemonize, daemonize);
+    configIntDup(config->timeout, timeout);
+    configIntDup(config->mode, mode);
+    configIntDup(config->reuse_port, reuse_port);
+    configIntDup(config->ipv6_first, ipv6_first);
+    configIntDup(config->no_delay, no_delay);
+    configIntDup(config->mtu, mtu);
+    configIntDup(config->fast_open, fast_open);
 
     char *temp_tunnel_addr = config->tunnel_address;
     char *tunnel_addr;
     if (temp_tunnel_addr && (tunnel_addr = strrchr(temp_tunnel_addr, ':'))) {
-        config->tunnel_addr = strndup(temp_tunnel_addr, tunnel_addr - temp_tunnel_addr);
+        int tunnel_addr_offset = tunnel_addr - temp_tunnel_addr;
+        config->tunnel_addr = xs_malloc(tunnel_addr_offset + 1);
+        memcpy(config->tunnel_addr, temp_tunnel_addr, tunnel_addr_offset);
+        config->tunnel_addr[tunnel_addr_offset] = '\0';
         config->tunnel_port = atoi(tunnel_addr+1);
     }
+
+    if (!config->password) err = "Invalid password";
 
     if (err != NULL) FATAL(err);
 
@@ -363,5 +381,15 @@ int configParse(xsocksConfig* config, int argc, char *argv[]) {
 }
 
 void configFree(xsocksConfig* config) {
+    xs_free(config->pidfile);
+    xs_free(config->remote_addr);
+    xs_free(config->local_addr);
+    xs_free(config->password);
+    xs_free(config->tunnel_address);
+    xs_free(config->tunnel_addr);
+    xs_free(config->key);
+    xs_free(config->method);
+    xs_free(config->logfile);
+
     xs_free(config);
 }

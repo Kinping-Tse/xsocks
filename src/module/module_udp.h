@@ -8,19 +8,8 @@ typedef struct udpServer {
     int remote_count;
 } udpServer;
 
-typedef struct udpRemote {
-    int fd;
-    event *re;
-    event *te;
-    sockAddrEx sa_client;
-    sockAddrEx sa_remote;
-    udpServer *server;
-} udpRemote;
-
+udpServer *udpServerCreate(char *host, int port);
 udpServer *udpServerNew(int fd);
 void udpServerFree(udpServer *server);
-
-udpRemote *udpRemoteCreate(char *host);
-void udpRemoteFree(udpRemote *remote);
 
 #endif /* __MODULE_UDP_H */

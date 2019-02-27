@@ -28,8 +28,7 @@ tcpServer *tcpServerNew(int fd) {
 void tcpServerFree(tcpServer *server) {
     if (!server) return;
 
-    eventDel(server->re);
-    eventFree(server->re);
+    CLR_EVENT(server->re);
     close(server->fd);
 
     xs_free(server);
@@ -75,8 +74,8 @@ void tcpConnectionFree(tcpClient *client) {
     LOGD("Tcp client current count: %d", server->client_count);
     LOGD("Tcp remote current count: %d", server->remote_count);
 
-    tcpClientFree(client);
     tcpRemoteFree(client->remote);
+    tcpClientFree(client);
 }
 
 tcpClient *tcpClientNew(int fd) {
@@ -139,7 +138,7 @@ static void tcpClientWriteHandler(event *e) {
 
     if (write_len == 0) {
         remote->buf_off = 0;
-        eventDel(client->we);
+        DEL_EVENT(client->we);
         ADD_EVENT(client->re);
         ADD_EVENT(remote->re);
         return;
@@ -258,8 +257,8 @@ static void tcpRemoteReadHandler(event *e) {
     return;
 
 write_again:
-    eventDel(remote->re);
-    eventDel(client->re);
+    DEL_EVENT(remote->re);
+    DEL_EVENT(client->re);
     ADD_EVENT(client->we);
     return;
 
@@ -271,7 +270,7 @@ static void tcpRemoteWriteHandler(event *e) {
     tcpRemote *remote = e->data;
     tcpClient *client = remote->client;
 
-    eventDel(remote->we);
+    DEL_EVENT(remote->we);
     ADD_EVENT(remote->re);
     ADD_EVENT(client->re);
 

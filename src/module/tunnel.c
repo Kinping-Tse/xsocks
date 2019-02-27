@@ -32,7 +32,6 @@ typedef struct localClient {
     event *re;
     sds buf;
     sds addr_buf;
-    sockAddrEx remote_server_sa;
     int remote_count;
 } localClient;
 
@@ -42,14 +41,46 @@ typedef struct remoteServer {
     int fd;
     event *re;
     event *te;
+    sockAddrEx remote_server_sa;
     sockAddrEx local_client_sa;
     localClient *client;
 } remoteServer;
+
+static void tunnelInit();
+static void tunnelRun();
+
+localClient *initUdpClient();
 
 void remoteServerReadHandler(event *e);
 void localClientReadHandler(event *e);
 
 static void udpRemoteReadTimeHandler(event *e);
+
+int main(int argc, char *argv[]) {
+    moduleHook hook = {tunnelInit, tunnelRun, NULL};
+
+    return moduleMain(MODULE_TUNNEL, hook, &tunnel, argc, argv);
+}
+
+static void tunnelInit() {
+    getLogger()->syslog_ident = "xs-tunnel";
+
+    if (app->config->mode & MODE_TCP_ONLY) {
+        LOGW("Only support UDP now!");
+        LOGW("Tcp mode is not working!");
+        // exit(EXIT_ERR);
+    }
+
+    if (app->config->tunnel_addr == NULL) FATAL("Error tunnel address!");
+
+    if (app->config->mode & MODE_UDP_ONLY) {
+        localTunnelServer = initUdpClient();
+    }
+}
+
+static void tunnelRun() {
+    LOGI("Use tunnel addr: %s:%d", app->config->tunnel_addr, app->config->tunnel_port);
+}
 
 localClient *newClient(int fd) {
     localClient *client = xs_calloc(sizeof(*client));
@@ -65,8 +96,6 @@ localClient *newClient(int fd) {
                                       app->config->tunnel_port);
     client->buf = sdsempty();
     client->buf = sdsMakeRoomFor(client->buf, NET_IOBUF_LEN);
-
-    netSockAddrExInit(&client->remote_server_sa);
 
     return client;
 }
@@ -90,6 +119,7 @@ remoteServer *newRemote(int fd) {
 
     anetNonBlock(NULL, fd);
     netSockAddrExInit(&remote->local_client_sa);
+    netSockAddrExInit(&remote->remote_server_sa);
     ADD_EVENT(remote->re);
     ADD_EVENT(remote->te);
 
@@ -117,7 +147,7 @@ localClient *initUdpClient() {
     int port = app->config->local_port;
     int fd;
 
-    if (app->config->ipv6_first || (host && isIPv6Addr(host)))
+    if ((host && isIPv6Addr(host)))
         fd = netUdp6Server(err, port, host);
     else
         fd = netUdpServer(err, port, host);
@@ -128,11 +158,6 @@ localClient *initUdpClient() {
     }
 
     localClient *client = newClient(fd);
-
-    if (netUdpGetSockAddrEx(err, app->config->remote_addr, app->config->remote_port,
-                            app->config->ipv6_first, &client->remote_server_sa) == NET_ERR) {
-        FATAL(err);
-    }
 
     return client;
 }
@@ -154,25 +179,6 @@ remoteServer *initUdpRemote() {
     }
 
     return newRemote(fd);
-}
-
-static void initTunnel() {
-    getLogger()->syslog_ident = "xs-tunnel";
-
-    if (app->config->mode & MODE_TCP_ONLY) {
-        LOGW("Only support UDP now!");
-        LOGW("Tcp mode is not working!");
-        // exit(EXIT_ERR);
-    }
-
-    if (app->config->tunnel_addr == NULL) {
-        LOGE("Error tunnel address!");
-        exit(EXIT_ERR);
-    }
-
-    if (app->config->mode & MODE_UDP_ONLY) {
-        localTunnelServer = initUdpClient();
-    }
 }
 
 void remoteServerReadHandler(event *e) {
@@ -289,15 +295,21 @@ void localClientReadHandler(event *e) {
     remote->client = client;
     memcpy(&remote->local_client_sa, &src_addr, sizeof(src_addr));
 
-    int rfd = remote->fd;
-    if (sendto(rfd, tmp_buf.data, tmp_buf.len, 0, (sockAddr *)&client->remote_server_sa.sa,
-               client->remote_server_sa.sa_len) == -1) {
-        LOGW("Remote server UDP send buffer error: %s", strerror(errno));
+    client->remote_count++;
+    LOGD("Udp remote current count: %d", client->remote_count);
+
+    char err[256];
+    if (netUdpGetSockAddrEx(err, app->config->remote_addr, app->config->remote_port,
+                            app->config->ipv6_first, &remote->remote_server_sa) == NET_ERR) {
         goto error;
     }
 
-    client->remote_count++;
-    LOGD("Udp remote current count: %d", client->remote_count);
+    int rfd = remote->fd;
+    if (sendto(rfd, tmp_buf.data, tmp_buf.len, 0, (sockAddr *)&remote->remote_server_sa.sa,
+               remote->remote_server_sa.sa_len) == -1) {
+        LOGW("Remote server UDP send buffer error: %s", strerror(errno));
+        goto error;
+    }
 
     goto end;
 
@@ -307,14 +319,4 @@ error:
 end:
     sdsfree(buf);
     bfree(&tmp_buf);
-}
-
-static void runTunnel() {
-    LOGI("Use tunnel addr: %s:%d", app->config->tunnel_addr, app->config->tunnel_port);
-}
-
-int main(int argc, char *argv[]) {
-    moduleHook hook = {initTunnel, runTunnel, NULL};
-
-    return moduleMain(MODULE_TUNNEL, hook, &tunnel, argc, argv);
 }
