@@ -44,6 +44,6 @@ $(STLIBNAME): $(OBJS)
 	$(COMMON_CC) -c $<
 
 clean:
-	rm -rf $(DYLIBNAME) $(STLIBNAME) *.o
+	rm -rf $(DYLIBNAME) $(STLIBNAME) $(BUILD_TMP_FILES)
 
 .PHONY: all install-shared dynamic static clean

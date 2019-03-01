@@ -156,13 +156,21 @@ endif
 endif
 
 clean:
-	rm -rf $(XSOCKS_MODULE_EXE) *.o Makefile.dep
+	rm -rf $(XSOCKS_MODULE_EXE) $(BUILD_TMP_FILES) *.info lcov-html Makefile.dep
 
 distclean: clean
 	$(MAKE) -C $(BUILD_DEPS_PATH) distclean
 	rm -rf .make-*
 
+gcov:
+	$(MAKE) $(MFLAGS) CFLAGS="-fprofile-arcs -ftest-coverage" LDFLAGS="-fprofile-arcs -ftest-coverage"
+
+lcov:
+	$(MAKE) $(MFLAGS) gcov
+	@geninfo -o xsocks.info .
+	@genhtml --legend -o lcov-html xsocks.info
+
 valgrind:
 	$(MAKE) $(MFLAGS) OPTIMIZATION="-O0" MALLOC="libc"
 
-.PHONY: all install install-lib clean distclean persist-settings
+.PHONY: all install install-lib clean distclean persist-settings gcov lcov valgrind

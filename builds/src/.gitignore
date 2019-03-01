@@ -1,5 +1,5 @@
 .make-*
 Makefile.dep
-xs-local
-xs-server
-xs-tunnel
+*.info
+lcov-html/
+xs-*

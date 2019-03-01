@@ -247,7 +247,7 @@ static int handleSocks5Handshake(tcpClient* client) {
     client->addr_buf = sdsnewlen(addr_buf, buf_len);
 
     s.ts->remote_count++;
-    LOGD("Tcp remote current count: %d", s.ts->remote_count);
+    LOGD("TCP remote current count: %d", s.ts->remote_count);
 
     if (shadowSocksHandshake(client) == TCP_ERR) return TCP_ERR;
 
@@ -316,11 +316,11 @@ static int shadowSocksHandshake(tcpClient *client) {
     tmp_buf.len = sdslen(client->addr_buf);
 
     if (app->crypto->encrypt(&tmp_buf, client->e_ctx, NET_IOBUF_LEN))
-        LOGW("Tcp client encrypt buffer error");
+        LOGW("TCP client encrypt buffer error");
 
     int nwrite = write(client->remote->fd, tmp_buf.data, tmp_buf.len);
     if (nwrite != (int)tmp_buf.len) {
-        LOGW("Tcp remote [%s] write error", client->remote_addr_info);
+        LOGW("TCP remote [%s] write error", client->remote_addr_info);
         ok = TCP_ERR;
     }
 

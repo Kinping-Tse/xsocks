@@ -32,9 +32,11 @@ static int eventTimeHandler(aeEventLoop *el, long long id, void *data) {
     UNUSED(id);
 
     event *e = data;
+    int next_time = EVENT_FLAG_TIME_ONCE ? AE_NOMORE : e->id*1000;
+
     e->handler(e);
 
-    return e->flags == EVENT_FLAG_TIME_ONCE ? AE_NOMORE : e->id*1000;
+    return next_time;
 }
 
 static void eventSignalHandler(int signal, siginfo_t *siginfo, void *data) {

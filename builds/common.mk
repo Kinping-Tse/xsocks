@@ -7,6 +7,8 @@ WARN = -Wall -Wextra -pedantic #-Werror
 OPT = $(OPTIMIZATION)
 DEBUG = -g -ggdb
 
+BUILD_TMP_FILES = *.o *.gcda *.gcno *.gcov
+
 DYLIB_SUFFIX = so
 STLIB_SUFFIX = a
 

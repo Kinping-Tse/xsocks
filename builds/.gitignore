@@ -2,3 +2,6 @@
 *.a
 *.so
 *.dylib
+*.gcno
+*.gcda
+*.gcnv
