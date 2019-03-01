@@ -1,5 +1,7 @@
 
 #include "module.h"
+#include "module_udp.h"
+#include "../core/socks5.h"
 
 #include "redis/anet.h"
 
@@ -24,42 +26,29 @@ udp:
 
 */
 
-static module tunnel;
-module *app = &tunnel;
-
-typedef struct localClient {
-    int fd;
-    event *re;
-    sds buf;
-    sds addr_buf;
-    int remote_count;
-} localClient;
-
-static localClient *localTunnelServer;
-
-typedef struct remoteServer {
-    int fd;
-    event *re;
-    event *te;
-    sockAddrEx remote_server_sa;
-    sockAddrEx local_client_sa;
-    localClient *client;
-} remoteServer;
+typedef struct server {
+    module mod;
+    udpServer *us;
+    buffer_t tunnel_addr;
+} server;
 
 static void tunnelInit();
 static void tunnelRun();
+static void tunnelExit();
 
-localClient *initUdpClient();
+static void udpServerInit();
+static void udpServerExit();
 
-void remoteServerReadHandler(event *e);
-void localClientReadHandler(event *e);
+static int udpServerHookProcess(void *data);
+static int udpRemoteHookProcess(void *data);
 
-static void udpRemoteReadTimeHandler(event *e);
+static server s;
+module *app = (module *)&s;
 
 int main(int argc, char *argv[]) {
-    moduleHook hook = {tunnelInit, tunnelRun, NULL};
+    moduleHook hook = {tunnelInit, tunnelRun, tunnelExit};
 
-    return moduleMain(MODULE_TUNNEL, hook, &tunnel, argc, argv);
+    return moduleMain(MODULE_TUNNEL, hook, app, argc, argv);
 }
 
 static void tunnelInit() {
@@ -68,255 +57,100 @@ static void tunnelInit() {
     if (app->config->mode & MODE_TCP_ONLY) {
         LOGW("Only support UDP now!");
         LOGW("Tcp mode is not working!");
-        // exit(EXIT_ERR);
     }
 
     if (app->config->tunnel_addr == NULL) FATAL("Error tunnel address!");
 
-    if (app->config->mode & MODE_UDP_ONLY) {
-        localTunnelServer = initUdpClient();
-    }
+    if (app->config->mode & MODE_UDP_ONLY) udpServerInit();
+
+    if (!s.us) exit(EXIT_ERR);
 }
 
 static void tunnelRun() {
     LOGI("Use tunnel addr: %s:%d", app->config->tunnel_addr, app->config->tunnel_port);
+
+    char addr_info[ADDR_INFO_STR_LEN];
+    if (s.us && anetFormatSock(s.us->fd, addr_info, ADDR_INFO_STR_LEN) > 0)
+        LOGN("UDP server read at: %s", addr_info);
 }
 
-localClient *newClient(int fd) {
-    localClient *client = xs_calloc(sizeof(*client));
-
-    anetNonBlock(NULL, fd);
-
-    event* re = eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_READ, localClientReadHandler, client);
-    eventAdd(app->el, re);
-
-    client->fd = fd;
-    client->re = re;
-    client->addr_buf = socks5AddrInit(NULL, app->config->tunnel_addr,
-                                      app->config->tunnel_port);
-    client->buf = sdsempty();
-    client->buf = sdsMakeRoomFor(client->buf, NET_IOBUF_LEN);
-
-    return client;
+static void tunnelExit() {
+    udpServerExit();
 }
 
-void freeClient(localClient *client) {
-    sdsfree(client->buf);
-    sdsfree(client->addr_buf);
-    eventDel(client->re);
-    eventFree(client->re);
-    close(client->fd);
+static void udpServerInit() {
+    udpHook hook = {.init = NULL, .process = udpServerHookProcess, .free = NULL};
 
-    xs_free(client);
+    sds addr = socks5AddrInit(NULL, app->config->tunnel_addr, app->config->tunnel_port);
+    int addr_len = sdslen(addr);
+
+    bzero(&s.tunnel_addr, sizeof(s.tunnel_addr));
+    balloc(&s.tunnel_addr, addr_len);
+    memcpy(s.tunnel_addr.data, addr, addr_len);
+    s.tunnel_addr.len = addr_len;
+
+    s.us = udpServerCreate(app->config->local_addr, app->config->local_port, hook, &s);
+    sdsfree(addr);
 }
 
-remoteServer *newRemote(int fd) {
-    remoteServer *remote = xs_calloc(sizeof(*remote));
+static void udpServerExit() {
+    bfree(&s.tunnel_addr);
 
-    remote->fd = fd;
-    remote->re = NEW_EVENT_READ(fd, remoteServerReadHandler, remote);
-    remote->te = NEW_EVENT_ONCE(app->config->timeout, udpRemoteReadTimeHandler, remote);
-
-    anetNonBlock(NULL, fd);
-    netSockAddrExInit(&remote->local_client_sa);
-    netSockAddrExInit(&remote->remote_server_sa);
-    ADD_EVENT(remote->re);
-    ADD_EVENT(remote->te);
-
-    return remote;
+    udpServerFree(s.us);
 }
 
-void freeRemote(remoteServer *remote) {
-    if (!remote) return;
+static int udpServerHookProcess(void *data) {
+    udpClient *client = data;
+    udpRemote *remote;
+    server *s = client->server->data;
 
-    remote->client->remote_count--;
-    LOGD("Udp remote current count: %d", remote->client->remote_count);
-
-    eventDel(remote->re);
-    eventDel(remote->te);
-    eventFree(remote->re);
-    eventFree(remote->te);
-    close(remote->fd);
-
-    xs_free(remote);
-}
-
-localClient *initUdpClient() {
     char err[ANET_ERR_LEN];
-    char *host = app->config->local_addr;
-    int port = app->config->local_port;
-    int fd;
+    int buflen = NET_IOBUF_LEN;
 
-    if ((host && isIPv6Addr(host)))
-        fd = netUdp6Server(err, port, host);
-    else
-        fd = netUdpServer(err, port, host);
+    // Append address buffer
+    bprepend(&client->buf, &s->tunnel_addr, buflen);
 
-    if (fd == ANET_ERR) {
-        FATAL("Could not create local client UDP socket %s:%d: %s",
-              host ? host : "*", port, err);
+    // Encrypt client buffer
+    if (app->crypto->encrypt_all(&client->buf, app->crypto->cipher, buflen)) {
+        LOGW("UDP server decrypt buffer error");
+        return UDP_ERR;
     }
 
-    localClient *client = newClient(fd);
+    // Get remote addr from config
+    if (netUdpGetSockAddrEx(err, app->config->remote_addr, app->config->remote_port,
+                            app->config->ipv6_first, &client->sa_remote) == NET_ERR) {
+        LOGW("Get UDP remote sockaddr error: %s", err);
+        return UDP_ERR;
+    }
 
-    return client;
+    // Prepare remote
+    udpHook hook = {.init = NULL, .process = udpRemoteHookProcess, .free = NULL};
+    if ((remote = udpRemoteCreate(&hook, NULL)) == NULL) return UDP_ERR;
+
+    remote->client = client;
+    client->remote = remote;
+
+    return UDP_OK;
 }
 
-remoteServer *initUdpRemote() {
-    char err[ANET_ERR_LEN];
-    char *host = app->config->remote_addr;
-    int port = 0;
-    int fd;
+static int udpRemoteHookProcess(void *data) {
+    udpRemote *remote = data;
 
-    if (host && isIPv6Addr(host))
-        fd = netUdp6Server(err, 0, NULL);
-    else
-        fd = netUdpServer(err, 0, NULL);
-
-    if (fd == ANET_ERR) {
-        FATAL("Could not create remote server UDP socket %s:%d: %s",
-              host, port, err);
-    }
-
-    return newRemote(fd);
-}
-
-void remoteServerReadHandler(event *e) {
-    remoteServer *remote = e->data;
-    localClient *client = remote->client;
-
-    buffer_t tmp_buf = {0,0,0,NULL};
-    int readlen = NET_IOBUF_LEN;
-    int rfd = remote->fd;
-    sockAddrEx remote_addr;
-    int nread;
-
-    balloc(&tmp_buf, NET_IOBUF_LEN);
-    netSockAddrExInit(&remote_addr);
-
-    // Read remote server buffer
-    nread = recvfrom(rfd, tmp_buf.data, readlen, 0,
-                    (sockAddr *)&remote_addr.sa, &remote_addr.sa_len);
-    if (nread == -1) {
-        LOGW("Remote Server UDP read error: %s", strerror(errno));
-        goto error;
-    }
-    tmp_buf.len = nread;
-
-    // Log remote server info
-    char ip[HOSTNAME_MAX_LEN];
-    int port;
-    netIpPresentBySockAddr(NULL, ip, HOSTNAME_MAX_LEN, &port, &remote_addr);
-    LOGD("Remote Server [%s:%d] UDP read", ip, port);
+    int buflen = NET_IOBUF_LEN;
 
     // Decrypt remote buffer
-    if (app->crypto->decrypt_all(&tmp_buf, app->crypto->cipher, NET_IOBUF_LEN)) {
-        LOGW("Remote server decrypt UDP buffer error");
-        goto error;
+    if (app->crypto->decrypt_all(&remote->buf, app->crypto->cipher, buflen)) {
+        LOGW("UDP remote decrypt buffer error");
+        return UDP_ERR;
     }
 
     // Validate the buffer
-    int addr_len = socks5AddrParse(tmp_buf.data, tmp_buf.len, NULL, NULL, NULL, NULL);
+    int addr_len = socks5AddrParse(remote->buf.data, remote->buf.len, NULL, NULL, NULL, NULL);
     if (addr_len == -1) {
-        LOGW("Remote server parse UDP buffer error");
-        goto error;
+        LOGW("UDP remote parse buffer error");
+        return UDP_ERR;
     }
+    remote->buf_off = addr_len;
 
-    // Write to local client
-    int cfd = client->fd;
-    int nwrite = sendto(cfd, tmp_buf.data+addr_len, tmp_buf.len-addr_len, 0,
-                        (sockAddr *)&remote->local_client_sa.sa, remote->local_client_sa.sa_len);
-    if (nwrite == -1) {
-        LOGW("Local client UDP write error: %s", strerror(errno));
-        goto error;
-    }
-
-    goto end;
-
-error:
-end:
-    freeRemote(remote);
-    bfree(&tmp_buf);
-}
-
-static void udpRemoteReadTimeHandler(event *e) {
-    remoteServer *remote = e->data;
-
-    LOGN("Udp remote read timeout");
-
-    freeRemote(remote);
-}
-
-void localClientReadHandler(event *e) {
-    localClient *client = e->data;
-    remoteServer *remote = NULL;
-
-    int readlen = NET_IOBUF_LEN;
-    int cfd = client->fd;
-    int nread;
-
-    sds buf = sdsempty();
-    sockAddrEx src_addr;
-    buffer_t tmp_buf = {0,0,0,NULL};
-
-    netSockAddrExInit(&src_addr);
-    sdssetlen(client->buf, 0);
-
-    // Read local client buffer
-    nread = recvfrom(cfd, client->buf, readlen, 0,
-                    (sockAddr *)&src_addr.sa, &src_addr.sa_len);
-    if (nread == -1) {
-        LOGW("Local client UDP read error: %s", strerror(errno));
-        goto error;
-    }
-    sdsIncrLen(client->buf, nread);
-
-    char ip[HOSTNAME_MAX_LEN];
-    int port;
-    netIpPresentBySockAddr(NULL, ip, HOSTNAME_MAX_LEN, &port, &src_addr);
-    LOGD("Local client [%s:%d] UDP read", ip, port);
-
-    // Append address buffer
-    buf = sdsdup(client->addr_buf);
-    buf = sdscatsds(buf, client->buf);
-
-    balloc(&tmp_buf, NET_IOBUF_LEN);
-    memcpy(tmp_buf.data, buf, sdslen(buf));
-    tmp_buf.len = sdslen(buf);
-
-    // Do buffer encrypt
-    if (app->crypto->encrypt_all(&tmp_buf, app->crypto->cipher, NET_IOBUF_LEN)) {
-        LOGW("Local client UDP encrypt buffer error");
-        goto error;
-    }
-
-    // Write to remote server
-    remote = initUdpRemote();
-    remote->client = client;
-    memcpy(&remote->local_client_sa, &src_addr, sizeof(src_addr));
-
-    client->remote_count++;
-    LOGD("Udp remote current count: %d", client->remote_count);
-
-    char err[256];
-    if (netUdpGetSockAddrEx(err, app->config->remote_addr, app->config->remote_port,
-                            app->config->ipv6_first, &remote->remote_server_sa) == NET_ERR) {
-        goto error;
-    }
-
-    int rfd = remote->fd;
-    if (sendto(rfd, tmp_buf.data, tmp_buf.len, 0, (sockAddr *)&remote->remote_server_sa.sa,
-               remote->remote_server_sa.sa_len) == -1) {
-        LOGW("Remote server UDP send buffer error: %s", strerror(errno));
-        goto error;
-    }
-
-    goto end;
-
-error:
-    freeRemote(remote);
-
-end:
-    sdsfree(buf);
-    bfree(&tmp_buf);
+    return UDP_OK;
 }

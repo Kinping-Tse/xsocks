@@ -6,6 +6,7 @@
 
 static void tcpServerReadHandler(event *e);
 
+static void tcpClientReadHandler(event *e);
 static void tcpClientWriteHandler(event *e);
 static void tcpClientReadTimeHandler(event *e);
 
@@ -13,14 +14,38 @@ static void tcpRemoteReadHandler(event *e);
 static void tcpRemoteWriteHandler(event *e);
 static void tcpRemoteConnectTimeHandler(event *e);
 
+tcpServer *tcpServerCreate(char *host, int port, clientReadHandler handler) {
+    char err[ANET_ERR_LEN];
+    int backlog = 256;
+    int fd;
+
+    if ((host && isIPv6Addr(host)))
+        fd = anetTcp6Server(err, port, host, backlog);
+    else
+        fd = anetTcpServer(err, port, host, backlog);
+
+    if (fd == ANET_ERR) {
+        LOGE("TCP server create error %s:%d: %s", host ? host : "*", port, err);
+        return NULL;
+    }
+
+    tcpServer *server = tcpServerNew(fd);
+    if (server) {
+        server->crHandler = handler;
+    }
+    return server;
+}
+
 tcpServer *tcpServerNew(int fd) {
     tcpServer *server = xs_calloc(sizeof(*server));
 
-    server->fd = fd;
-    server->re = NEW_EVENT_READ(fd, tcpServerReadHandler, server);
+    if (server) {
+        server->fd = fd;
+        server->re = NEW_EVENT_READ(fd, tcpServerReadHandler, server);
 
-    anetNonBlock(NULL, server->fd);
-    ADD_EVENT(server->re);
+        anetNonBlock(NULL, server->fd);
+        ADD_EVENT(server->re);
+    }
 
     return server;
 }
@@ -65,7 +90,8 @@ static void tcpServerReadHandler(event* e) {
 }
 
 void tcpConnectionFree(tcpClient *client) {
-    assert(client != NULL);
+    if (!client) return;
+
     tcpServer *server = client->server;
 
     server->client_count--;
@@ -128,9 +154,21 @@ void tcpClientFree(tcpClient *client) {
     xs_free(client);
 }
 
+static void tcpClientReadHandler(event *e) {
+    tcpClient *client = e->data;
+
+    if (client->server->crHandler && client->server->crHandler(client) == TCP_ERR) goto error;
+
+    return;
+
+error:
+    tcpConnectionFree(client);
+}
+
 static void tcpClientWriteHandler(event *e) {
     tcpClient *client = e->data;
     tcpRemote *remote = client->remote;
+
     int nwrite;
     int cfd = client->fd;
     int write_len = remote->buf.len - remote->buf_off;

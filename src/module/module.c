@@ -1,10 +1,8 @@
 
 #include "module.h"
+#include "../core/version.h"
 
 #include "shadowsocks-libev/ppbloom.h"
-
-#include <signal.h>
-#include <libev/ev.h>
 
 static module *mod;
 

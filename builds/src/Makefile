@@ -4,12 +4,12 @@ include $(ROOT)/builds/common.mk
 include $(ROOT)/builds/deps.mk
 
 SRC_ROOT = $(ROOT)/src
-VPATH = $(SRC_ROOT)/core:$(SRC_ROOT)/event:$(SRC_ROOT)/module
+VPATH = $(wildcard $(SRC_ROOT)/*)
 
 include $(BUILD_ROOT)/common.mk
 
-SRCS = $(wildcard $(SRC_ROOT)/core/*.c $(SRC_ROOT)/event/*.c)
-OBJS = $(notdir $(SRCS:.c=.o)) module.o
+SRCS = $(filter-out $(wildcard $(SRC_ROOT)/module/*c), $(wildcard $(SRC_ROOT)/*/*.c))
+OBJS = $(notdir $(SRCS:.c=.o)) module.o module_tcp.o module_udp.o
 
 DEPENDENCY_TARGETS = redis json-parser shadowsocks-libev
 
@@ -74,11 +74,11 @@ endif
 EXT_LIBS += -lm
 
 XSOCKS_SERVER_NAME = xs-server
-XSOCKS_SERVER_OBJ = server.o module_tcp.o module_udp.o $(OBJS)
+XSOCKS_SERVER_OBJ = server.o $(OBJS)
 XSOCKS_LOCAL_NAME = xs-local
-XSOCKS_LOCAL_OBJ = local.o module_tcp.o $(OBJS)
+XSOCKS_LOCAL_OBJ = local.o $(OBJS)
 XSOCKS_TUNNEL_NAME = xs-tunnel
-XSOCKS_TUNNEL_OBJ = tunnel.o module_udp.o $(OBJS)
+XSOCKS_TUNNEL_OBJ = tunnel.o $(OBJS)
 
 XSOCKS_MODULE_EXE = $(XSOCKS_SERVER_NAME) $(XSOCKS_LOCAL_NAME) $(XSOCKS_TUNNEL_NAME)
 

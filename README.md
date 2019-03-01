@@ -25,7 +25,7 @@ make
 For a detailed and complete list of all supported arguments,
 you may refer to the man pages of the applications, respectively.
 
-    xs-[client|redir|server|tunnel|manager]
+    xs-[client|redir|server|tunnel]
 
        -s <server_host>           Host name or IP address of your remote server.
 
@@ -85,26 +85,13 @@ you may refer to the man pages of the applications, respectively.
        [--acl <acl_file>]         Path to ACL (Access Control List).
                                   (only available in local and server mode)
 
-       [--manager-address <addr>] UNIX domain socket address.
-                                  (only available in server and manager mode)
-
        [--mtu <MTU>]              MTU of your network interface.
 
        [--mptcp]                  Enable Multipath TCP on MPTCP Kernel.
 
        [--no-delay]               Enable TCP_NODELAY.
 
-       [--executable <path>]      Path to the executable of ss-server.
-                                  (only available in manager mode)
-
-       [-D <path>]                Path to the working directory of ss-manager.
-                                  (only available in manager mode)
-
        [--key <key_in_base64>]    Key of your remote server.
-
-       [--plugin <name>]          Enable SIP003 plugin. (Experimental)
-
-       [--plugin-opts <options>]  Set SIP003 plugin options. (Experimental)
 
        [-v]                       Verbose mode.
 

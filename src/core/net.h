@@ -31,6 +31,9 @@ enum {
     NET_ERR = -1
 };
 
+int netUdpRead(char *err, int fd, char *buf, int buflen, sockAddrEx *sa);
+int netUdpWrite(char *err, int fd, char *buf, int buflen, sockAddrEx *sa);
+
 int netUdpServer(char *err, int port, char *bindaddr);
 int netUdp6Server(char *err, int port, char *bindaddr);
 

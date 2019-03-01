@@ -5,71 +5,31 @@
 #include "redis/anet.h"
 #include <stdarg.h>
 
-static void anetSetError(char *err, const char *fmt, ...) {
-    va_list ap;
+static int _netUdpServer(char *err, int port, char *bindaddr, int af);
+static void anetSetError(char *err, const char *fmt, ...);
+static int anetSetReuseAddr(char *err, int fd);
+static int anetBind(char *err, int s, sockAddr *saddr, socklen_t slen);
 
-    if (!err) return;
-    va_start(ap, fmt);
-    vsnprintf(err, ANET_ERR_LEN, fmt, ap);
-    va_end(ap);
+int netUdpRead(char *err, int fd, char *buf, int buflen, sockAddrEx *sa) {
+    int nread;
+    sockAddr *psa = sa ? (sockAddr *)&sa->sa : NULL;
+    socklen_t *slen = sa ? &sa->sa_len : NULL;
+
+    nread = recvfrom(fd, buf, buflen, 0, psa, slen);
+    if (nread == -1) {
+        anetSetError(err, "%s", STRERR);
+        return NET_ERR;
+    }
+    return nread;
 }
 
-static int anetSetReuseAddr(char *err, int fd) {
-    int yes = 1;
-    /* Make sure connection-intensive things like the redis benchmark
-     * will be able to close/open sockets a zillion of times */
-    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1) {
-        anetSetError(err, "setsockopt SO_REUSEADDR: %s", strerror(errno));
-        return ANET_ERR;
+int netUdpWrite(char *err, int fd, char *buf, int buflen, sockAddrEx *sa) {
+    int nwrite = sendto(fd, buf, buflen, 0, (sockAddr *)&sa->sa, sa->sa_len);
+    if (nwrite == -1) {
+        anetSetError(err, "%s", STRERR);
+        return NET_ERR;
     }
-    return ANET_OK;
-}
-
-static int anetBind(char *err, int s, sockAddr *saddr, socklen_t slen) {
-    if (bind(s, saddr, slen) == -1) {
-        anetSetError(err, "bind: %s", strerror(errno));
-        return ANET_ERR;
-    }
-    return ANET_OK;
-}
-
-static int _netUdpServer(char *err, int port, char *bindaddr, int af) {
-    int s = -1, rv;
-    char port_s[PORT_MAX_STR_LEN];
-    addrInfo hints, *servinfo, *p;
-
-    snprintf(port_s, 6, "%d", port);
-    bzero(&hints, sizeof(hints));
-
-    hints.ai_family = af;
-    hints.ai_socktype = SOCK_DGRAM;
-    hints.ai_flags = AI_PASSIVE;    /* No effect if bindaddr != NULL */
-
-    if ((rv = getaddrinfo(bindaddr, port_s, &hints, &servinfo)) != 0) {
-        anetSetError(err, "%s", gai_strerror(rv));
-        return ANET_ERR;
-    }
-    for (p = servinfo; p != NULL; p = p->ai_next) {
-        if ((s = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1)
-            continue;
-
-        if (af == AF_INET6 && netSetIpV6Only(err, s, 1) == ANET_ERR) goto error;
-        if (anetSetReuseAddr(err, s) == ANET_ERR) goto error;
-        if (anetBind(err, s, p->ai_addr,p->ai_addrlen) == ANET_ERR) goto error;
-
-        goto end;
-    }
-    if (p == NULL) {
-        anetSetError(err, "unable to bind socket, errno: %d", errno);
-        goto error;
-    }
-
-error:
-    if (s != -1) close(s);
-    s = ANET_ERR;
-end:
-    freeaddrinfo(servinfo);
-    return s;
+    return nwrite;
 }
 
 int netUdpServer(char *err, int port, char *bindaddr) {
@@ -106,7 +66,7 @@ int netRecvTimeout(char *err, int fd, int s) {
 
 int netSetIpV6Only(char *err, int fd, int ipv6_only) {
     if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &ipv6_only, sizeof(ipv6_only)) == -1) {
-        anetSetError(err, "setsockopt: %s", strerror(errno));
+        anetSetError(err, "setsockopt: %s", STRERR);
         return NET_ERR;
     }
     return NET_OK;
@@ -210,8 +170,73 @@ int netIpPresentBySockAddr(char *err, char *ip, int ip_len, int *port, sockAddrE
 
 int netIpPresentByIpAddr(char *err, char *ip, int ip_len, void *addr, int is_ipv6) {
     if (!inet_ntop(!is_ipv6 ? AF_INET : AF_INET6, addr, ip, ip_len)) {
-        anetSetError(err, "inet_ntop error: %s", strerror(errno));
+        anetSetError(err, "inet_ntop error: %s", STRERR);
         return NET_ERR;
     }
     return NET_OK;
+}
+
+static int _netUdpServer(char *err, int port, char *bindaddr, int af) {
+    int s = -1, rv;
+    char port_s[PORT_MAX_STR_LEN];
+    addrInfo hints, *servinfo, *p;
+
+    snprintf(port_s, 6, "%d", port);
+    bzero(&hints, sizeof(hints));
+
+    hints.ai_family = af;
+    hints.ai_socktype = SOCK_DGRAM;
+    hints.ai_flags = AI_PASSIVE;    /* No effect if bindaddr != NULL */
+
+    if ((rv = getaddrinfo(bindaddr, port_s, &hints, &servinfo)) != 0) {
+        anetSetError(err, "%s", gai_strerror(rv));
+        return ANET_ERR;
+    }
+    for (p = servinfo; p != NULL; p = p->ai_next) {
+        if ((s = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1)
+            continue;
+
+        if (af == AF_INET6 && netSetIpV6Only(err, s, 1) == ANET_ERR) goto error;
+        if (anetSetReuseAddr(err, s) == ANET_ERR) goto error;
+        if (anetBind(err, s, p->ai_addr,p->ai_addrlen) == ANET_ERR) goto error;
+
+        goto end;
+    }
+    if (p == NULL) {
+        anetSetError(err, "unable to bind socket, errno: %d", errno);
+        goto error;
+    }
+
+error:
+    if (s != -1) close(s);
+    s = ANET_ERR;
+end:
+    freeaddrinfo(servinfo);
+    return s;
+}
+
+static void anetSetError(char *err, const char *fmt, ...) {
+    va_list ap;
+
+    if (!err) return;
+    va_start(ap, fmt);
+    vsnprintf(err, ANET_ERR_LEN, fmt, ap);
+    va_end(ap);
+}
+
+static int anetSetReuseAddr(char *err, int fd) {
+    int yes = 1;
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes)) == -1) {
+        anetSetError(err, "setsockopt SO_REUSEADDR: %s", STRERR);
+        return ANET_ERR;
+    }
+    return ANET_OK;
+}
+
+static int anetBind(char *err, int s, sockAddr *saddr, socklen_t slen) {
+    if (bind(s, saddr, slen) == -1) {
+        anetSetError(err, "bind: %s", STRERR);
+        return ANET_ERR;
+    }
+    return ANET_OK;
 }

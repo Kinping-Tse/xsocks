@@ -1,9 +1,9 @@
 
 #include "module.h"
 #include "module_tcp.h"
+#include "../core/socks5.h"
 
 #include "redis/anet.h"
-#include "redis/sds.h"
 
 /*
 c: client lo: local r: remote
@@ -37,15 +37,14 @@ static void localExit();
 static void tcpServerInit();
 static void tcpServerExit();
 
-static void _tcpClientReadHandler(event *e);
-static void handleSocks5Auth(tcpClient* client);
-static void handleSocks5Handshake(tcpClient* client);
-static void handleSocks5Stream(tcpClient *client);
+static int tcpClientReadHandler(tcpClient *client);
+static int handleSocks5Auth(tcpClient* client);
+static int handleSocks5Handshake(tcpClient* client);
+static int handleSocks5Stream(tcpClient *client);
 static int shadowSocksHandshake(tcpClient *client);
 
 static server s;
 module *app = (module *)&s;
-eventHandler tcpClientReadHandler = _tcpClientReadHandler;
 
 int main(int argc, char *argv[]) {
     moduleHook hook = {localInit, localRun, localExit};
@@ -62,6 +61,8 @@ static void localInit() {
         LOGW("Only support TCP now!");
         LOGW("UDP mode is not working!");
     }
+
+    if (!s.ts) exit(EXIT_ERR);
 }
 
 static void localRun() {
@@ -76,44 +77,25 @@ static void localExit() {
 }
 
 static void tcpServerInit() {
-    char err[ANET_ERR_LEN];
-    char *host = app->config->local_addr;
-    int port = app->config->local_port;
-    int backlog = 256;
-    int fd;
-
-    if ((host && isIPv6Addr(host)))
-        fd = anetTcp6Server(err, port, host, backlog);
-    else
-        fd = anetTcpServer(err, port, host, backlog);
-
-    if (fd == ANET_ERR)
-        FATAL("Could not create server TCP listening socket %s:%d: %s",
-              host ? host : "*", port, err);
-
-    s.ts = tcpServerNew(fd);
+    s.ts = tcpServerCreate(app->config->local_addr, app->config->local_port, tcpClientReadHandler);
 }
 
 static void tcpServerExit() {
     tcpServerFree(s.ts);
 }
 
-static void _tcpClientReadHandler(event *e) {
-    tcpClient *client = e->data;
-
+static int tcpClientReadHandler(tcpClient *client) {
     if (client->stage == STAGE_INIT) {
-        handleSocks5Auth(client);
-        return;
+        return handleSocks5Auth(client);
     } else if (client->stage == STAGE_HANDSHAKE) {
-        handleSocks5Handshake(client);
-        return;
+        return handleSocks5Handshake(client);
     }
 
     assert(client->stage == STAGE_STREAM);
-    handleSocks5Stream(client);
+    return handleSocks5Stream(client);
 }
 
-static void handleSocks5Auth(tcpClient* client) {
+static int handleSocks5Auth(tcpClient* client) {
     char buf[NET_IOBUF_LEN];
     int readlen = NET_IOBUF_LEN;
     int cfd = client->re->id;
@@ -121,23 +103,23 @@ static void handleSocks5Auth(tcpClient* client) {
 
     nread = read(cfd, buf, readlen);
     if (nread == -1) {
-        if (errno == EAGAIN) return;
+        if (errno == EAGAIN) return TCP_OK;
 
-        LOG_STRERROR("Local client auth read error");
-        goto error;
+        LOG_STRERROR("TCP client socks5 auth read error");
+        return TCP_ERR;
     } else if (nread == 0) {
-        LOGD("Local client auth closed connection");
-        goto error;
+        LOGD("TCP client socks5 auth closed connection");
+        return TCP_ERR;
     } else if (nread <= (int)sizeof(socks5AuthReq)) {
-        LOGW("Local client socks5 authenticates error");
-        goto error;
+        LOGW("TCP client socks5 authenticates error");
+        return TCP_ERR;
     }
 
     socks5AuthReq *auth_req = (socks5AuthReq *)buf;
     int auth_len = sizeof(socks5AuthReq) + auth_req->nmethods;
     if (nread < auth_len || auth_req->ver != SVERSION) {
-        LOGW("Local client socks5 authenticates error");
-        goto error;
+        LOGW("TCP client socks5 authenticates error");
+        return TCP_ERR;
     }
 
     // Must be noauth here
@@ -152,20 +134,15 @@ static void handleSocks5Auth(tcpClient* client) {
         }
     }
 
-    if (auth_resp.method == METHOD_UNACCEPTABLE) goto error;
-
-    if (write(cfd, &auth_resp, sizeof(auth_resp)) != sizeof(auth_resp))
-        goto error;
+    if (auth_resp.method == METHOD_UNACCEPTABLE) return TCP_ERR;
+    if (write(cfd, &auth_resp, sizeof(auth_resp)) != sizeof(auth_resp)) return TCP_ERR;
 
     client->stage = STAGE_HANDSHAKE;
 
-    return;
-
-error:
-    tcpConnectionFree(client);
+    return TCP_OK;
 }
 
-static void handleSocks5Handshake(tcpClient* client) {
+static int handleSocks5Handshake(tcpClient* client) {
     char buf[NET_IOBUF_LEN];
     int readlen = NET_IOBUF_LEN;
     int cfd = client->re->id;
@@ -173,20 +150,20 @@ static void handleSocks5Handshake(tcpClient* client) {
 
     nread = read(cfd, buf, readlen);
     if (nread == -1) {
-        if (errno == EAGAIN) return;
+        if (errno == EAGAIN) return TCP_OK;
 
-        LOG_STRERROR("Local client handshake read error");
-        goto error;
+        LOG_STRERROR("TCP client socks5 handshake read error");
+        return TCP_ERR;
     } else if (nread == 0) {
-        LOGD("Local client handshake closed connection");
-        goto error;
+        LOGD("TCP client socks5 handshake closed connection");
+        return TCP_ERR;
     }
 
     socks5Req *request = (socks5Req *)buf;
     int request_len = sizeof(socks5Req);
     if (nread < request_len || request->ver != SVERSION) {
-        LOGW("Local client socks5 request error");
-        goto error;
+        LOGW("TCP client socks5 request error");
+        return TCP_ERR;
     }
 
     socks5Resp resp = {
@@ -197,12 +174,12 @@ static void handleSocks5Handshake(tcpClient* client) {
     };
 
     if (request->cmd != SOCKS5_CMD_CONNECT) {
-        LOGW("Local client request error, unsupported cmd: %d", request->cmd);
+        LOGW("TCP client request error, unsupported cmd: %d", request->cmd);
         resp.rep = SOCKS5_REP_CMD_NOT_SUPPORTED;
         if (write(cfd, &resp, sizeof(resp)) == -1) {
             // Do nothing, just avoid warning
         }
-        goto error;
+        return TCP_ERR;
     }
 
     int port;
@@ -213,16 +190,16 @@ static void handleSocks5Handshake(tcpClient* client) {
     char *addr_buf = buf+request_len-1;
     int buf_len = nread-request_len+1;
     if (socks5AddrParse(addr_buf, buf_len, &addr_type, addr, &addr_len, &port) == SOCKS5_ERR) {
-        LOGW("Local client request error, long addrlen: %d or addrtype: %d", addr_len, addr_type);
+        LOGW("TCP client request error, long addrlen: %d or addrtype: %d", addr_len, addr_type);
         resp.rep = SOCKS5_REP_ADDRTYPE_NOT_SUPPORTED;
         if (write(cfd, &resp, sizeof(resp)) == -1) {
             // Do nothing, just avoid warning
         }
-        goto error;
+        return TCP_ERR;
     }
 
     snprintf(client->remote_addr_info, ADDR_INFO_STR_LEN, "%s:%d", addr, port);
-    LOGI("Tcp client request addr: [%s]", client->remote_addr_info);
+    LOGI("TCP client request addr: [%s]", client->remote_addr_info);
 
     sockAddrIpV4 sock_addr;
     bzero(&sock_addr, sizeof(sock_addr));
@@ -237,8 +214,8 @@ static void handleSocks5Handshake(tcpClient* client) {
 
     int nwrite = write(cfd, &resp_buf, reply_size);
     if (nwrite != reply_size) {
-        LOGW("Local client replay error");
-        goto error;
+        LOGW("TCP client replay error");
+        return TCP_ERR;
     }
 
     // Connect to remote server
@@ -247,16 +224,16 @@ static void handleSocks5Handshake(tcpClient* client) {
     int remote_port = app->config->remote_port;
     int rfd  = anetTcpConnect(err, remote_addr, remote_port);
     if (rfd == ANET_ERR) {
-        LOGE("Remote server [%s:%d] connenct error: %s", remote_addr, remote_port, err);
-        goto error;
+        LOGE("TCP remote [%s:%d] connenct error: %s", remote_addr, remote_port, err);
+        return TCP_ERR;
     }
-    LOGD("Connect to remote server suceess, fd:%d", rfd);
+    LOGD("TCP remote connect suceess, fd:%d", rfd);
 
     // Prepare stream
     tcpRemote *remote = tcpRemoteNew(rfd);
     if (!remote) {
-        LOGW("Tcp remote is NULL, please check the memory");
-        goto error;
+        LOGW("TCP remote is NULL, please check the memory");
+        return TCP_ERR;
     }
 
     remote->client = client;
@@ -272,57 +249,51 @@ static void handleSocks5Handshake(tcpClient* client) {
     s.ts->remote_count++;
     LOGD("Tcp remote current count: %d", s.ts->remote_count);
 
-    if (shadowSocksHandshake(client) == MODULE_ERR) {
-        goto error;
-    }
+    if (shadowSocksHandshake(client) == TCP_ERR) return TCP_ERR;
 
     anetDisableTcpNoDelay(err, client->fd);
     anetDisableTcpNoDelay(err, remote->fd);
-    return;
 
-error:
-    tcpConnectionFree(client);
+    return TCP_OK;
 }
 
-static void handleSocks5Stream(tcpClient *client) {
+static int handleSocks5Stream(tcpClient *client) {
     tcpRemote *remote = client->remote;
+
     int readlen = NET_IOBUF_LEN;
     int cfd = client->fd;
     int nread;
 
-    // Read local client buffer
+    // Read client buffer
     nread = read(cfd, client->buf.data, readlen);
     if (nread == -1) {
-        if (errno == EAGAIN) return;
+        if (errno == EAGAIN) return TCP_OK;
 
-        LOGW("Tcp client [%s] read error: %s", client->client_addr_info, STRERR);
-        goto error;
+        LOGW("TCP client [%s] read error: %s", client->client_addr_info, STRERR);
+        return TCP_ERR;
     } else if (nread == 0) {
-        LOGD("Tcp client [%s] closed connection", client->client_addr_info);
-        goto error;
+        LOGD("TCP client [%s] closed connection", client->client_addr_info);
+        return TCP_ERR;
     }
     client->buf.len = nread;
 
     // Do buffer encrypt
     if (app->crypto->encrypt(&client->buf, client->e_ctx, NET_IOBUF_LEN)) {
-        LOGW("Tcp client encrypt buffer error");
-        goto error;
+        LOGW("TCP client encrypt buffer error");
+        return TCP_ERR;
     }
 
-    // Write to remote server
+    // Write to remote
     int rfd = remote->re->id;
     int nwrite;
 
     nwrite = anetWrite(rfd, client->buf.data, client->buf.len);
     if (nwrite != (int)client->buf.len) {
-        LOGW("Tcp remote [%s] write error: %s", client->remote_addr_info, STRERR);
-        goto error;
+        LOGW("TCP remote [%s] write error: %s", client->remote_addr_info, STRERR);
+        return TCP_ERR;
     }
 
-    return;
-
-error:
-    tcpConnectionFree(client);
+    return TCP_OK;
 }
 
 /*
@@ -337,7 +308,7 @@ error:
 static int shadowSocksHandshake(tcpClient *client) {
     assert(client->addr_buf);
 
-    int ok = MODULE_OK;
+    int ok = TCP_OK;
     buffer_t tmp_buf = {0,0,0,NULL};
 
     balloc(&tmp_buf, NET_IOBUF_LEN);
@@ -350,7 +321,7 @@ static int shadowSocksHandshake(tcpClient *client) {
     int nwrite = write(client->remote->fd, tmp_buf.data, tmp_buf.len);
     if (nwrite != (int)tmp_buf.len) {
         LOGW("Tcp remote [%s] write error", client->remote_addr_info);
-        ok = MODULE_ERR;
+        ok = TCP_ERR;
     }
 
     bfree(&tmp_buf);

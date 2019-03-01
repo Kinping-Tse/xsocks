@@ -1,9 +1,10 @@
 #ifndef __XS_EVENT_H
 #define __XS_EVENT_H
 
-struct event;
-
-typedef void (*eventHandler)(struct event* e);
+enum {
+    EVENT_OK = 0,
+    EVENT_ERR = -1
+};
 
 enum {
     EVENT_TYPE_IO = 0,
@@ -18,14 +19,12 @@ enum {
     EVENT_FLAG_TIME_REPEAT = 1
 };
 
-enum {
-    EVENT_OK = 0,
-    EVENT_ERR = -1
-};
-
 typedef struct eventLoop {
     struct eventLoopContext *ctx;
 } eventLoop;
+
+struct event;
+typedef void (*eventHandler)(struct event *e);
 
 typedef struct event {
     int id;
@@ -36,6 +35,15 @@ typedef struct event {
     struct eventLoop *el;
     struct eventContext *ctx;
 } event;
+
+#define NEW_EVENT_READ(fd, handler, data) eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_READ, handler, data)
+#define NEW_EVENT_WRITE(fd, handler, data) eventNew(fd, EVENT_TYPE_IO, EVENT_FLAG_WRITE, handler, data)
+#define NEW_EVENT_ONCE(timeout, handler, data) eventNew(timeout, EVENT_TYPE_TIME, EVENT_FLAG_TIME_ONCE, handler, data)
+#define NEW_EVENT_REPEAT(timeout, handler, data) eventNew(timeout, EVENT_TYPE_TIME, EVENT_FLAG_TIME_REPEAT, handler, data)
+#define NEW_EVENT_SIGNAL(signal, handler, data) eventNew(signal, EVENT_TYPE_SIGNAL, 0, handler, data)
+#define ADD_EVENT(e) eventAdd(app->el, e)
+#define DEL_EVENT(e) eventDel(e)
+#define CLR_EVENT(e) do { DEL_EVENT(e); eventFree(e); } while (0)
 
 eventLoop *eventLoopNew();
 void eventLoopFree(eventLoop *el);

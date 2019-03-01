@@ -2,6 +2,12 @@
 #ifndef __MODULE_TCP_H
 #define __MODULE_TCP_H
 
+#include "../core/net.h"
+#include "../event/event.h"
+
+#include "redis/sds.h"
+#include "shadowsocks-libev/crypto.h"
+
 #define STAGE_ERROR     -1  /* Error detected                   */
 #define STAGE_INIT       0  /* Initial stage                    */
 #define STAGE_HANDSHAKE  1  /* Handshake with client            */
@@ -9,11 +15,20 @@
 #define STAGE_RESOLVE    4  /* Resolve the hostname             */
 #define STAGE_STREAM     5  /* Stream between client and server */
 
+enum {
+    TCP_OK = 0,
+    TCP_ERR = -1,
+};
+
+struct tcpClient;
+typedef int (*clientReadHandler)(struct tcpClient *client);
+
 typedef struct tcpServer {
     int fd;
     event *re;
     int client_count;
     int remote_count;
+    clientReadHandler crHandler;
 } tcpServer;
 
 typedef struct tcpClient {
@@ -43,13 +58,13 @@ typedef struct tcpRemote {
     tcpClient *client;
 } tcpRemote;
 
+tcpServer *tcpServerCreate(char *host, int port, clientReadHandler handler);
 tcpServer *tcpServerNew(int fd);
 void tcpServerFree(tcpServer *server);
 void tcpConnectionFree(tcpClient *client);
 
 tcpClient *tcpClientNew(int fd);
 void tcpClientFree(tcpClient *client);
-extern eventHandler tcpClientReadHandler;
 
 tcpRemote *tcpRemoteNew(int fd);
 void tcpRemoteFree(tcpRemote *remote);
