@@ -54,7 +54,6 @@ typedef struct tcpRemote {
     int buf_off;
     event *re;
     event *we;
-    event *te;
     tcpClient *client;
 } tcpRemote;
 
