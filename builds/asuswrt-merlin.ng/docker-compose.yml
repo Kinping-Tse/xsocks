@@ -1,15 +1,12 @@
 version: "3"
 
 services:
-  xs-server:
+  xsocks:
     build: .
     image: xsocks/builds/asuswrt-merlin.ng:${XSOCKS_VERSION}
     deploy:
-      resources:
-        limits:
-          cpus: '0.8'
-        reservations:
-          cpus: '0.5'
+      restart_policy:
+        max_attempts: 0
     privileged: true
     restart: on-failure:0
     volumes:

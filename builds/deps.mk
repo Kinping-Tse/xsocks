@@ -1,4 +1,6 @@
 
+VERSION = $(shell grep XS_VERSION $(ROOT)/src/core/version.h | awk -F \" '{print $$2}')
+
 MALLOC = libc
 ifeq ($(USE_TCMALLOC), yes)
 	MALLOC = tcmalloc

@@ -11,11 +11,12 @@ services:
         reservations:
           cpus: '0.25'
           memory: 2M
+      restart_policy:
+        max_attempts: 0
     privileged: true
     volumes:
       - /etc/localtime:/etc/localtime
       - ../config.json:/usr/local/xsocks/etc/config.json
-    restart: on-failure:0
     ports:
       - "8388:8388/tcp"
       - "8388:8388/udp"

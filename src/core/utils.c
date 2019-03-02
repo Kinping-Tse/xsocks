@@ -13,7 +13,7 @@ void xs_daemonize() {
 
     if (fork() != 0) exit(0);
 
-    umask(0);
+    // umask(0);
     setsid();
     // chdir("/");
 

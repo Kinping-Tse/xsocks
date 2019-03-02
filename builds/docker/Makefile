@@ -1,7 +1,8 @@
 
 ROOT = $(realpath ../..)
+include $(ROOT)/builds/common.mk
+include $(ROOT)/builds/deps.mk
 
-VERSION = $(shell grep XS_VERSION $(ROOT)/src/core/version.h | awk -F \" '{print $$2}')
 default: docker
 
 docker:

@@ -373,8 +373,6 @@ int configParse(xsocksConfig* config, int argc, char *argv[]) {
         config->tunnel_port = atoi(tunnel_addr+1);
     }
 
-    if (!config->password) err = "Invalid password";
-
     if (err != NULL) FATAL(err);
 
     return help ? CONFIG_ERR : CONFIG_OK;

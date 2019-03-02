@@ -44,8 +44,14 @@ static void moduleInit(int type, moduleHook hook, module *m, int argc, char *arg
     }
 
     mod->config = config;
-
     initLogger();
+
+    if (!config->password) {
+        LOGE("Invalid password");
+        moduleUsage();
+        exit(EXIT_ERR);
+    }
+
     if (config->daemonize) xs_daemonize();
     createPidFile();
 

@@ -1,8 +1,7 @@
 
 ROOT = $(realpath ../..)
 include $(ROOT)/builds/common.mk
-
-VERSION = $(shell grep XS_VERSION $(ROOT)/src/core/version.h | awk -F \" '{print $$2}')
+include $(ROOT)/builds/deps.mk
 
 HOST ?= aarch64-linux
 AM_TOOLCHAINS_PATH ?= /usr/local/src/github.com/RMerl/am-toolchains

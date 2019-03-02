@@ -80,7 +80,7 @@ static void tcpServerReadHandler(event* e) {
     }
 
     client->server = server;
-    snprintf(client->client_addr_info, ADDR_INFO_STR_LEN, "%s:%d", cip, cport);
+    anetFormatAddr(client->client_addr_info, ADDR_INFO_STR_LEN, cip, cport);
 
     server->client_count++;
 
@@ -207,7 +207,8 @@ error:
 static void tcpClientReadTimeHandler(event *e) {
     tcpClient *client = e->data;
 
-    LOGN("TCP client (%d) [%s] read timeout", client->fd, client->client_addr_info);
+    LOGN("TCP client (%d) [%s] read timeout", client->fd,
+         client->stage == STAGE_STREAM ? client->remote_addr_info : client->client_addr_info);
 
     tcpConnectionFree(client);
 }
