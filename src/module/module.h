@@ -36,6 +36,7 @@ enum {
     MODULE_LOCAL = 1,
     MODULE_CLIENT = MODULE_LOCAL,
     MODULE_TUNNEL = 2,
+    MODULE_REDIR = 3,
 };
 
 extern module *app;

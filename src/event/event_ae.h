@@ -85,9 +85,10 @@ static int eventApiAddEvent(eventLoopContext *elCtx, eventContext* eCtx) {
     if (e->type == EVENT_TYPE_IO) {
         if (aeCreateFileEvent(elCtx->el, e->id, eCtx->mask, eventIoHandler, e) == AE_ERR)
             return EVENT_ERR;
-    } else if (e->type == EVENT_TYPE_TIME)
-        eCtx->mask = aeCreateTimeEvent(elCtx->el, e->id*1000, eventTimeHandler, e, NULL);
-    else if (e->type == EVENT_TYPE_SIGNAL) {
+    } else if (e->type == EVENT_TYPE_TIME) {
+        if ((eCtx->mask = aeCreateTimeEvent(elCtx->el, e->id*1000, eventTimeHandler, e, NULL)) == AE_ERR)
+            return EVENT_ERR;
+    } else if (e->type == EVENT_TYPE_SIGNAL) {
         if (signals[e->id]) return EVENT_ERR;
 
         struct sigaction act;
@@ -109,7 +110,7 @@ static void eventApiDelEvent(eventLoopContext *elCtx, eventContext* eCtx) {
         case EVENT_TYPE_IO: aeDeleteFileEvent(elCtx->el, e->id, eCtx->mask); break;
         case EVENT_TYPE_TIME: aeDeleteTimeEvent(elCtx->el, eCtx->mask); break;
         case EVENT_TYPE_SIGNAL: signals[e->id] = NULL; signal(e->id, SIG_DFL); break;
-        default: assert(false); break;
+        default: LOGE("Unknown event type!"); break;
     }
 }
 

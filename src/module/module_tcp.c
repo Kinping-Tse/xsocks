@@ -213,6 +213,24 @@ static void tcpClientReadTimeHandler(event *e) {
     tcpConnectionFree(client);
 }
 
+tcpRemote *tcpRemoteCreate(char *host, int port) {
+    char err[ANET_ERR_LEN];
+    int fd;
+
+    if ((fd = anetTcpNonBlockConnect(err, host, port)) == ANET_ERR) {
+        LOGW("TCP remote connect error: %s", err);
+        return NULL;
+    }
+
+    tcpRemote *remote = tcpRemoteNew(fd);
+    if (!remote) {
+        LOGW("TCP remote is NULL, please check the memory");
+        close(fd);
+        return NULL;
+    }
+    return remote;
+}
+
 tcpRemote *tcpRemoteNew(int fd) {
     tcpRemote *remote = xs_calloc(sizeof(*remote));
     if (!remote) return NULL;
@@ -273,7 +291,7 @@ static void tcpRemoteReadHandler(event *e) {
             LOGW("TCP remote [%s] encrypt buffer error", client->remote_addr_info);
             goto error;
         }
-    } else if (app->type == MODULE_LOCAL) {
+    } else if (app->type == MODULE_LOCAL || app->type == MODULE_REDIR) {
         if (app->crypto->decrypt(&remote->buf, client->d_ctx, NET_IOBUF_LEN)) {
             LOGW("TCP remote [%s] decrypt buffer error", client->remote_addr_info);
             goto error;
@@ -308,20 +326,29 @@ static void tcpRemoteWriteHandler(event *e) {
     tcpRemote *remote = e->data;
     tcpClient *client = remote->client;
 
-    DEL_EVENT(remote->we);
-    ADD_EVENT(remote->re);
-    ADD_EVENT(client->re);
-
-    if (client->buf.len - client->buf_off == 0) return;
-
-    // Write to remote server
     int nwrite;
     int rfd = remote->fd;
+    int write_len = client->buf.len - client->buf_off;
+    char *write_buf = client->buf.data + client->buf_off;
 
-    nwrite = anetWrite(rfd, client->buf.data+client->buf_off, client->buf.len-client->buf_off);
-    if (nwrite != (int)client->buf.len-client->buf_off) {
-        LOGW("TCP remote [%s] write error: %s", client->remote_addr_info, STRERR);
-        goto error;
+    if (write_len == 0) {
+        client->buf_off = 0;
+        DEL_EVENT(remote->we);
+        ADD_EVENT(remote->re);
+        ADD_EVENT(client->re);
+        return;
+    }
+
+    nwrite = write(rfd, write_buf, write_len);
+    if (nwrite <= write_len) {
+        if (nwrite == -1) {
+            if (errno == EAGAIN) return;
+
+            LOGW("TCP remote [%s] write error: %s", client->remote_addr_info, STRERR);
+            goto error;
+        }
+
+        client->buf_off += nwrite;
     }
 
     return;

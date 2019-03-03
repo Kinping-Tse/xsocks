@@ -65,6 +65,7 @@ void tcpConnectionFree(tcpClient *client);
 tcpClient *tcpClientNew(int fd);
 void tcpClientFree(tcpClient *client);
 
+tcpRemote *tcpRemoteCreate(char *host, int port);
 tcpRemote *tcpRemoteNew(int fd);
 void tcpRemoteFree(tcpRemote *remote);
 

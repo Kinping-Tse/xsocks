@@ -111,10 +111,8 @@ static void moduleUsage() {
         case MODULE_LOCAL: eprintf("    xs-local\n"); break;
         case MODULE_REMOTE: eprintf("    xs-server\n"); break;
         case MODULE_TUNNEL: eprintf("    xs-tunnel\n"); break;
-        default:
-            // eprintf("    xs-redir\n");
-            break;
-
+        case MODULE_REDIR: eprintf("    xs-redir\n"); break;
+        default: FATAL("Unknown module type!");
     }
 
     eprintf("       -s <server_host>           Host name or IP address of your remote server.\n");
@@ -150,9 +148,8 @@ static void moduleUsage() {
     eprintf("       [-b <local_address>]       Local address to bind.\n");
     eprintf("\n");
     eprintf("       [-u]                       Enable UDP relay.\n");
-#ifdef MODULE_REDIR
-    // eprintf("                                  TPROXY is required in redir mode.\n");
-#endif
+    if (module == MODULE_REDIR)
+        eprintf("                                  TPROXY is required in redir mode.\n");
     eprintf("       [-U]                       Enable UDP relay and disable TCP relay.\n");
     eprintf("       [-6]                       Use IPv6 address first.\n");
     eprintf("\n");
@@ -168,22 +165,12 @@ static void moduleUsage() {
 #if defined(MODULE_REMOTE) || defined(MODULE_LOCAL)
     // eprintf("       [--acl <acl_file>]         Path to ACL (Access Control List).\n");
 #endif
-#if defined(MODULE_REMOTE) || defined(MODULE_MANAGER)
-    // eprintf("       [--manager-address <addr>] UNIX domain socket address.\n");
-#endif
-#ifdef MODULE_MANAGER
-    // eprintf("       [--executable <path>]      Path to the executable of ss-server.\n");
-#endif
     eprintf("       [--mtu <MTU>]              MTU of your network interface.\n");
 #ifdef __linux__
     // eprintf("       [--mptcp]                  Enable Multipath TCP on MPTCP Kernel.\n");
 #endif
-#ifndef MODULE_MANAGER
     // eprintf("       [--no-delay]               Enable TCP_NODELAY.\n");
     eprintf("       [--key <key_in_base64>]    Key of your remote server.\n");
-#endif
-    // eprintf("       [--plugin <name>]          Enable SIP003 plugin. (Experimental)\n");
-    // eprintf("       [--plugin-opts <options>]  Set SIP003 plugin options. (Experimental)\n");
     eprintf("\n");
     eprintf("       [--logfile <file>]         Log file.\n");
     eprintf("       [--loglevel <level>]       Log level.\n");
@@ -250,7 +237,7 @@ static void signalExitHandler(event *e) {
         case SIGTERM: msg = "Received SIGTERM scheduling shutdown..."; break;
         case SIGQUIT: msg = "Received SIGQUIT scheduling shutdown..."; break;
         default: msg = "Received shutdown signal, scheduling shutdown..."; break;
-    };
+    }
     LOGW(msg);
 
     eventLoopStop(mod->el);

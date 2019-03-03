@@ -93,27 +93,22 @@ static void eventApiFreeEvent(eventContext* ctx) {
 }
 
 static int eventApiAddEvent(eventLoopContext *elCtx, eventContext* eCtx) {
-    event *e = eCtx->e;
-    if (e->type == EVENT_TYPE_IO)
-        ev_io_start(elCtx->el, &eCtx->w.io);
-    else if (e->type == EVENT_TYPE_TIME)
-        ev_timer_start(elCtx->el, &eCtx->w.t);
-    else if (e->type == EVENT_TYPE_SIGNAL)
-        ev_signal_start(elCtx->el, &eCtx->w.sig);
-    else
-        return EVENT_ERR;
-
+    switch (eCtx->e->type) {
+        case EVENT_TYPE_IO: ev_io_start(elCtx->el, &eCtx->w.io); break;
+        case EVENT_TYPE_TIME: ev_timer_start(elCtx->el, &eCtx->w.t); break;
+        case EVENT_TYPE_SIGNAL: ev_signal_start(elCtx->el, &eCtx->w.sig); break;
+        default: return EVENT_ERR;
+    }
     return EVENT_OK;
 }
 
 static void eventApiDelEvent(eventLoopContext *elCtx, eventContext* eCtx) {
-    event *e = eCtx->e;
-    if (e->type == EVENT_TYPE_IO)
-        ev_io_stop(elCtx->el, &eCtx->w.io);
-    else if (e->type == EVENT_TYPE_TIME)
-        ev_timer_stop(elCtx->el, &eCtx->w.t);
-    else if (e->type == EVENT_TYPE_SIGNAL)
-        ev_signal_stop(elCtx->el, &eCtx->w.sig);
+    switch (eCtx->e->type) {
+        case EVENT_TYPE_IO: ev_io_stop(elCtx->el, &eCtx->w.io); break;
+        case EVENT_TYPE_TIME: ev_timer_stop(elCtx->el, &eCtx->w.t); break;
+        case EVENT_TYPE_SIGNAL: ev_signal_stop(elCtx->el, &eCtx->w.sig); break;
+        default: LOGE("Unknown event type!"); break;
+    }
 }
 
 static void eventApiRun(eventLoopContext *ctx) {

@@ -132,7 +132,7 @@ static int tcpClientReadHandler(tcpClient *client) {
         return TCP_ERR;
     }
 
-    if (client->stage == STAGE_HANDSHAKE){
+    if (client->stage == STAGE_HANDSHAKE) {
         LOGD("TCP remote (%d) [%s] connect success", rfd, client->remote_addr_info);
         client->stage = STAGE_STREAM;
 

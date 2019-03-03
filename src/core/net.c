@@ -5,6 +5,12 @@
 #include "redis/anet.h"
 #include <stdarg.h>
 
+#ifdef __linux__
+#include <linux/if.h>
+#include <linux/netfilter_ipv4.h>
+#include <linux/netfilter_ipv6/ip6_tables.h>
+#endif
+
 static int _netUdpServer(char *err, int port, char *bindaddr, int af);
 static void anetSetError(char *err, const char *fmt, ...);
 static int anetSetReuseAddr(char *err, int fd);
@@ -90,6 +96,29 @@ void netSockAddrExInit(sockAddrEx* sa) {
     socklen_t slen = sizeof(*sa);
     bzero(sa, slen);
     sa->sa_len = slen;
+}
+
+int netTcpGetDestSockAddr(char *err, int fd, int ipv6_first, sockAddrEx *sa) {
+#ifndef __linux__
+    UNUSED(err);
+    UNUSED(fd);
+    UNUSED(ipv6_first);
+    UNUSED(sa);
+#else
+    int res = -1;
+
+    netSockAddrExInit(sa);
+
+    if (ipv6_first) res = getsockopt(fd, SOL_IPV6, IP6T_SO_ORIGINAL_DST, &sa->sa, &sa->sa_len);
+    if (res == -1) res = getsockopt(fd, SOL_IP, SO_ORIGINAL_DST, &sa->sa, &sa->sa_len);
+    if (!ipv6_first && res == -1) res = getsockopt(fd, SOL_IPV6, IP6T_SO_ORIGINAL_DST, &sa->sa, &sa->sa_len);
+
+    if (res == -1) {
+        anetSetError(err, "getsockopt SO_ORIGINAL_DST: %s", STRERR);
+        return NET_ERR;
+    }
+#endif
+    return NET_OK;
 }
 
 int netUdpGetSockAddrEx(char *err, char *host, int port, int ipv6_first, sockAddrEx *sa) {
@@ -210,6 +239,7 @@ static int _netUdpServer(char *err, int port, char *bindaddr, int af) {
 error:
     if (s != -1) close(s);
     s = ANET_ERR;
+
 end:
     freeaddrinfo(servinfo);
     return s;
