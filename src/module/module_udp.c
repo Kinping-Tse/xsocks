@@ -185,7 +185,8 @@ static udpRemote *udpRemoteNew(int fd) {
     if (remote) {
         remote->fd = fd;
         remote->re = NEW_EVENT_READ(fd, udpRemoteReadHandler, remote);
-        remote->te = NEW_EVENT_ONCE(app->config->timeout, udpRemoteReadTimeHandler, remote);
+        remote->te = NEW_EVENT_ONCE(app->config->timeout * MILLISECOND_UNIT_F,
+                                    udpRemoteReadTimeHandler, remote);
 
         bzero(&remote->buf, sizeof(remote->buf));
         balloc(&remote->buf, NET_IOBUF_LEN);

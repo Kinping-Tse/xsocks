@@ -77,11 +77,11 @@ static void localExit() {
 }
 
 static void tcpServerInit() {
-    s.ts = tcpServerCreate(app->config->local_addr, app->config->local_port, tcpClientReadHandler);
+    s.ts = moduleTcpServerCreate(app->config->local_addr, app->config->local_port, tcpClientReadHandler);
 }
 
 static void tcpServerExit() {
-    tcpServerFree(s.ts);
+    moduleTcpServerFree(s.ts);
 }
 
 static int tcpClientReadHandler(tcpClient *client) {

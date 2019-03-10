@@ -15,6 +15,7 @@
 
 #include "logger.h"
 #include "xsalloc.h"
+#include "debug.h"
 
 #define UNUSED(V) ((void)V)
 

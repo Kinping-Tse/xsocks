@@ -4,7 +4,9 @@
 
 #include "../core/common.h"
 #include "../core/config.h"
+#include "../core/error.h"
 #include "../core/utils.h"
+#include "../core/time.h"
 #include "../event/event.h"
 
 #include "redis/adlist.h"
@@ -40,6 +42,8 @@ enum {
 };
 
 extern module *app;
+
+#define ADD_EVENT(e) eventAdd(app->el, e)
 
 int moduleMain(int type, moduleHook hook, module *m, int argc, char *argv[]);
 

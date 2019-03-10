@@ -4,7 +4,7 @@
     "local_port": 1080,
     "local_address": "127.0.0.1",
     "tunnel_address": "8.8.8.8:53",
-    "password": "foobar0",
+    "password": "foobar",
     "method": "aes-256-cfb",
     "mode": "tcp_and_udp",
     "timeout": 60,

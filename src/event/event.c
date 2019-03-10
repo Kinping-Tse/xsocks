@@ -36,22 +36,27 @@ event *eventNew(int id, int type, int flags, eventHandler handler, void *data) {
     e->flags = flags;
     e->handler = handler;
     e->data = data;
+    e->el = NULL;
     e->ctx = eventApiNewEvent(e);
     return e;
 }
 
 void eventFree(event* e) {
+    if (!e) return;
+
     eventApiFreeEvent(e->ctx);
     xs_free(e);
 }
 
 int eventAdd(eventLoop *el, event* e) {
+    if (e->el) return EVENT_OK;
+
     e->el = el;
     return eventApiAddEvent(el->ctx, e->ctx);
 }
 
 void eventDel(event* e) {
-    if (e->el == NULL) return;
+    if (!e || !e->el) return;
 
     eventApiDelEvent(e->el->ctx, e->ctx);
     e->el = NULL;

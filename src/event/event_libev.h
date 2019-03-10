@@ -2,6 +2,8 @@
 #ifndef __XS_EVENT_LIBEV_H
 #define __XS_EVENT_LIBEV_H
 
+#include "../core/time.h"
+
 #include "libev/ev.h"
 
 typedef struct eventLoopContext {
@@ -77,7 +79,7 @@ static eventContext *eventApiNewEvent(event *e) {
         ctx->w.io.data = e;
     } else if (e->type == EVENT_TYPE_TIME) {
         int repeat = e->flags == EVENT_FLAG_TIME_ONCE ? 0 : e->id;
-        ev_timer_init(&ctx->w.t, eventTimeHandler, e->id, repeat);
+        ev_timer_init(&ctx->w.t, eventTimeHandler, e->id/MILLISECOND_UNIT_F, repeat);
         ctx->w.t.data = e;
     } else if (e->type == EVENT_TYPE_SIGNAL) {
         ev_signal_init(&ctx->w.sig, eventSignalHandler, e->id);

@@ -13,7 +13,7 @@ static void tcpClientReadTimeHandler(event *e);
 static void tcpRemoteReadHandler(event *e);
 static void tcpRemoteWriteHandler(event *e);
 
-tcpServer *tcpServerCreate(char *host, int port, clientReadHandler handler) {
+tcpServer *moduleTcpServerCreate(char *host, int port, clientReadHandler handler) {
     char err[ANET_ERR_LEN];
     int backlog = 256;
     int fd;
@@ -49,7 +49,7 @@ tcpServer *tcpServerNew(int fd) {
     return server;
 }
 
-void tcpServerFree(tcpServer *server) {
+void moduleTcpServerFree(tcpServer *server) {
     if (!server) return;
 
     CLR_EVENT(server->re);
@@ -110,7 +110,8 @@ tcpClient *tcpClientNew(int fd) {
     client->fd = fd;
     client->re = NEW_EVENT_READ(fd, tcpClientReadHandler, client);
     client->we = NEW_EVENT_WRITE(fd, tcpClientWriteHandler, client);
-    client->te = NEW_EVENT_ONCE(app->config->timeout, tcpClientReadTimeHandler, client);
+    client->te = NEW_EVENT_ONCE(app->config->timeout * MILLISECOND_UNIT,
+                                tcpClientReadTimeHandler, client);
     client->server = NULL;
     client->remote = NULL;
     client->stage = STAGE_INIT;

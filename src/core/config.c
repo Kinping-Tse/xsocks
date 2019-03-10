@@ -1,7 +1,9 @@
 
 #include "common.h"
+#include "error.h"
 #include "utils.h"
 #include "config.h"
+#include "net.h"
 
 #include "json-parser/json.h"
 #include "redis/sds.h"
@@ -58,10 +60,10 @@ xsocksConfig *configNew() {
     config->pidfile = NULL;
     config->daemonize = CONFIG_DEFAULT_DAEMONIZE;
     config->remote_addr = NULL;
-    config->remote_port = 8388;
+    config->remote_port = CONFIG_DEFAULT_REMOTE_PORT;
     config->local_addr = NULL;
-    config->local_port = 1080;
-    config->password = NULL;
+    config->local_port = CONFIG_DEFAULT_LOCAL_PORT;
+    configStringDup(config->password, CONFIG_DEFAULT_PASSWORD);
     config->tunnel_address = NULL;
     config->key = NULL;
     configStringDup(config->method, CONFIG_DEFAULT_METHOD);
@@ -300,7 +302,7 @@ int configParse(xsocksConfig* config, int argc, char *argv[]) {
     char *err = NULL;
     int c;
 
-    while ((c = getopt_long(argc, argv, "f:s:p:l:L:k:t:m:i:c:b:a:n:huUv6A",
+    while ((c = getopt_long(argc, argv, "f:s:p:l:L:k:t:m:c:b:huUv6",
                             long_options, NULL)) != -1) {
         switch (c) {
             case GETOPT_VAL_FAST_OPEN: fast_open = 1; break;
@@ -363,14 +365,11 @@ int configParse(xsocksConfig* config, int argc, char *argv[]) {
     configIntDup(config->mtu, mtu);
     configIntDup(config->fast_open, fast_open);
 
-    char *temp_tunnel_addr = config->tunnel_address;
-    char *tunnel_addr;
-    if (temp_tunnel_addr && (tunnel_addr = strrchr(temp_tunnel_addr, ':'))) {
-        int tunnel_addr_offset = tunnel_addr - temp_tunnel_addr;
-        config->tunnel_addr = xs_malloc(tunnel_addr_offset + 1);
-        memcpy(config->tunnel_addr, temp_tunnel_addr, tunnel_addr_offset);
-        config->tunnel_addr[tunnel_addr_offset] = '\0';
-        config->tunnel_port = atoi(tunnel_addr+1);
+    if (config->tunnel_address) {
+        config->tunnel_addr = xs_malloc(HOSTNAME_MAX_LEN);
+        netHostPortParse(config->tunnel_address, config->tunnel_addr, &config->tunnel_port);
+        xs_free(config->tunnel_address);
+        config->tunnel_address = NULL;
     }
 
     if (err != NULL) FATAL(err);

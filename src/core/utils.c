@@ -4,8 +4,6 @@
 
 #include <ctype.h>
 #include <fcntl.h>
-#include <stdarg.h>
-#include <sys/time.h>
 #include <sys/stat.h>
 
 void xs_daemonize() {
@@ -23,6 +21,11 @@ void xs_daemonize() {
         dup2(fd, STDERR_FILENO);
         if (fd > STDERR_FILENO) close(fd);
     }
+}
+
+void setupIgnoreHandlers() {
+    signal(SIGHUP, SIG_IGN);
+    signal(SIGPIPE, SIG_IGN);
 }
 
 void hexdump(const void *memory, size_t bytes) {
@@ -58,15 +61,6 @@ void hexdump(const void *memory, size_t bytes) {
     }
 }
 
-void xs_error(char *err, const char *fmt, ...) {
-    va_list ap;
-
-    if (!err) return;
-    va_start(ap, fmt);
-    vsnprintf(err, XS_ERR_LEN, fmt, ap);
-    va_end(ap);
-}
-
 #define INT_DIGITS 19 /* enough for 64 bit integer */
 
 char *xs_itoa(int i) {
@@ -91,26 +85,4 @@ char *xs_itoa(int i) {
 
 int isIPv6Addr(char *ip) {
     return strchr(ip, ':') ? 1 : 0;
-}
-
-#define MICROSECOND_UNIT 1000000
-#define MICROSECOND_UNIT_F (double)1000000.0
-
-uint64_t timerStart() {
-    struct timeval time;
-
-    if (gettimeofday(&time, NULL) == -1) return 0;
-
-    return time.tv_sec * MICROSECOND_UNIT + time.tv_usec;
-}
-
-double timerStop(uint64_t start_time, uint64_t *stop_time) {
-    struct timeval time;
-
-    if (gettimeofday(&time, NULL) == -1) return 0;
-
-    uint64_t t = time.tv_sec * MICROSECOND_UNIT + time.tv_usec;
-    if (stop_time) *stop_time = t;
-
-    return t/MICROSECOND_UNIT_F - start_time/MICROSECOND_UNIT_F;
 }

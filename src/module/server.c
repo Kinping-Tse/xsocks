@@ -1,7 +1,10 @@
 
 #include "module.h"
-#include "module_tcp.h"
 #include "module_udp.h"
+
+#undef ADD_EVENT
+#include "../protocol/tcp_shadowsocks.h"
+
 #include "../core/socks5.h"
 
 #include "redis/anet.h"
@@ -27,6 +30,21 @@ udp:
 
 */
 
+typedef struct tcpServer {
+    tcpListener *ln;
+} tcpServer;
+
+typedef struct tcpClient {
+    tcpConn *conn;
+    tcpServer *server;
+    struct tcpRemote *remote;
+} tcpClient;
+
+typedef struct tcpRemote {
+    tcpConn *conn;
+    tcpClient *client;
+} tcpRemote;
+
 typedef struct server {
     module mod;
     tcpServer *ts;
@@ -40,8 +58,28 @@ static void serverExit();
 static void tcpServerInit();
 static void tcpServerExit();
 
-static int tcpClientReadHandler(tcpClient *client);
-static int tcpShadowSocksHandshake(tcpClient *client);
+static tcpServer *tcpServerNew();
+static void tcpServerFree(tcpServer *server);
+static void tcpOnAccept(void *data);
+
+static void tcpConnectionFree(tcpClient *client);
+
+static tcpClient *tcpClientNew(int fd);
+static void tcpClientFree(tcpClient *client);
+
+static tcpRemote *tcpRemoteNew();
+static void tcpRemoteFree(tcpRemote *remote);
+
+static void tcpClientOnRead(void *data);
+static void tcpClientOnWrite(void *data);
+static void tcpClientOnTimeout(void *data);
+
+static void tcpRemoteOnConnect(void *data, int status);
+static void tcpRemoteOnRead(void *data);
+static void tcpRemoteOnWrite(void *data);
+
+// static int tcpClientReadHandler(tcpClient *client);
+// static int tcpShadowSocksHandshake(tcpClient *client);
 
 static void udpServerInit();
 static void udpServerExit();
@@ -70,8 +108,10 @@ static void serverInit() {
 static void serverRun() {
     char addr_info[ADDR_INFO_STR_LEN];
 
-    if (s.ts && anetFormatSock(s.ts->fd, addr_info, ADDR_INFO_STR_LEN) > 0)
-        LOGN("TCP server listen at: %s", addr_info);
+    if (s.ts) LOGN("TCP server listen at: %s", s.ts->ln->addrinfo);
+
+    // if (s.ts && anetFormatSock(s.ts->fd, addr_info, ADDR_INFO_STR_LEN) > 0)
+    //     LOGN("TCP server listen at: %s", addr_info);
     if (s.us && anetFormatSock(s.us->fd, addr_info, ADDR_INFO_STR_LEN) > 0)
         LOGN("UDP server read at: %s", addr_info);
 }
@@ -82,116 +122,266 @@ static void serverExit() {
 }
 
 static void tcpServerInit() {
-    s.ts = tcpServerCreate(app->config->remote_addr, app->config->remote_port, tcpClientReadHandler);
+    // s.ts = moduleTcpServerCreate(app->config->remote_addr, app->config->remote_port, tcpClientReadHandler);
+    s.ts = tcpServerNew();
 }
 
 static void tcpServerExit() {
+    // moduleTcpServerFree(s.ts);
     tcpServerFree(s.ts);
 }
 
-static int tcpClientReadHandler(tcpClient *client) {
-    tcpRemote *remote = client->remote;
-
-    int readlen = NET_IOBUF_LEN;
-    int cfd = client->fd;
-    int nread;
-
-    // Read client buffer
-    nread = read(cfd, client->buf.data, readlen);
-    if (nread == -1) {
-        if (errno == EAGAIN) return TCP_OK;
-
-        LOGW("TCP client [%s] read error: %s", client->client_addr_info, STRERR);
-        return TCP_ERR;
-    } else if (nread == 0) {
-        LOGD("TCP client [%s] closed connection", client->client_addr_info);
-        return TCP_ERR;
-    }
-    client->buf.len = nread;
-
-    // Decrypt client buffer
-    if (app->crypto->decrypt(&client->buf, client->d_ctx, NET_IOBUF_LEN)) {
-        LOGW("TCP client [%s] decrypt buffer error", client->client_addr_info);
-        return TCP_ERR;
+static tcpServer *tcpServerNew() {
+    tcpServer *server = xs_calloc(sizeof(*server));
+    if (!server) {
+        LOGW("TCP server is NULL, please check the memory");
+        return NULL;
     }
 
-    int raddr_len;
-    if (client->stage == STAGE_INIT) {
-        if ((raddr_len = tcpShadowSocksHandshake(client)) == -1) return TCP_ERR;
-
-        return TCP_OK;
+    char err[XS_ERR_LEN];
+    tcpListener *ln = tcpListen(err, app->el, app->config->remote_addr, app->config->remote_port,
+                                server, tcpOnAccept);
+    if (!ln) {
+        LOGE(err);
+        tcpServerFree(server);
+        return NULL;
     }
+    server->ln = ln;
 
-    // Write to remote
-    int nwrite;
-    int rfd = remote->fd;
-
-    nwrite = anetWrite(rfd, client->buf.data, client->buf.len);
-    if (nwrite != (int)client->buf.len) {
-        LOGW("TCP remote (%d) [%s] write error: %s", rfd, client->remote_addr_info, STRERR);
-        return TCP_ERR;
-    }
-
-    if (client->stage == STAGE_HANDSHAKE) {
-        LOGD("TCP remote (%d) [%s] connect success", rfd, client->remote_addr_info);
-        client->stage = STAGE_STREAM;
-
-        anetDisableTcpNoDelay(NULL, client->fd);
-        anetDisableTcpNoDelay(NULL, remote->fd);
-    }
-
-    return TCP_OK;
+    return server;
 }
 
-int tcpShadowSocksHandshake(tcpClient *client) {
-    int raddr_len = 0;
+static void tcpServerFree(tcpServer *server) {
+    if (!server) return;
+    TCP_L_CLOSE(server->ln);
+    xs_free(server);
+}
 
-    // Validate the buffer
-    char rhost[HOSTNAME_MAX_LEN];
-    int rhost_len = HOSTNAME_MAX_LEN;
-    int rport;
+static void tcpOnAccept(void *data) {
+    tcpServer *server = data;
+    tcpClient *client = tcpClientNew(server->ln->fd);
+    if (client) {
+        tcpConn *conn = client->conn;
+        LOGD("TCP server accepted client %s", conn->addrinfo_peer);
+    }
+}
 
-    if ((raddr_len= socks5AddrParse(client->buf.data, client->buf.len, NULL, rhost,
-                                    &rhost_len, &rport)) == SOCKS5_ERR) {
-        LOGW("TCP client [%s] parse socks5 addr error", client->client_addr_info);
-        return -1;
+void tcpConnectionFree(tcpClient *client) {
+    if (!client) return;
+
+    // tcpServer *server = client->server;
+
+    // server->client_count--;
+    // if (client->remote) server->remote_count--;
+
+    // LOGD("TCP client current count: %d", server->client_count);
+    // LOGD("TCP remote current count: %d", server->remote_count);
+
+    tcpRemoteFree(client->remote);
+    tcpClientFree(client);
+}
+
+static tcpClient *tcpClientNew(int fd) {
+    tcpClient *client = xs_calloc(sizeof(*client));
+    if (!client) {
+        LOGW("TCP client is NULL, please check the memory");
+        return NULL;
     }
 
-    anetFormatAddr(client->remote_addr_info, ADDR_INFO_STR_LEN, rhost, rport);
-    LOGI("TCP client (%d) [%s] request remote addr [%s]", client->fd, client->client_addr_info,
-         client->remote_addr_info);
-
-    // Connect to remote server
-    char err[ANET_ERR_LEN];
-    int rfd;
-
-    if ((rfd = anetTcpNonBlockConnect(err, rhost, rport)) == ANET_ERR) {
-        LOGW("TCP remote (%d) [%s] connect error: %s", rfd, client->remote_addr_info, err);
-        return -1;
+    char err[XS_ERR_LEN];
+    tcpConn *conn = tcpAccept(err, app->el, fd, app->config->timeout, client);
+    if (!conn) {
+        LOGW(err);
+        tcpClientFree(client);
+        return NULL;
     }
-    LOGD("TCP remote (%d) [%s] is connecting ...", rfd, client->remote_addr_info);
+    client->conn = conn;
 
-    // Prepare stream
-    tcpRemote *remote = tcpRemoteNew(rfd);
+    TCP_ON_READ(conn, tcpClientOnRead);
+    TCP_ON_WRITE(conn, tcpClientOnWrite);
+    TCP_ON_TIME(conn, tcpClientOnTimeout);
+
+    ADD_EVENT_READ(conn);
+    DEL_EVENT_WRITE(conn);
+    ADD_EVENT_TIME(conn);
+
+    return client;
+}
+
+static void tcpClientFree(tcpClient *client) {
+    if (!client) return;
+    TCP_CLOSE(client->conn);
+    xs_free(client);
+}
+
+static void tcpClientOnRead(void *data) {
+    tcpClient *client = data;
+
+    // client->conn = (tcpConn *)tcpShadowsocksConnNew(client->conn, app->config->crypto, app->config->tunnel_addr,
+                                                    // app->config->tunnel_port);
+
+}
+
+static void tcpClientOnWrite(void *data) {
+
+}
+
+static void tcpClientOnTimeout(void *data) {
+    tcpClient *client = data;
+    tcpConn *conn = client->conn;
+
+    if (tcpIsConnected(conn))
+        LOGI("TCP client %s read timeout", conn->addrinfo_peer);
+    else
+        LOGE("TCP client %s connect timeout", conn->addrinfo);
+
+    tcpConnectionFree(client);
+}
+
+static tcpRemote *tcpRemoteNew() {
+    tcpRemote *remote = xs_calloc(sizeof(*remote));
     if (!remote) {
         LOGW("TCP remote is NULL, please check the memory");
-        return -1;
+        return NULL;
     }
 
-    remote->client = client;
+    char err[XS_ERR_LEN];
+    tcpConn *conn = tcpConnect(err, app->el, app->config->remote_addr, app->config->remote_port,
+                               app->config->timeout, remote);
+    if (!conn) {
+        LOGW("TCP remote connect error: %s", err);
+        exit(EXIT_ERR);
+    }
+    remote->conn = conn;
 
-    client->remote = remote;
-    client->stage = STAGE_HANDSHAKE;
+    TCP_ON_READ(conn, tcpRemoteOnRead);
+    TCP_ON_WRITE(conn, tcpRemoteOnWrite);
+    TCP_ON_CONN(conn, tcpRemoteOnConnect);
 
-    // Wait for remote connect succees to write left buffer
-    client->buf_off = raddr_len;
-    DEL_EVENT(client->re);
-
-    s.ts->remote_count++;
-    LOGD("TCP remote current count: %d", s.ts->remote_count);
-
-    return raddr_len;
+    return remote;
 }
+
+static void tcpRemoteFree(tcpRemote *remote) {
+    if (!remote) return;
+    TCP_CLOSE(remote->conn);
+    xs_free(remote);
+}
+
+static void tcpRemoteOnConnect(void *data, int status) {
+
+}
+
+static void tcpRemoteOnRead(void *data) {
+
+}
+
+static void tcpRemoteOnWrite(void *data) {
+
+}
+
+// static int tcpClientReadHandler(tcpClient *client) {
+//     tcpRemote *remote = client->remote;
+
+//     int readlen = NET_IOBUF_LEN;
+//     int cfd = client->fd;
+//     int nread;
+
+//     // Read client buffer
+//     nread = read(cfd, client->buf.data, readlen);
+//     if (nread == -1) {
+//         if (errno == EAGAIN) return TCP_OK;
+
+//         LOGW("TCP client [%s] read error: %s", client->client_addr_info, STRERR);
+//         return TCP_ERR;
+//     } else if (nread == 0) {
+//         LOGD("TCP client [%s] closed connection", client->client_addr_info);
+//         return TCP_ERR;
+//     }
+//     client->buf.len = nread;
+
+//     // Decrypt client buffer
+//     if (app->crypto->decrypt(&client->buf, client->d_ctx, NET_IOBUF_LEN)) {
+//         LOGW("TCP client [%s] decrypt buffer error", client->client_addr_info);
+//         return TCP_ERR;
+//     }
+
+//     int raddr_len;
+//     if (client->stage == STAGE_INIT) {
+//         if ((raddr_len = tcpShadowSocksHandshake(client)) == -1) return TCP_ERR;
+
+//         return TCP_OK;
+//     }
+
+//     // Write to remote
+//     int nwrite;
+//     int rfd = remote->fd;
+
+//     nwrite = anetWrite(rfd, client->buf.data, client->buf.len);
+//     if (nwrite != (int)client->buf.len) {
+//         LOGW("TCP remote (%d) [%s] write error: %s", rfd, client->remote_addr_info, STRERR);
+//         return TCP_ERR;
+//     }
+
+//     if (client->stage == STAGE_HANDSHAKE) {
+//         LOGD("TCP remote (%d) [%s] connect success", rfd, client->remote_addr_info);
+//         client->stage = STAGE_STREAM;
+
+//         anetDisableTcpNoDelay(NULL, client->fd);
+//         anetDisableTcpNoDelay(NULL, remote->fd);
+//     }
+
+//     return TCP_OK;
+// }
+
+// int tcpShadowSocksHandshake(tcpClient *client) {
+//     int raddr_len = 0;
+
+//     // Validate the buffer
+//     char rhost[HOSTNAME_MAX_LEN];
+//     int rhost_len = HOSTNAME_MAX_LEN;
+//     int rport;
+
+//     if ((raddr_len= socks5AddrParse(client->buf.data, client->buf.len, NULL, rhost,
+//                                     &rhost_len, &rport)) == SOCKS5_ERR) {
+//         LOGW("TCP client [%s] parse socks5 addr error", client->client_addr_info);
+//         return -1;
+//     }
+
+//     anetFormatAddr(client->remote_addr_info, ADDR_INFO_STR_LEN, rhost, rport);
+//     LOGI("TCP client (%d) [%s] request remote addr [%s]", client->fd, client->client_addr_info,
+//          client->remote_addr_info);
+
+//     // Connect to remote server
+//     char err[ANET_ERR_LEN];
+//     int rfd;
+
+//     if ((rfd = anetTcpNonBlockConnect(err, rhost, rport)) == ANET_ERR) {
+//         LOGW("TCP remote (%d) [%s] connect error: %s", rfd, client->remote_addr_info, err);
+//         return -1;
+//     }
+//     LOGD("TCP remote (%d) [%s] is connecting ...", rfd, client->remote_addr_info);
+
+//     // Prepare stream
+//     tcpRemote *remote = tcpRemoteNew(rfd);
+//     if (!remote) {
+//         LOGW("TCP remote is NULL, please check the memory");
+//         return -1;
+//     }
+
+//     remote->client = client;
+
+//     client->remote = remote;
+//     client->stage = STAGE_HANDSHAKE;
+
+//     // Wait for remote connect succees to write left buffer
+//     client->buf_off = raddr_len;
+//     DEL_EVENT(client->re);
+
+//     s.ts->remote_count++;
+//     LOGD("TCP remote current count: %d", s.ts->remote_count);
+
+//     return raddr_len;
+// }
 
 static void udpServerInit() {
     udpHook hook = {.init = NULL, .process = udpServerHookProcess, .free = NULL};

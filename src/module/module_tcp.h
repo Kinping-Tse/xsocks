@@ -57,9 +57,9 @@ typedef struct tcpRemote {
     tcpClient *client;
 } tcpRemote;
 
-tcpServer *tcpServerCreate(char *host, int port, clientReadHandler handler);
+tcpServer *moduleTcpServerCreate(char *host, int port, clientReadHandler handler);
 tcpServer *tcpServerNew(int fd);
-void tcpServerFree(tcpServer *server);
+void moduleTcpServerFree(tcpServer *server);
 void tcpConnectionFree(tcpClient *client);
 
 tcpClient *tcpClientNew(int fd);

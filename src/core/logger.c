@@ -7,8 +7,11 @@
 
 static logger *xsocks_logger = NULL;
 
+static void loggerLogRaw(logger* log, int level, const char* file, int line, const char *msg);
+
 logger *loggerNew() {
     logger *log = xs_calloc(sizeof(*log));
+    if (!log) return log;
 
     log->file = LOGGER_DEFAULT_FILE;
     log->level = LOGGER_DEFAULT_LEVEL;
@@ -22,10 +25,36 @@ logger *loggerNew() {
 }
 
 void loggerFree(logger* log) {
+    if (!log) return;
     xs_free(log);
 }
 
-void loggerLogRaw(logger* log, int level, const char* file, int line, const char *msg) {
+void loggerLog(logger *log, int level, const char *file, int line, const char *fmt, ...) {
+    if (log == NULL) log = getLogger();
+
+    if ((level & 0xFF) < log->level) return;
+
+    va_list ap;
+    char msg[LOG_MAX_LEN];
+
+    va_start(ap, fmt);
+    vsnprintf(msg, sizeof(msg), fmt, ap);
+    va_end(ap);
+
+    loggerLogRaw(log, level, file, line, msg);
+}
+
+void setLogger(logger *log) {
+    if (xsocks_logger != log) loggerFree(xsocks_logger);
+    xsocks_logger = log;
+}
+
+logger *getLogger() {
+    if (xsocks_logger == NULL) xsocks_logger = loggerNew();
+    return xsocks_logger;
+}
+
+static void loggerLogRaw(logger* log, int level, const char* file, int line, const char *msg) {
     const int syslogLevelMap[] = { LOG_DEBUG, LOG_INFO, LOG_NOTICE, LOG_WARNING, LOG_ERR };
     FILE * fp;
     int rawmode = (level & LOGLEVEL_RAW);
@@ -40,7 +69,7 @@ void loggerLogRaw(logger* log, int level, const char* file, int line, const char
     if (rawmode) {
         fprintf(fp, "%s", msg);
     } else {
-        char buf_fl[1024] = {0};
+        char buf_fl[LOG_MAX_LEN] = {0};
         char buf_tm[64];
 
         struct timeval tv;
@@ -71,30 +100,4 @@ void loggerLogRaw(logger* log, int level, const char* file, int line, const char
         syslog(syslogLevelMap[level], "%s", msg);
         closelog();
     }
-}
-
-void loggerLog(logger *log, int level, const char *file, int line, const char *fmt, ...) {
-    if (log == NULL) log = xsocks_logger;
-
-    if ((level & 0xFF) < log->level) return;
-
-    va_list ap;
-    char msg[LOG_MAX_LEN];
-
-    va_start(ap, fmt);
-    vsnprintf(msg, sizeof(msg), fmt, ap);
-    va_end(ap);
-
-    loggerLogRaw(log, level, file, line, msg);
-}
-
-void setLogger(logger *log) {
-    if (xsocks_logger != NULL && xsocks_logger != log)
-        loggerFree(xsocks_logger);
-
-    xsocks_logger = log;
-}
-
-logger *getLogger() {
-    return xsocks_logger;
 }

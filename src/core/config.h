@@ -5,7 +5,7 @@
 /* Error codes */
 enum {
     CONFIG_OK = 0,
-    CONFIG_ERR = -1
+    CONFIG_ERR = -1,
 };
 
 enum {
@@ -15,7 +15,10 @@ enum {
 };
 
 #define CONFIG_DEFAULT_DAEMONIZE 0
+#define CONFIG_DEFAULT_PASSWORD "foobar"
 #define CONFIG_DEFAULT_METHOD "aes-256-cfb"
+#define CONFIG_DEFAULT_REMOTE_PORT 8388
+#define CONFIG_DEFAULT_LOCAL_PORT 1080
 #define CONFIG_DEFAULT_TIMEOUT 60
 #define CONFIG_DEFAULT_MODE MODE_TCP_ONLY
 #define CONFIG_DEFAULT_MTU 0

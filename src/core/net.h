@@ -1,3 +1,4 @@
+
 #ifndef __NET_H
 #define __NET_H
 
@@ -12,6 +13,8 @@
 #define NET_IPV6_STR_LEN INET6_ADDRSTRLEN /*  46  */
 #define NET_IP_MAX_STR_LEN NET_IPV6_STR_LEN
 #define NET_IOBUF_LEN  (1024*16)  /* Generic I/O buffer size */
+
+#define IOBUF_MIN_LEN  (1024)  /* Generic I/O buffer size */
 
 typedef struct in_addr ipV4Addr;
 typedef struct in6_addr ipV6Addr;
@@ -28,11 +31,17 @@ typedef struct sockAddrEx {
 
 enum {
     NET_OK = 0,
-    NET_ERR = -1
+    NET_ERR = -1,
+    NET_ERR_LEN = 256,
 };
+
+int netTcpRead(char *err, int fd, char *buf, int buflen, int *closed);
+int netTcpWrite(char *err, int fd, char *buf, int buflen);
 
 int netUdpRead(char *err, int fd, char *buf, int buflen, sockAddrEx *sa);
 int netUdpWrite(char *err, int fd, char *buf, int buflen, sockAddrEx *sa);
+
+int netTcpNonBlockConnect(char *err, char *host, int port, sockAddrEx *sa);
 
 int netUdpServer(char *err, int port, char *bindaddr);
 int netUdp6Server(char *err, int port, char *bindaddr);
@@ -47,5 +56,6 @@ int netTcpGetDestSockAddr(char *err, int fd, int ipv6_first, sockAddrEx *sa);
 int netUdpGetSockAddrEx(char *err, char *host, int port, int ipv6_first, sockAddrEx *sa);
 int netIpPresentBySockAddr(char *err, char *ip, int ip_len, int *port, sockAddrEx* sae);
 int netIpPresentByIpAddr(char *err, char *ip, int ip_len, void* addr, int is_ipv6);
+int netHostPortParse(char *addr, char *host, int *port);
 
 #endif /* __NET_H */

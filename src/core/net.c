@@ -1,9 +1,11 @@
 #include "common.h"
 #include "net.h"
-#include "utils.h"
+#include "error.h"
 
 #include "redis/anet.h"
 #include <stdarg.h>
+
+#include "utils.h"
 
 #ifdef __linux__
 #include <linux/if.h>
@@ -11,10 +13,56 @@
 #include <linux/netfilter_ipv6/ip6_tables.h>
 #endif
 
+#define anetSetError errorSet
+
 static int _netUdpServer(char *err, int port, char *bindaddr, int af);
-static void anetSetError(char *err, const char *fmt, ...);
 static int anetSetReuseAddr(char *err, int fd);
 static int anetBind(char *err, int s, sockAddr *saddr, socklen_t slen);
+
+int netTcpRead(char *err, int fd, char *buf, int buflen, int *closed) {
+    int nread;
+    int total_len = 0;
+    if (closed) *closed = 0;
+
+    while (total_len < buflen) {
+        nread = read(fd, buf + total_len, buflen - total_len);
+        if (nread <= 0) break;
+
+        total_len += nread;
+    }
+
+    if (total_len == 0) {
+        if (nread == 0 && closed) *closed = 1;
+
+        if (nread == -1) {
+            if (errno != EAGAIN) {
+                errorSet(err, "%s", STRERR);
+                return NET_ERR;
+            }
+        }
+    }
+
+    return total_len;
+}
+
+int netTcpWrite(char *err, int fd, char *buf, int buflen) {
+    int nwrite;
+    int total_len = 0;
+
+    while (total_len < buflen) {
+        nwrite = write(fd, buf + total_len, buflen - total_len);
+        if (nwrite <= 0) break;
+
+        total_len += nwrite;
+    }
+
+    if (total_len == 0 && nwrite == -1 && errno != EAGAIN) {
+        errorSet(err, "%s", STRERR);
+        return NET_ERR;
+    }
+
+    return total_len;
+}
 
 int netUdpRead(char *err, int fd, char *buf, int buflen, sockAddrEx *sa) {
     int nread;
@@ -36,6 +84,55 @@ int netUdpWrite(char *err, int fd, char *buf, int buflen, sockAddrEx *sa) {
         return NET_ERR;
     }
     return nwrite;
+}
+
+int netTcpNonBlockConnect(char *err, char *addr, int port, sockAddrEx *sa) {
+    int s = NET_ERR, rv;
+    char portstr[6];  /* strlen("65535") + 1; */
+    addrInfo hints, *servinfo, *p;
+
+    snprintf(portstr, sizeof(portstr), "%d", port);
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+
+    if ((rv = getaddrinfo(addr, portstr, &hints, &servinfo)) != 0) {
+        anetSetError(err, "%s", gai_strerror(rv));
+        return NET_ERR;
+    }
+    for (p = servinfo; p != NULL; p = p->ai_next) {
+        if ((s = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1)
+            continue;
+        if (anetSetReuseAddr(err, s) == ANET_ERR) goto error;
+        if (anetNonBlock(err, s) == ANET_ERR) goto error;
+        if (connect(s, p->ai_addr, p->ai_addrlen) == -1) {
+            if (errno == EINPROGRESS) break;
+
+            close(s);
+            s = NET_ERR;
+            continue;
+        }
+        break;
+    }
+    if (p) {
+        if (sa) {
+            memcpy(&sa->sa, p->ai_addr, p->ai_addrlen);
+            sa->sa_len = p->ai_addrlen;
+        }
+        goto end;
+    }
+
+    anetSetError(err, "creating socket: %s", STRERR);
+
+error:
+    if (s != NET_ERR) {
+        close(s);
+        s = NET_ERR;
+    }
+
+end:
+    freeaddrinfo(servinfo);
+    return s;
 }
 
 int netUdpServer(char *err, int port, char *bindaddr) {
@@ -205,6 +302,22 @@ int netIpPresentByIpAddr(char *err, char *ip, int ip_len, void *addr, int is_ipv
     return NET_OK;
 }
 
+int netHostPortParse(char *addr, char *host, int *port) {
+    if (!addr) return NET_ERR;
+
+    char *p = strrchr(addr, ':');
+    if (p) {
+        int offset = p - addr;
+        if (host) {
+            memcpy(host, addr, offset);
+            host[offset] = '\0';
+        }
+        if (port) *port = atoi(p+1);
+        return NET_OK;
+    }
+    return NET_ERR;
+}
+
 static int _netUdpServer(char *err, int port, char *bindaddr, int af) {
     int s = -1, rv;
     char port_s[PORT_MAX_STR_LEN];
@@ -243,15 +356,6 @@ error:
 end:
     freeaddrinfo(servinfo);
     return s;
-}
-
-static void anetSetError(char *err, const char *fmt, ...) {
-    va_list ap;
-
-    if (!err) return;
-    va_start(ap, fmt);
-    vsnprintf(err, ANET_ERR_LEN, fmt, ap);
-    va_end(ap);
 }
 
 static int anetSetReuseAddr(char *err, int fd) {

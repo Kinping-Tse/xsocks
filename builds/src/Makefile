@@ -9,7 +9,8 @@ VPATH = $(wildcard $(SRC_ROOT)/*)
 include $(BUILD_ROOT)/common.mk
 
 SRCS = $(filter-out $(wildcard $(SRC_ROOT)/module/*c), $(wildcard $(SRC_ROOT)/*/*.c))
-OBJS = $(notdir $(SRCS:.c=.o)) module.o module_tcp.o module_udp.o
+OBJS = $(notdir $(SRCS:.c=.o))
+MODULE_OBJS = $(OBJS) module.o module_tcp.o module_udp.o
 
 DEPENDENCY_TARGETS = redis json-parser shadowsocks-libev
 
@@ -74,15 +75,20 @@ endif
 EXT_LIBS += -lm
 
 XSOCKS_SERVER_NAME = xs-server
-XSOCKS_SERVER_OBJ = server.o $(OBJS)
+XSOCKS_SERVER_OBJ = server.o $(MODULE_OBJS)
 XSOCKS_LOCAL_NAME = xs-local
-XSOCKS_LOCAL_OBJ = local.o $(OBJS)
+XSOCKS_LOCAL_OBJ = local.o $(MODULE_OBJS)
 XSOCKS_TUNNEL_NAME = xs-tunnel
-XSOCKS_TUNNEL_OBJ = tunnel.o $(OBJS)
+XSOCKS_TUNNEL_OBJ = tunnel.o $(MODULE_OBJS)
 XSOCKS_REDIR_NAME = xs-redir
-XSOCKS_REDIR_OBJ = redir.o $(OBJS)
+XSOCKS_REDIR_OBJ = redir.o $(MODULE_OBJS)
+XSOCKS_BENCHMAKR_SERVER_NAME = xs-benchmark-server
+XSOCKS_BENCHMAKR_SERVER_OBJ = benchmark_server.o $(OBJS)
+XSOCKS_BENCHMAKR_CLIENT_NAME = xs-benchmark-client
+XSOCKS_BENCHMAKR_CLIENT_OBJ = benchmark_client.o $(OBJS)
 
 XSOCKS_MODULE_EXE = $(XSOCKS_SERVER_NAME) $(XSOCKS_LOCAL_NAME) $(XSOCKS_TUNNEL_NAME)
+XSOCKS_BENCHMAKR_EXE = $(XSOCKS_BENCHMAKR_SERVER_NAME) $(XSOCKS_BENCHMAKR_CLIENT_NAME)
 
 ifeq ($(uname_S), Linux)
 XSOCKS_MODULE_EXE += $(XSOCKS_REDIR_NAME)
@@ -141,6 +147,12 @@ $(XSOCKS_TUNNEL_NAME): $(XSOCKS_TUNNEL_OBJ)
 $(XSOCKS_REDIR_NAME): $(XSOCKS_REDIR_OBJ)
 	$(XSOCKS_MODULE_EXE_LD)
 
+$(XSOCKS_BENCHMAKR_CLIENT_NAME): $(XSOCKS_BENCHMAKR_CLIENT_OBJ)
+	$(XSOCKS_MODULE_EXE_LD)
+
+$(XSOCKS_BENCHMAKR_SERVER_NAME): $(XSOCKS_BENCHMAKR_SERVER_OBJ)
+	$(XSOCKS_MODULE_EXE_LD)
+
 %.o: %.c .make-prerequisites
 	$(COMMON_CC) -c $<
 
@@ -165,11 +177,13 @@ endif
 endif
 
 clean:
-	rm -rf $(XSOCKS_MODULE_EXE) $(BUILD_TMP_FILES) *.info lcov-html Makefile.dep
+	rm -rf $(XSOCKS_MODULE_EXE) $(BUILD_TMP_FILES) *.info lcov-html Makefile.dep $(XSOCKS_BENCHMAKR_EXE)
 
 distclean: clean
 	$(MAKE) -C $(BUILD_DEPS_PATH) distclean
 	rm -rf .make-*
+
+bench: $(XSOCKS_BENCHMAKR_EXE)
 
 gcov:
 	$(MAKE) $(MFLAGS) CFLAGS="-fprofile-arcs -ftest-coverage" LDFLAGS="-fprofile-arcs -ftest-coverage"
@@ -182,4 +196,4 @@ lcov:
 valgrind:
 	$(MAKE) $(MFLAGS) OPTIMIZATION="-O0" MALLOC="libc"
 
-.PHONY: all install install-lib clean distclean persist-settings gcov lcov valgrind
+.PHONY: all install install-lib clean distclean persist-settings bench gcov lcov valgrind

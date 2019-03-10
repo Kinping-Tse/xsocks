@@ -1,7 +1,7 @@
 
 #include "common.h"
+#include "error.h"
 #include "net.h"
-#include "utils.h"
 #include "socks5.h"
 
 static int socks5HostParse(char *host) {
