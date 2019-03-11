@@ -91,7 +91,11 @@ static server s;
 module *app = (module *)&s;
 
 int main(int argc, char *argv[]) {
-    moduleHook hook = { .init = serverInit, .run = serverRun, .exit = serverExit, };
+    moduleHook hook = {
+        .init = serverInit,
+        .run = serverRun,
+        .exit = serverExit,
+    };
 
     return moduleMain(MODULE_SERVER, hook, app, argc, argv);
 }
@@ -112,8 +116,7 @@ static void serverRun() {
 
     // if (s.ts && anetFormatSock(s.ts->fd, addr_info, ADDR_INFO_STR_LEN) > 0)
     //     LOGN("TCP server listen at: %s", addr_info);
-    if (s.us && anetFormatSock(s.us->fd, addr_info, ADDR_INFO_STR_LEN) > 0)
-        LOGN("UDP server read at: %s", addr_info);
+    if (s.us && anetFormatSock(s.us->fd, addr_info, ADDR_INFO_STR_LEN) > 0) LOGN("UDP server read at: %s", addr_info);
 }
 
 static void serverExit() {
@@ -139,8 +142,7 @@ static tcpServer *tcpServerNew() {
     }
 
     char err[XS_ERR_LEN];
-    tcpListener *ln = tcpListen(err, app->el, app->config->remote_addr, app->config->remote_port,
-                                server, tcpOnAccept);
+    tcpListener *ln = tcpListen(err, app->el, app->config->remote_addr, app->config->remote_port, server, tcpOnAccept);
     if (!ln) {
         LOGE(err);
         tcpServerFree(server);
@@ -246,8 +248,8 @@ static tcpRemote *tcpRemoteNew() {
     }
 
     char err[XS_ERR_LEN];
-    tcpConn *conn = tcpConnect(err, app->el, app->config->remote_addr, app->config->remote_port,
-                               app->config->timeout, remote);
+    tcpConn *conn =
+        tcpConnect(err, app->el, app->config->remote_addr, app->config->remote_port, app->config->timeout, remote);
     if (!conn) {
         LOGW("TCP remote connect error: %s", err);
         exit(EXIT_ERR);
@@ -267,17 +269,11 @@ static void tcpRemoteFree(tcpRemote *remote) {
     xs_free(remote);
 }
 
-static void tcpRemoteOnConnect(void *data, int status) {
+static void tcpRemoteOnConnect(void *data, int status) {}
 
-}
+static void tcpRemoteOnRead(void *data) {}
 
-static void tcpRemoteOnRead(void *data) {
-
-}
-
-static void tcpRemoteOnWrite(void *data) {
-
-}
+static void tcpRemoteOnWrite(void *data) {}
 
 // static int tcpClientReadHandler(tcpClient *client) {
 //     tcpRemote *remote = client->remote;
@@ -411,7 +407,7 @@ static int udpServerHookProcess(void *data) {
     int rport;
     int raddr_len;
 
-    if ((raddr_len= socks5AddrParse(client->buf.data, client->buf.len, NULL, rip, &rip_len, &rport)) == -1) {
+    if ((raddr_len = socks5AddrParse(client->buf.data, client->buf.len, NULL, rip, &rip_len, &rport)) == -1) {
         LOGW("UDP server parse buffer error");
         return UDP_ERR;
     }

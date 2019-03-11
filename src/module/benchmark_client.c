@@ -1,6 +1,6 @@
 
-#include "../protocol/tcp_shadowsocks.h"
 #include "../protocol/tcp_raw.h"
+#include "../protocol/tcp_shadowsocks.h"
 
 #include <getopt.h>
 
@@ -156,7 +156,7 @@ static void parseOptions(int argc, char *argv[]) {
             case 't': app->timeout = atoi(optarg); break;
             case 'k': app->password = optarg; break;
             case 'm': app->method = optarg; break;
-            case 'h': help = 1;  break;
+            case 'h': help = 1; break;
             case GETOPT_VAL_KEY: app->key = optarg; break;
             case GETOPT_VAL_TYPE:
                 if (strcmp(optarg, "raw") == 0) {
@@ -173,9 +173,7 @@ static void parseOptions(int argc, char *argv[]) {
             case 'd': app->buf_size = atoi(optarg); break;
             case GETOPT_VAL_KEEPALIVE: app->keepalive = atoi(optarg); break;
             case '?':
-            default:
-                help = 1;
-                break;
+            default: help = 1; break;
         }
     }
 
@@ -186,28 +184,24 @@ static void parseOptions(int argc, char *argv[]) {
 }
 
 static void usage() {
-    printf(
-        "Usage: xs-benchmark-client\n\n"
-        " [-s <hostname>]          Server hostname (default 127.0.0.1)\n"
-        " [-p <port>]              Server port (default 18388)\n"
-        " [-k <password>]          Server password (default foobar)\n"
-        " [-m <encrypt_method>]    Server encrypt method (default aes-256-cfb)\n"
-        " [--key <key_in_base64>]  Server key (default null)\n"
-        " [-c <clients>]           Number of parallel connections (default 20)\n"
-        " [-n <requests>]          Total number of requests (default 10000)\n"
-        " [-L <addr>:<port>]       Tunnel address and port (default 127.0.0.1:19999)\n"
-        " [--keepalive <boolean>]  1=keep alive 0=reconnect (default 1)\n"
-        " [-t <timeout>]           Socket timeout (default 60 s)\n"
-        " [-d <size>]              Data size (bytes) of one client request (default 500KB)\n"
-        " [--type <client_type>]   Client connection type (default shadowsocks),\n"
-        "                          support type: [shadowsocks, raw]\n"
-        " [-h, --help]             Print this help\n"
-    );
+    printf("Usage: xs-benchmark-client\n\n"
+           " [-s <hostname>]          Server hostname (default 127.0.0.1)\n"
+           " [-p <port>]              Server port (default 18388)\n"
+           " [-k <password>]          Server password (default foobar)\n"
+           " [-m <encrypt_method>]    Server encrypt method (default aes-256-cfb)\n"
+           " [--key <key_in_base64>]  Server key (default null)\n"
+           " [-c <clients>]           Number of parallel connections (default 20)\n"
+           " [-n <requests>]          Total number of requests (default 10000)\n"
+           " [-L <addr>:<port>]       Tunnel address and port (default 127.0.0.1:19999)\n"
+           " [--keepalive <boolean>]  1=keep alive 0=reconnect (default 1)\n"
+           " [-t <timeout>]           Socket timeout (default 60 s)\n"
+           " [-d <size>]              Data size (bytes) of one client request (default 500KB)\n"
+           " [--type <client_type>]   Client connection type (default shadowsocks),\n"
+           "                          support type: [shadowsocks, raw]\n"
+           " [-h, --help]             Print this help\n");
 }
 
-void freeAllClients() {
-
-}
+void freeAllClients() {}
 
 static void benchmark() {
     tcpClientCreate();
@@ -386,7 +380,8 @@ static void tcpClientOnRead(void *data) {
     char *addrinfo = conn->addrinfo;
 
     nread = TCP_READ(conn, buf, buflen);
-    if (nread == TCP_AGAIN) goto end;
+    if (nread == TCP_AGAIN)
+        goto end;
     else if (nread == TCP_ERR) {
         LOGW("TCP client %s read error: %s", addrinfo, conn->errstr);
         goto error;

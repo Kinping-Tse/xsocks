@@ -90,11 +90,11 @@ static eventContext *eventApiNewEvent(event *e) {
     return ctx;
 }
 
-static void eventApiFreeEvent(eventContext* ctx) {
+static void eventApiFreeEvent(eventContext *ctx) {
     xs_free(ctx);
 }
 
-static int eventApiAddEvent(eventLoopContext *elCtx, eventContext* eCtx) {
+static int eventApiAddEvent(eventLoopContext *elCtx, eventContext *eCtx) {
     switch (eCtx->e->type) {
         case EVENT_TYPE_IO: ev_io_start(elCtx->el, &eCtx->w.io); break;
         case EVENT_TYPE_TIME: ev_timer_start(elCtx->el, &eCtx->w.t); break;
@@ -104,7 +104,7 @@ static int eventApiAddEvent(eventLoopContext *elCtx, eventContext* eCtx) {
     return EVENT_OK;
 }
 
-static void eventApiDelEvent(eventLoopContext *elCtx, eventContext* eCtx) {
+static void eventApiDelEvent(eventLoopContext *elCtx, eventContext *eCtx) {
     switch (eCtx->e->type) {
         case EVENT_TYPE_IO: ev_io_stop(elCtx->el, &eCtx->w.io); break;
         case EVENT_TYPE_TIME: ev_timer_stop(elCtx->el, &eCtx->w.t); break;

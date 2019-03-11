@@ -8,15 +8,14 @@ static void tcpListenReadHandler(event *e);
 
 static tcpConn *tcpConnNew(int fd, int timeout, eventLoop *el, void *data);
 static int tcpCheckConnectDone(tcpConn *c);
-static void tcpConnInit(tcpConn * c);
+static void tcpConnInit(tcpConn *c);
 
 static int handleTcpConnection(tcpConn *c);
 static void tcpConnReadHandler(event *e);
 static void tcpConnWriteHandler(event *e);
 static void tcpConnReadTimeHandler(event *e);
 
-tcpListener *tcpListen(char *err, eventLoop *el, char *host, int port,
-                       void *data, tcpEventHandler onAccept) {
+tcpListener *tcpListen(char *err, eventLoop *el, char *host, int port, void *data, tcpEventHandler onAccept) {
     int backlog = 256;
     int fd;
 
@@ -151,7 +150,7 @@ static tcpConn *tcpConnNew(int fd, int timeout, eventLoop *el, void *data) {
     return c;
 }
 
-static void tcpConnInit(tcpConn * c) {
+static void tcpConnInit(tcpConn *c) {
     int fd = c->fd;
 
     anetFormatSock(fd, c->addrinfo, sizeof(c->addrinfo));
@@ -167,12 +166,10 @@ static int tcpCheckConnectDone(tcpConn *c) {
     if (rc == 0) return TCP_OK;
 
     switch (errno) {
-        case EISCONN:
-            return TCP_OK;
+        case EISCONN: return TCP_OK;
         case EALREADY:
         case EINPROGRESS:
-        case EWOULDBLOCK:
-            return TCP_AGAIN;
+        case EWOULDBLOCK: return TCP_AGAIN;
         default:
             c->err = errno;
             xs_error(c->errstr, STRERR);

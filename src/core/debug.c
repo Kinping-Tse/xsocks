@@ -6,9 +6,9 @@
 
 #include "version.h"
 
-#include <signal.h>
-#include <execinfo.h>
 #include <dlfcn.h>
+#include <execinfo.h>
+#include <signal.h>
 
 #define TRACE_MAX_LEN 1024
 
@@ -136,7 +136,7 @@ void logCoreDump(void *eip) {
 }
 
 static void sigsegvHandler(int sig, siginfo_t *info, void *secret) {
-    ucontext_t *uc = (ucontext_t*) secret;
+    ucontext_t *uc = (ucontext_t *)secret;
     void *eip = getMcontextEip(uc);
 
     bugReportStart();

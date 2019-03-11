@@ -1,11 +1,13 @@
+
 #include "common.h"
+
 #include "net.h"
 #include "error.h"
+#include "utils.h"
 
 #include "redis/anet.h"
-#include <stdarg.h>
 
-#include "utils.h"
+#include <stdarg.h>
 
 #ifdef __linux__
 #include <linux/if.h>
@@ -88,7 +90,7 @@ int netUdpWrite(char *err, int fd, char *buf, int buflen, sockAddrEx *sa) {
 
 int netTcpNonBlockConnect(char *err, char *addr, int port, sockAddrEx *sa) {
     int s = NET_ERR, rv;
-    char portstr[6];  /* strlen("65535") + 1; */
+    char portstr[6]; /* strlen("65535") + 1; */
     addrInfo hints, *servinfo, *p;
 
     snprintf(portstr, sizeof(portstr), "%d", port);
@@ -101,8 +103,7 @@ int netTcpNonBlockConnect(char *err, char *addr, int port, sockAddrEx *sa) {
         return NET_ERR;
     }
     for (p = servinfo; p != NULL; p = p->ai_next) {
-        if ((s = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1)
-            continue;
+        if ((s = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) continue;
         if (anetSetReuseAddr(err, s) == ANET_ERR) goto error;
         if (anetNonBlock(err, s) == ANET_ERR) goto error;
         if (connect(s, p->ai_addr, p->ai_addrlen) == -1) {
@@ -189,7 +190,7 @@ int netNoSigPipe(char *err, int fd) {
     return NET_OK;
 }
 
-void netSockAddrExInit(sockAddrEx* sa) {
+void netSockAddrExInit(sockAddrEx *sa) {
     socklen_t slen = sizeof(*sa);
     bzero(sa, slen);
     sa->sa_len = slen;
@@ -228,7 +229,7 @@ int netUdpGetSockAddrEx(char *err, char *host, int port, int ipv6_first, sockAdd
 
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_DGRAM;
-    hints.ai_flags = AI_PASSIVE;    /* No effect if bindaddr != NULL */
+    hints.ai_flags = AI_PASSIVE; /* No effect if bindaddr != NULL */
 
     if ((rv = getaddrinfo(host, port_s, &hints, &servinfo)) != 0) {
         anetSetError(err, "%s", gai_strerror(rv));
@@ -278,17 +279,15 @@ end:
     return s;
 }
 
-int netIpPresentBySockAddr(char *err, char *ip, int ip_len, int *port, sockAddrEx* sae) {
+int netIpPresentBySockAddr(char *err, char *ip, int ip_len, int *port, sockAddrEx *sae) {
     sockAddrStorage *s = &sae->sa;
     if (s->ss_family == AF_INET) {
-        sockAddrIpV4 *sa = (sockAddrIpV4*)s;
-        if (ip && netIpPresentByIpAddr(err, ip, ip_len, (void*)&(sa->sin_addr), 0) == NET_ERR)
-            return NET_ERR;
+        sockAddrIpV4 *sa = (sockAddrIpV4 *)s;
+        if (ip && netIpPresentByIpAddr(err, ip, ip_len, (void *)&(sa->sin_addr), 0) == NET_ERR) return NET_ERR;
         if (port) *port = ntohs(sa->sin_port);
     } else {
-        sockAddrIpV6 *sa = (sockAddrIpV6*)s;
-        if (ip && netIpPresentByIpAddr(err, ip, ip_len, (void*)&(sa->sin6_addr), 1) == NET_ERR)
-            return NET_ERR;
+        sockAddrIpV6 *sa = (sockAddrIpV6 *)s;
+        if (ip && netIpPresentByIpAddr(err, ip, ip_len, (void *)&(sa->sin6_addr), 1) == NET_ERR) return NET_ERR;
         if (port) *port = ntohs(sa->sin6_port);
     }
     return NET_OK;
@@ -328,19 +327,18 @@ static int _netUdpServer(char *err, int port, char *bindaddr, int af) {
 
     hints.ai_family = af;
     hints.ai_socktype = SOCK_DGRAM;
-    hints.ai_flags = AI_PASSIVE;    /* No effect if bindaddr != NULL */
+    hints.ai_flags = AI_PASSIVE; /* No effect if bindaddr != NULL */
 
     if ((rv = getaddrinfo(bindaddr, port_s, &hints, &servinfo)) != 0) {
         anetSetError(err, "%s", gai_strerror(rv));
         return ANET_ERR;
     }
     for (p = servinfo; p != NULL; p = p->ai_next) {
-        if ((s = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1)
-            continue;
+        if ((s = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) continue;
 
         if (af == AF_INET6 && netSetIpV6Only(err, s, 1) == ANET_ERR) goto error;
         if (anetSetReuseAddr(err, s) == ANET_ERR) goto error;
-        if (anetBind(err, s, p->ai_addr,p->ai_addrlen) == ANET_ERR) goto error;
+        if (anetBind(err, s, p->ai_addr, p->ai_addrlen) == ANET_ERR) goto error;
 
         goto end;
     }

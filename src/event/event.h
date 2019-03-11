@@ -3,7 +3,7 @@
 
 enum {
     EVENT_OK = 0,
-    EVENT_ERR = -1
+    EVENT_ERR = -1,
 };
 
 enum {
@@ -16,7 +16,7 @@ enum {
     EVENT_FLAG_READ = 0,
     EVENT_FLAG_WRITE = 1,
     EVENT_FLAG_TIME_ONCE = 0,
-    EVENT_FLAG_TIME_REPEAT = 1
+    EVENT_FLAG_TIME_REPEAT = 1,
 };
 
 typedef struct eventLoop {
@@ -50,9 +50,9 @@ void eventLoopRun(eventLoop *el);
 void eventLoopStop(eventLoop *el);
 
 event *eventNew(int id, int type, int flags, eventHandler handler, void *data);
-void eventFree(event* e);
-int eventAdd(eventLoop *el, event* e);
-void eventDel(event* e);
+void eventFree(event *e);
+int eventAdd(eventLoop *el, event *e);
+void eventDel(event *e);
 
 char *eventGetApiName();
 

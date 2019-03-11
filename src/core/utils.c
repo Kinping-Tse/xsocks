@@ -1,5 +1,6 @@
 
 #include "common.h"
+
 #include "utils.h"
 
 #include <ctype.h>
@@ -29,13 +30,13 @@ void setupIgnoreHandlers() {
 }
 
 void hexdump(const void *memory, size_t bytes) {
-    const unsigned char * p, * q;
+    const unsigned char *p, *q;
     int i;
 
     p = memory;
     while (bytes) {
         q = p;
-        LOGDR("%p: ", (void *) p);
+        LOGDR("%p: ", (void *)p);
         for (i = 0; i < 16 && bytes; ++i) {
             LOGDR("%02X %s", *p, i == 7 ? " " : "");
             ++p;
@@ -53,7 +54,7 @@ void hexdump(const void *memory, size_t bytes) {
             ++p;
             --bytes;
         }
-         while (i < 16) {
+        while (i < 16) {
             LOGDR(" ");
             ++i;
         }

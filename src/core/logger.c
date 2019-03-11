@@ -7,7 +7,7 @@
 
 static logger *xsocks_logger = NULL;
 
-static void loggerLogRaw(logger* log, int level, const char* file, int line, const char *msg);
+static void loggerLogRaw(logger *log, int level, const char *file, int line, const char *msg);
 
 logger *loggerNew() {
     logger *log = xs_calloc(sizeof(*log));
@@ -24,7 +24,7 @@ logger *loggerNew() {
     return log;
 }
 
-void loggerFree(logger* log) {
+void loggerFree(logger *log) {
     if (!log) return;
     xs_free(log);
 }
@@ -54,9 +54,9 @@ logger *getLogger() {
     return xsocks_logger;
 }
 
-static void loggerLogRaw(logger* log, int level, const char* file, int line, const char *msg) {
-    const int syslogLevelMap[] = { LOG_DEBUG, LOG_INFO, LOG_NOTICE, LOG_WARNING, LOG_ERR };
-    FILE * fp;
+static void loggerLogRaw(logger *log, int level, const char *file, int line, const char *msg) {
+    const int syslogLevelMap[] = {LOG_DEBUG, LOG_INFO, LOG_NOTICE, LOG_WARNING, LOG_ERR};
+    FILE *fp;
     int rawmode = (level & LOGLEVEL_RAW);
     int log_to_stdout = log->file == NULL || log->file[0] == '\0';
 
@@ -79,24 +79,23 @@ static void loggerLogRaw(logger* log, int level, const char* file, int line, con
         int off = strftime(buf_tm, sizeof(buf_tm), "%Y-%m-%d %H:%M:%S.", tm);
         snprintf(buf_tm + off, sizeof(buf_tm) - off, "%03d", (int)tv.tv_usec / 1000);
 
-        if (log->file_line_enabled)
-            snprintf(buf_fl, sizeof(buf_fl), "%s:%d", file, line);
+        if (log->file_line_enabled) snprintf(buf_fl, sizeof(buf_fl), "%s:%d", file, line);
 
         const char *loglevelMap[] = {"Debug", "Info", "Notice", "Warning", "Error"};
         const char *colorMap[] = {"\x1b[94m", "\x1b[36m", "\x1b[32m", "\x1b[33m", "\x1b[31m", "\x1b[35m"};
 
         if (log->color_enabled && log_to_stdout)
-            fprintf(fp, "%s %s[%d] %s<%s>\x1b[0m\x1b[90m%s\x1b[0m: %s\n", buf_tm, log->syslog_ident,
-                    getpid(), colorMap[level], loglevelMap[level], buf_fl, msg);
+            fprintf(fp, "%s %s[%d] %s<%s>\x1b[0m\x1b[90m%s\x1b[0m: %s\n", buf_tm, log->syslog_ident, getpid(),
+                    colorMap[level], loglevelMap[level], buf_fl, msg);
         else
-            fprintf(fp, "%s %s[%d] <%s> %s: %s\n", buf_tm, log->syslog_ident,
-                    getpid(), loglevelMap[level], buf_fl, msg);
+            fprintf(fp, "%s %s[%d] <%s> %s: %s\n", buf_tm, log->syslog_ident, getpid(), loglevelMap[level], buf_fl,
+                    msg);
     }
     fflush(fp);
 
     if (!log_to_stdout) fclose(fp);
     if (log->syslog_enabled) {
-        openlog(log->syslog_ident, LOG_PID|LOG_NDELAY|LOG_NOWAIT, log->syslog_facility);
+        openlog(log->syslog_ident, LOG_PID | LOG_NDELAY | LOG_NOWAIT, log->syslog_facility);
         syslog(syslogLevelMap[level], "%s", msg);
         closelog();
     }

@@ -3,10 +3,11 @@
 #define __MODULE_H
 
 #include "../core/common.h"
+
 #include "../core/config.h"
 #include "../core/error.h"
-#include "../core/utils.h"
 #include "../core/time.h"
+#include "../core/utils.h"
 #include "../event/event.h"
 
 #include "redis/adlist.h"
@@ -29,7 +30,7 @@ typedef struct module {
 
 enum {
     MODULE_OK = 0,
-    MODULE_ERR = -1
+    MODULE_ERR = -1,
 };
 
 enum {

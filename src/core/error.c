@@ -1,5 +1,6 @@
 
 #include "common.h"
+
 #include "error.h"
 
 #include <stdarg.h>

@@ -51,11 +51,11 @@ int netRecvTimeout(char *err, int fd, int s);
 int netSetIpV6Only(char *err, int fd, int ipv6_only);
 int netNoSigPipe(char *err, int fd);
 
-void netSockAddrExInit(sockAddrEx* sa);
+void netSockAddrExInit(sockAddrEx *sa);
 int netTcpGetDestSockAddr(char *err, int fd, int ipv6_first, sockAddrEx *sa);
 int netUdpGetSockAddrEx(char *err, char *host, int port, int ipv6_first, sockAddrEx *sa);
-int netIpPresentBySockAddr(char *err, char *ip, int ip_len, int *port, sockAddrEx* sae);
-int netIpPresentByIpAddr(char *err, char *ip, int ip_len, void* addr, int is_ipv6);
+int netIpPresentBySockAddr(char *err, char *ip, int ip_len, int *port, sockAddrEx *sae);
+int netIpPresentByIpAddr(char *err, char *ip, int ip_len, void *addr, int is_ipv6);
 int netHostPortParse(char *addr, char *host, int *port);
 
 #endif /* __NET_H */

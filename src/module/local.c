@@ -1,7 +1,7 @@
 
+#include "../core/socks5.h"
 #include "module.h"
 #include "module_tcp.h"
-#include "../core/socks5.h"
 
 #include "redis/anet.h"
 
@@ -38,8 +38,8 @@ static void tcpServerInit();
 static void tcpServerExit();
 
 static int tcpClientReadHandler(tcpClient *client);
-static int handleSocks5Auth(tcpClient* client);
-static int handleSocks5Handshake(tcpClient* client);
+static int handleSocks5Auth(tcpClient *client);
+static int handleSocks5Handshake(tcpClient *client);
 static int handleSocks5Stream(tcpClient *client);
 static int shadowSocksHandshake(tcpClient *client);
 
@@ -68,8 +68,7 @@ static void localInit() {
 static void localRun() {
     char addr_info[ADDR_INFO_STR_LEN];
 
-    if (s.ts && anetFormatSock(s.ts->fd, addr_info, ADDR_INFO_STR_LEN) > 0)
-        LOGN("TCP server listen at: %s", addr_info);
+    if (s.ts && anetFormatSock(s.ts->fd, addr_info, ADDR_INFO_STR_LEN) > 0) LOGN("TCP server listen at: %s", addr_info);
 }
 
 static void localExit() {
@@ -95,7 +94,7 @@ static int tcpClientReadHandler(tcpClient *client) {
     return handleSocks5Stream(client);
 }
 
-static int handleSocks5Auth(tcpClient* client) {
+static int handleSocks5Auth(tcpClient *client) {
     char buf[NET_IOBUF_LEN];
     int readlen = NET_IOBUF_LEN;
     int cfd = client->re->id;
@@ -125,7 +124,7 @@ static int handleSocks5Auth(tcpClient* client) {
     // Must be noauth here
     socks5AuthResp auth_resp = {
         SVERSION,
-        METHOD_UNACCEPTABLE
+        METHOD_UNACCEPTABLE,
     };
     for (int i = 0; i < auth_req->nmethods; i++) {
         if (auth_req->methods[i] == METHOD_NOAUTH) {
@@ -142,7 +141,7 @@ static int handleSocks5Auth(tcpClient* client) {
     return TCP_OK;
 }
 
-static int handleSocks5Handshake(tcpClient* client) {
+static int handleSocks5Handshake(tcpClient *client) {
     char buf[NET_IOBUF_LEN];
     int readlen = NET_IOBUF_LEN;
     int cfd = client->re->id;
@@ -170,7 +169,7 @@ static int handleSocks5Handshake(tcpClient* client) {
         SVERSION,
         SOCKS5_REP_SUCCEEDED,
         0,
-        SOCKS5_ATYP_IPV4
+        SOCKS5_ATYP_IPV4,
     };
 
     if (request->cmd != SOCKS5_CMD_CONNECT) {
@@ -187,8 +186,8 @@ static int handleSocks5Handshake(tcpClient* client) {
     int addr_len = HOSTNAME_MAX_LEN;
     char addr[HOSTNAME_MAX_LEN];
 
-    char *addr_buf = buf+request_len-1;
-    int buf_len = nread-request_len+1;
+    char *addr_buf = buf + request_len - 1;
+    int buf_len = nread - request_len + 1;
     if (socks5AddrParse(addr_buf, buf_len, &addr_type, addr, &addr_len, &port) == SOCKS5_ERR) {
         LOGW("TCP client request error, long addrlen: %d or addrtype: %d", addr_len, addr_type);
         resp.rep = SOCKS5_REP_ADDRTYPE_NOT_SUPPORTED;
@@ -207,8 +206,7 @@ static int handleSocks5Handshake(tcpClient* client) {
     char resp_buf[NET_IOBUF_LEN];
     memcpy(resp_buf, &resp, sizeof(resp));
     memcpy(resp_buf + sizeof(resp), &sock_addr.sin_addr, sizeof(sock_addr.sin_addr));
-    memcpy(resp_buf + sizeof(resp) + sizeof(sock_addr.sin_addr),
-        &sock_addr.sin_port, sizeof(sock_addr.sin_port));
+    memcpy(resp_buf + sizeof(resp) + sizeof(sock_addr.sin_addr), &sock_addr.sin_port, sizeof(sock_addr.sin_port));
 
     int reply_size = sizeof(resp) + sizeof(sock_addr.sin_addr) + sizeof(sock_addr.sin_port);
 
@@ -222,7 +220,7 @@ static int handleSocks5Handshake(tcpClient* client) {
     char err[ANET_ERR_LEN];
     char *remote_addr = app->config->remote_addr;
     int remote_port = app->config->remote_port;
-    int rfd  = anetTcpConnect(err, remote_addr, remote_port);
+    int rfd = anetTcpConnect(err, remote_addr, remote_port);
     if (rfd == ANET_ERR) {
         LOGE("TCP remote [%s:%d] connenct error: %s", remote_addr, remote_port, err);
         return TCP_ERR;
@@ -309,14 +307,13 @@ static int shadowSocksHandshake(tcpClient *client) {
     assert(client->addr_buf);
 
     int ok = TCP_OK;
-    buffer_t tmp_buf = {0,0,0,NULL};
+    buffer_t tmp_buf = {0, 0, 0, NULL};
 
     balloc(&tmp_buf, NET_IOBUF_LEN);
     memcpy(tmp_buf.data, client->addr_buf, sdslen(client->addr_buf));
     tmp_buf.len = sdslen(client->addr_buf);
 
-    if (app->crypto->encrypt(&tmp_buf, client->e_ctx, NET_IOBUF_LEN))
-        LOGW("TCP client encrypt buffer error");
+    if (app->crypto->encrypt(&tmp_buf, client->e_ctx, NET_IOBUF_LEN)) LOGW("TCP client encrypt buffer error");
 
     int nwrite = write(client->remote->fd, tmp_buf.data, tmp_buf.len);
     if (nwrite != (int)tmp_buf.len) {

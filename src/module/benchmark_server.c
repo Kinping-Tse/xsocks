@@ -41,9 +41,7 @@ int main(int argc, char *argv[]) {
 
     // Listen
     tcpServer *server = tcpServerNew();
-    if (server == NULL) {
-        exit(EXIT_ERR);
-    }
+    if (server == NULL) exit(EXIT_ERR);
 
     LOGD("Use event type: %s", eventGetApiName());
     LOGI("Use server addr: %s:%d", app->host, app->port);
@@ -87,11 +85,9 @@ static void parseOptions(int argc, char *argv[]) {
             case 's': app->host = optarg; break;
             case 'p': app->port = atoi(optarg); break;
             case 't': app->timeout = atoi(optarg); break;
-            case 'h': help = 1;  break;
+            case 'h': help = 1; break;
             case '?':
-            default:
-                help = 1;
-                break;
+            default: help = 1; break;
         }
     }
 
@@ -102,13 +98,11 @@ static void parseOptions(int argc, char *argv[]) {
 }
 
 static void usage() {
-    printf(
-"Usage: xs-benchmark-server\n\n"
-" [-s <hostname>]      Server hostname (default 127.0.0.1)\n"
-" [-p <port>]          Server port (default 19999)\n"
-" [-t <timeout>]       Socket timeout (default 60)\n"
-" [-h, --help]         Print this help\n"
-    );
+    printf("Usage: xs-benchmark-server\n\n"
+           " [-s <hostname>]      Server hostname (default 127.0.0.1)\n"
+           " [-p <port>]          Server port (default 19999)\n"
+           " [-t <timeout>]       Socket timeout (default 60)\n"
+           " [-h, --help]         Print this help\n");
 }
 
 tcpServer *tcpServerNew() {

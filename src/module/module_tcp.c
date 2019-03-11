@@ -1,6 +1,6 @@
 
-#include "module.h"
 #include "module_tcp.h"
+#include "module.h"
 
 #include "redis/anet.h"
 
@@ -29,9 +29,7 @@ tcpServer *moduleTcpServerCreate(char *host, int port, clientReadHandler handler
     }
 
     tcpServer *server = tcpServerNew(fd);
-    if (server) {
-        server->crHandler = handler;
-    }
+    if (server) { server->crHandler = handler; }
     return server;
 }
 
@@ -58,7 +56,7 @@ void moduleTcpServerFree(tcpServer *server) {
     xs_free(server);
 }
 
-static void tcpServerReadHandler(event* e) {
+static void tcpServerReadHandler(event *e) {
     tcpServer *server = e->data;
 
     int cfd, cport;
@@ -67,8 +65,7 @@ static void tcpServerReadHandler(event* e) {
 
     cfd = anetTcpAccept(err, e->id, cip, sizeof(cip), &cport);
     if (cfd == ANET_ERR) {
-        if (errno != EWOULDBLOCK)
-            LOGW("TCP server accept: %s", err);
+        if (errno != EWOULDBLOCK) LOGW("TCP server accept: %s", err);
 
         return;
     }
@@ -110,8 +107,7 @@ tcpClient *tcpClientNew(int fd) {
     client->fd = fd;
     client->re = NEW_EVENT_READ(fd, tcpClientReadHandler, client);
     client->we = NEW_EVENT_WRITE(fd, tcpClientWriteHandler, client);
-    client->te = NEW_EVENT_ONCE(app->config->timeout * MILLISECOND_UNIT,
-                                tcpClientReadTimeHandler, client);
+    client->te = NEW_EVENT_ONCE(app->config->timeout * MILLISECOND_UNIT, tcpClientReadTimeHandler, client);
     client->server = NULL;
     client->remote = NULL;
     client->stage = STAGE_INIT;
@@ -155,7 +151,6 @@ void tcpClientFree(tcpClient *client) {
 }
 
 static void tcpClientReadHandler(event *e) {
-
     tcpClient *client = e->data;
 
     DEL_EVENT(client->te);

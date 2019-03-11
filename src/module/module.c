@@ -65,7 +65,7 @@ static void moduleInit(int type, moduleHook hook, module *m, int argc, char *arg
 }
 
 static void moduleRun() {
-    xsocksConfig* config = mod->config;
+    xsocksConfig *config = mod->config;
 
     LOGN("Use crypto method: %s", config->method);
     LOGN("Use crypto password: %s", config->password);
@@ -133,9 +133,8 @@ static void moduleUsage() {
     eprintf("                                  The default cipher is aes-256-cfb.\n");
     eprintf("\n");
     if (module == MODULE_TUNNEL) {
-        eprintf(
-            "       -L <addr>:<port>           Destination server address and port\n"
-            "                                  for local port forwarding.\n");
+        eprintf("       -L <addr>:<port>           Destination server address and port\n"
+                "                                  for local port forwarding.\n");
     }
     // eprintf("       [-a <user>]                Run as another user.\n");
     eprintf("       [-f <pid_file>]            The file path to store pid.\n");
@@ -148,14 +147,13 @@ static void moduleUsage() {
     eprintf("       [-b <local_address>]       Local address to bind.\n");
     eprintf("\n");
     eprintf("       [-u]                       Enable UDP relay.\n");
-    if (module == MODULE_REDIR)
-        eprintf("                                  TPROXY is required in redir mode.\n");
+    if (module == MODULE_REDIR) eprintf("                                  TPROXY is required in redir mode.\n");
     eprintf("       [-U]                       Enable UDP relay and disable TCP relay.\n");
     eprintf("       [-6]                       Use IPv6 address first.\n");
     eprintf("\n");
     // if (module == MODULE_REMOTE)
-        // eprintf(
-            // "       [-d <addr>]                Name servers for internal DNS resolver.\n");
+    // eprintf(
+    // "       [-d <addr>]                Name servers for internal DNS resolver.\n");
 
     // eprintf("       [--reuse-port]             Enable port reuse.\n");
 #if defined(MODULE_REMOTE) || defined(MODULE_LOCAL) || defined(MODULE_REDIR)

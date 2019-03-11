@@ -1,6 +1,7 @@
 
 #include "module.h"
 #include "module_udp.h"
+
 #include "../core/socks5.h"
 
 #include "redis/anet.h"
@@ -70,8 +71,7 @@ static void tunnelRun() {
     LOGI("Use tunnel addr: %s:%d", app->config->tunnel_addr, app->config->tunnel_port);
 
     char addr_info[ADDR_INFO_STR_LEN];
-    if (s.us && anetFormatSock(s.us->fd, addr_info, ADDR_INFO_STR_LEN) > 0)
-        LOGN("UDP server read at: %s", addr_info);
+    if (s.us && anetFormatSock(s.us->fd, addr_info, ADDR_INFO_STR_LEN) > 0) LOGN("UDP server read at: %s", addr_info);
 }
 
 static void tunnelExit() {
@@ -117,8 +117,8 @@ static int udpServerHookProcess(void *data) {
     }
 
     // Get remote addr from config
-    if (netUdpGetSockAddrEx(err, app->config->remote_addr, app->config->remote_port,
-                            app->config->ipv6_first, &client->sa_remote) == NET_ERR) {
+    if (netUdpGetSockAddrEx(err, app->config->remote_addr, app->config->remote_port, app->config->ipv6_first,
+                            &client->sa_remote) == NET_ERR) {
         LOGW("Get UDP remote sockaddr error: %s", err);
         return UDP_ERR;
     }

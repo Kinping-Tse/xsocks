@@ -3,9 +3,10 @@
 #define __PROTOCOL_PROXY_H
 
 #include "../core/common.h"
+
+#include "../core/error.h"
 #include "../core/net.h"
 #include "../core/time.h"
-#include "../core/error.h"
 #include "../core/utils.h"
 #include "../event/event.h"
 

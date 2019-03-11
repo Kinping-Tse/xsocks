@@ -1,5 +1,6 @@
 
 #include "../core/common.h"
+
 #include "event.h"
 
 #ifdef USE_AE
@@ -11,7 +12,7 @@
 #endif
 
 eventLoop *eventLoopNew() {
-    eventLoop* el = xs_calloc(sizeof(*el));
+    eventLoop *el = xs_calloc(sizeof(*el));
     el->ctx = eventApiNewLoop();
     return el;
 }
@@ -30,7 +31,7 @@ void eventLoopStop(eventLoop *el) {
 }
 
 event *eventNew(int id, int type, int flags, eventHandler handler, void *data) {
-    event* e = xs_calloc(sizeof(*e));
+    event *e = xs_calloc(sizeof(*e));
     e->id = id;
     e->type = type;
     e->flags = flags;
@@ -41,21 +42,21 @@ event *eventNew(int id, int type, int flags, eventHandler handler, void *data) {
     return e;
 }
 
-void eventFree(event* e) {
+void eventFree(event *e) {
     if (!e) return;
 
     eventApiFreeEvent(e->ctx);
     xs_free(e);
 }
 
-int eventAdd(eventLoop *el, event* e) {
+int eventAdd(eventLoop *el, event *e) {
     if (e->el) return EVENT_OK;
 
     e->el = el;
     return eventApiAddEvent(el->ctx, e->ctx);
 }
 
-void eventDel(event* e) {
+void eventDel(event *e) {
     if (!e || !e->el) return;
 
     eventApiDelEvent(e->el->ctx, e->ctx);

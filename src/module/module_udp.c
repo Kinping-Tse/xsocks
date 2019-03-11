@@ -1,6 +1,6 @@
 
-#include "module.h"
 #include "module_udp.h"
+#include "module.h"
 
 #include "redis/anet.h"
 
@@ -102,8 +102,8 @@ static void udpServerReadHandler(event *e) {
     int rfd = client->remote->fd;
     int nwrite;
 
-    nwrite = netUdpWrite(err, rfd, client->buf.data+client->buf_off,
-                         client->buf.len-client->buf_off, &client->sa_remote);
+    nwrite = netUdpWrite(err, rfd, client->buf.data + client->buf_off, client->buf.len - client->buf_off,
+                         &client->sa_remote);
     if (nwrite == -1) {
         LOGW("UDP server write error: %s", err);
         goto error;
@@ -185,8 +185,7 @@ static udpRemote *udpRemoteNew(int fd) {
     if (remote) {
         remote->fd = fd;
         remote->re = NEW_EVENT_READ(fd, udpRemoteReadHandler, remote);
-        remote->te = NEW_EVENT_ONCE(app->config->timeout * MILLISECOND_UNIT_F,
-                                    udpRemoteReadTimeHandler, remote);
+        remote->te = NEW_EVENT_ONCE(app->config->timeout * MILLISECOND_UNIT_F, udpRemoteReadTimeHandler, remote);
 
         bzero(&remote->buf, sizeof(remote->buf));
         balloc(&remote->buf, NET_IOBUF_LEN);
@@ -247,8 +246,8 @@ static void udpRemoteReadHandler(event *e) {
     int cfd = client->server->fd;
     int nwrite;
 
-    nwrite = netUdpWrite(err, cfd, remote->buf.data+remote->buf_off,
-                         remote->buf.len-remote->buf_off, &client->sa_client);
+    nwrite = netUdpWrite(err, cfd, remote->buf.data + remote->buf_off, remote->buf.len - remote->buf_off,
+                         &client->sa_client);
     if (nwrite == -1) {
         LOGW("UDP remote write error: %s", err);
         goto error;

@@ -1,6 +1,7 @@
 
 #include "module.h"
 #include "module_tcp.h"
+
 #include "../core/socks5.h"
 
 #include "redis/anet.h"
@@ -23,7 +24,11 @@ static server s;
 module *app = (module *)&s;
 
 int main(int argc, char *argv[]) {
-    moduleHook hook = { .init = redirInit, .run = redirRun, .exit = redirExit, };
+    moduleHook hook = {
+        .init = redirInit,
+        .run = redirRun,
+        .exit = redirExit,
+    };
 
     return moduleMain(MODULE_REDIR, hook, app, argc, argv);
 }
@@ -44,8 +49,7 @@ static void redirInit() {
 static void redirRun() {
     char addr_info[ADDR_INFO_STR_LEN];
 
-    if (s.ts && anetFormatSock(s.ts->fd, addr_info, ADDR_INFO_STR_LEN) > 0)
-        LOGN("TCP server listen at: %s", addr_info);
+    if (s.ts && anetFormatSock(s.ts->fd, addr_info, ADDR_INFO_STR_LEN) > 0) LOGN("TCP server listen at: %s", addr_info);
 }
 
 static void redirExit() {
@@ -98,8 +102,8 @@ static int tcpClientReadHandler(tcpClient *client) {
         }
 
         anetFormatAddr(client->remote_addr_info, ADDR_INFO_STR_LEN, ip, port);
-        LOGI("TCP client (%d) [%s] request remote addr [%s]", client->fd,
-             client->client_addr_info, client->remote_addr_info);
+        LOGI("TCP client (%d) [%s] request remote addr [%s]", client->fd, client->client_addr_info,
+             client->remote_addr_info);
 
         sds addr = socks5AddrInit(NULL, ip, port);
         int addr_len = sdslen(addr);

@@ -1,9 +1,9 @@
 
+#include "config.h"
 #include "common.h"
 #include "error.h"
-#include "utils.h"
-#include "config.h"
 #include "net.h"
+#include "utils.h"
 
 #include "json-parser/json.h"
 #include "redis/sds.h"
@@ -20,7 +20,7 @@ configEnum loglevel_enum[] = {
     {"notice", LOGLEVEL_NOTICE},
     {"warning", LOGLEVEL_WARNING},
     {"error", LOGLEVEL_ERROR},
-    {NULL, 0}
+    {NULL, 0},
 };
 
 #define configStringDup(d, s) \
@@ -155,7 +155,7 @@ void configLoad(xsocksConfig *config, char *filename) {
     if (obj->type != json_object) goto loaderr;
 
     for (uint64_t i = 0; i < obj->u.object.length; i++) {
-        char *name        = obj->u.object.values[i].name;
+        char *name = obj->u.object.values[i].name;
         json_value *value = obj->u.object.values[i].value;
 
         if (strcmp(name, "server") == 0) {
@@ -179,12 +179,10 @@ void configLoad(xsocksConfig *config, char *filename) {
         } else if (strcmp(name, "user") == 0) {
             // conf.user = to_string(value);
         } else if (strcmp(name, "fast_open") == 0) {
-            check_json_value_type(value, json_boolean,
-                                  "invalid config file: option 'fast_open' must be a boolean");
+            check_json_value_type(value, json_boolean, "invalid config file: option 'fast_open' must be a boolean");
             config->fast_open = to_integer(value);
         } else if (strcmp(name, "reuse_port") == 0) {
-            check_json_value_type(value, json_boolean,
-                                  "invalid config file: option 'reuse_port' must be a boolean");
+            check_json_value_type(value, json_boolean, "invalid config file: option 'reuse_port' must be a boolean");
             config->reuse_port = to_integer(value);
         } else if (strcmp(name, "logfile") == 0) {
             config->logfile = to_string(value);
@@ -200,14 +198,12 @@ void configLoad(xsocksConfig *config, char *filename) {
                 goto loaderr;
             }
         } else if (strcmp(name, "logfile_line") == 0) {
-            check_json_value_type(value, json_boolean,
-                                  "invalid config file: option 'logfile_line' must be a boolean");
+            check_json_value_type(value, json_boolean, "invalid config file: option 'logfile_line' must be a boolean");
             config->logfile_line = to_integer(value);
         } else if (strcmp(name, "pidfile") == 0) {
             config->pidfile = to_string(value);
         } else if (strcmp(name, "daemonize") == 0) {
-            check_json_value_type(value, json_boolean,
-                                  "invalid config file: option 'daemonize' must be a boolean");
+            check_json_value_type(value, json_boolean, "invalid config file: option 'daemonize' must be a boolean");
             config->daemonize = to_integer(value);
         } else if (strcmp(name, "tunnel_address") == 0) {
             config->tunnel_address = to_string(value);
@@ -227,28 +223,23 @@ void configLoad(xsocksConfig *config, char *filename) {
 
             xs_free(mode_str);
         } else if (strcmp(name, "mtu") == 0) {
-            check_json_value_type(value, json_integer,
-                                  "invalid config file: option 'mtu' must be an integer");
+            check_json_value_type(value, json_integer, "invalid config file: option 'mtu' must be an integer");
             config->mtu = to_integer(value);
         } else if (strcmp(name, "ipv6_first") == 0) {
-            check_json_value_type(value, json_boolean,
-                                  "invalid config file: option 'ipv6_first' must be a boolean");
+            check_json_value_type(value, json_boolean, "invalid config file: option 'ipv6_first' must be a boolean");
             config->ipv6_first = to_integer(value);
         } else if (strcmp(name, "ipv6_only") == 0) {
-            check_json_value_type(value, json_boolean,
-                                  "invalid config file: option 'ipv6_only' must be a boolean");
+            check_json_value_type(value, json_boolean, "invalid config file: option 'ipv6_only' must be a boolean");
             config->ipv6_only = to_integer(value);
         } else if (strcmp(name, "use_syslog") == 0) {
-            check_json_value_type(value, json_boolean,
-                                  "invalid config file: option 'use_syslog' must be a boolean");
+            check_json_value_type(value, json_boolean, "invalid config file: option 'use_syslog' must be a boolean");
             config->use_syslog = to_integer(value);
         } else if (strcmp(name, "no_delay") == 0) {
-            check_json_value_type(
-                value, json_boolean,
-                "invalid config file: option 'no_delay' must be a boolean");
+            check_json_value_type(value, json_boolean, "invalid config file: option 'no_delay' must be a boolean");
             config->no_delay = to_integer(value);
         } else {
-            err = sdscatprintf(sdsempty(), "Bad directive: %s", name); goto loaderr;
+            err = sdscatprintf(sdsempty(), "Bad directive: %s", name);
+            goto loaderr;
         }
     }
 
@@ -263,7 +254,7 @@ loaderr:
     FATAL(err);
 }
 
-int configParse(xsocksConfig* config, int argc, char *argv[]) {
+int configParse(xsocksConfig *config, int argc, char *argv[]) {
     struct option long_options[] = {
         { "help",        no_argument,       NULL, GETOPT_VAL_HELP        },
         { "reuse-port",  no_argument,       NULL, GETOPT_VAL_REUSE_PORT  },
@@ -274,7 +265,7 @@ int configParse(xsocksConfig* config, int argc, char *argv[]) {
         { "no-delay",    no_argument,       NULL, GETOPT_VAL_NODELAY     },
         { "password",    required_argument, NULL, GETOPT_VAL_PASSWORD    },
         { "key",         required_argument, NULL, GETOPT_VAL_KEY         },
-        { NULL,          0,                 NULL, 0                      }
+        { NULL,          0,                 NULL, 0                      },
     };
 
     char *conf_path = NULL;
@@ -302,8 +293,7 @@ int configParse(xsocksConfig* config, int argc, char *argv[]) {
     char *err = NULL;
     int c;
 
-    while ((c = getopt_long(argc, argv, "f:s:p:l:L:k:t:m:c:b:huUv6",
-                            long_options, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "f:s:p:l:L:k:t:m:c:b:huUv6", long_options, NULL)) != -1) {
         switch (c) {
             case GETOPT_VAL_FAST_OPEN: fast_open = 1; break;
             case GETOPT_VAL_MTU: mtu = atoi(optarg); break;
@@ -316,17 +306,21 @@ int configParse(xsocksConfig* config, int argc, char *argv[]) {
                     err = "Invalid log level. "
                           "Must be one of debug, info, notice, warning, error";
                 break;
-            case GETOPT_VAL_LOGFILE: logfile = optarg; testLogfile(&err, logfile); break;
+            case GETOPT_VAL_LOGFILE:
+                logfile = optarg;
+                testLogfile(&err, logfile);
+                break;
             case 's': remote_addr = optarg; break;
             case 'p': remote_port = atoi(optarg); break;
             case 'b': local_addr = optarg; break;
             case 'l': local_port = atoi(optarg); break;
             case 'L': tunnel_address = optarg; break;
             case GETOPT_VAL_PASSWORD:
-            case 'k':
-                password = optarg;
+            case 'k': password = optarg; break;
+            case 'f':
+                daemonize = 1;
+                pidfile = optarg;
                 break;
-            case 'f': daemonize = 1; pidfile = optarg; break;
             case 't': timeout = atoi(optarg); break;
             case 'm': method = optarg; break;
             case 'c': conf_path = optarg; break;
@@ -377,7 +371,7 @@ int configParse(xsocksConfig* config, int argc, char *argv[]) {
     return help ? CONFIG_ERR : CONFIG_OK;
 }
 
-void configFree(xsocksConfig* config) {
+void configFree(xsocksConfig *config) {
     xs_free(config->pidfile);
     xs_free(config->remote_addr);
     xs_free(config->local_addr);

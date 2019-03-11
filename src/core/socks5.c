@@ -1,8 +1,9 @@
 
 #include "common.h"
+
+#include "socks5.h"
 #include "error.h"
 #include "net.h"
-#include "socks5.h"
 
 static int socks5HostParse(char *host) {
     if (strchr(host, ':')) {
@@ -10,12 +11,18 @@ static int socks5HostParse(char *host) {
     } else {
         for (char *c = host; *c != '\0'; c++) {
             switch (*c) {
-                case '0': case '1': case '2': case '3': case '4':
-                case '5': case '6': case '7': case '8': case '9':
-                case '.':
-                    break;
-                default:
-                    return SOCKS5_ATYP_DOMAIN;
+                case '0':
+                case '1':
+                case '2':
+                case '3':
+                case '4':
+                case '5':
+                case '6':
+                case '7':
+                case '8':
+                case '9':
+                case '.': break;
+                default: return SOCKS5_ATYP_DOMAIN;
             }
         }
         return SOCKS5_ATYP_IPV4;
@@ -73,8 +80,7 @@ error:
     return NULL;
 }
 
-int socks5AddrParse(char *addr_buf, int buf_len, int *atyp,
-                    char *host, int *host_len, int *port) {
+int socks5AddrParse(char *addr_buf, int buf_len, int *atyp, char *host, int *host_len, int *port) {
     int real_buf_len = 0;
     int addr_type = *addr_buf++;
     buf_len--;
