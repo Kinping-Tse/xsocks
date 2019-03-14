@@ -126,7 +126,8 @@ static int tcpShadowsocksConnWrite(void *data, char *buf, int buf_len) {
         }
 
         c->state = SHADOWSOCKS_STATE_HANDSHAKE;
-    } else if (c->state == SHADOWSOCKS_STATE_HANDSHAKE) c->state = SHADOWSOCKS_STATE_STREAM;
+    } else if (c->state == SHADOWSOCKS_STATE_HANDSHAKE)
+        c->state = SHADOWSOCKS_STATE_STREAM;
 
     // If don't copy here, it will crash when free
     memcpy(c->tmp_buf->data, buf, buf_len);

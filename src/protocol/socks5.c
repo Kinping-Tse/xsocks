@@ -3,8 +3,8 @@
 
 #include "socks5.h"
 
-#include "../core/utils.h"
 #include "../core/net.h"
+#include "../core/utils.h"
 
 static int socks5HostParse(char *host) {
     if (isIPv6Addr(host)) {
@@ -112,7 +112,7 @@ int socks5AddrParse(char *addr_buf, int buf_len, int *atyp, char *host, int *hos
     }
 
     if (host_len) *host_len = addr_len;
-    if (port) *port = ntohs(*(uint16_t *)(addr_buf+addr_len));
+    if (port) *port = ntohs(*(uint16_t *)(addr_buf + addr_len));
 
     return real_buf_len;
 }

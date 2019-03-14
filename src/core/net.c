@@ -1,8 +1,8 @@
 
 #include "common.h"
 
-#include "net.h"
 #include "error.h"
+#include "net.h"
 
 #include "redis/anet.h"
 

@@ -3,9 +3,9 @@
 #include "module_udp.h"
 
 #undef ADD_EVENT
-#include "../protocol/tcp_shadowsocks.h"
-#include "../protocol/tcp_raw.h"
 #include "../protocol/socks5.h"
+#include "../protocol/tcp_raw.h"
+#include "../protocol/tcp_shadowsocks.h"
 
 #include "redis/anet.h"
 

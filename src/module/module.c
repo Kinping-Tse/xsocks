@@ -4,8 +4,6 @@
 
 #include "shadowsocks-libev/ppbloom.h"
 
-#include <signal.h>
-
 static module *mod;
 
 #define eprintf(...) fprintf(stderr, __VA_ARGS__)
