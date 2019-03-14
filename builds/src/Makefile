@@ -33,6 +33,10 @@ EXT_CFLAGS = -I$(DEPS_PATH) $(LIBSODIUM_HEADER_CFLAGS) -I$(MBEDTLS_PATH)/include
 EXT_LDFLAGS =
 EXT_LIBS =
 
+ifeq ($(uname_S), Linux)
+	EXT_LIBS += -ldl
+endif
+
 ifeq ($(LINK_MODE), static)
 EXT_LIBS += $(REDIS_PATH)/libredis.a \
 	$(SHADOWSOCKS_LIBEV_PATH)/libshadowsocks-libev.a \
@@ -43,7 +47,7 @@ EXT_LIBS += $(REDIS_PATH)/libredis.a \
 	ifeq ($(MALLOC), jemalloc)
 		EXT_LIBS += $(JEMALLOC_PATH)/lib/libjemalloc.a
 		ifeq ($(uname_S), Linux)
-		EXT_LIBS += -pthread -ldl -lrt
+		EXT_LIBS += -pthread -lrt
 		endif
 	endif
 endif

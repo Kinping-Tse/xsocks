@@ -25,7 +25,7 @@ int isIPv6Addr(char *ip) {
 }
 
 int netTcpRead(char *err, int fd, char *buf, int buflen, int *closed) {
-    int nread;
+    int nread = 0;
     int total_len = 0;
     if (closed) *closed = 0;
 
@@ -51,7 +51,7 @@ int netTcpRead(char *err, int fd, char *buf, int buflen, int *closed) {
 }
 
 int netTcpWrite(char *err, int fd, char *buf, int buflen) {
-    int nwrite;
+    int nwrite = 0;
     int total_len = 0;
 
     while (total_len < buflen) {
