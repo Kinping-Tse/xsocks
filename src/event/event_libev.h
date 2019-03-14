@@ -49,7 +49,9 @@ static void eventSignalHandler(EV_P_ struct ev_signal *w, int revents) {
     }
 }
 
-static eventLoopContext *eventApiNewLoop() {
+static eventLoopContext *eventApiNewLoop(int size) {
+    UNUSED(size);
+
     eventLoopContext *ctx = xs_calloc(sizeof(*ctx));
 
 #if EV_MULTIPLICITY
@@ -78,8 +80,10 @@ static eventContext *eventApiNewEvent(event *e) {
         ev_io_init(&ctx->w.io, eventIoHandler, e->id, events);
         ctx->w.io.data = e;
     } else if (e->type == EVENT_TYPE_TIME) {
-        int repeat = e->flags == EVENT_FLAG_TIME_ONCE ? 0 : e->id;
-        ev_timer_init(&ctx->w.t, eventTimeHandler, e->id/MILLISECOND_UNIT_F, repeat);
+        ev_tstamp time = e->id / MILLISECOND_UNIT_F;
+        ev_tstamp repeat = e->flags == EVENT_FLAG_TIME_ONCE ? 0 : time;
+
+        ev_timer_init(&ctx->w.t, eventTimeHandler, time, repeat);
         ctx->w.t.data = e;
     } else if (e->type == EVENT_TYPE_SIGNAL) {
         ev_signal_init(&ctx->w.sig, eventSignalHandler, e->id);

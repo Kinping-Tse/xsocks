@@ -48,9 +48,9 @@ static void eventSignalHandler(int signal, siginfo_t *siginfo, void *data) {
     e->handler(e);
 }
 
-static eventLoopContext *eventApiNewLoop() {
+static eventLoopContext *eventApiNewLoop(int size) {
     eventLoopContext *ctx = xs_calloc(sizeof(*ctx));
-    ctx->el = aeCreateEventLoop(64);
+    ctx->el = aeCreateEventLoop(size);
 
     return ctx;
 }

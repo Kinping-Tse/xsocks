@@ -1,7 +1,8 @@
 
-#include "../core/socks5.h"
 #include "module.h"
+
 #include "module_tcp.h"
+#include "../protocol/socks5.h"
 
 #include "redis/anet.h"
 

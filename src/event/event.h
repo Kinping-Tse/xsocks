@@ -42,9 +42,9 @@ typedef struct event {
 #define NEW_EVENT_REPEAT(timeout, handler, data) eventNew(timeout, EVENT_TYPE_TIME, EVENT_FLAG_TIME_REPEAT, handler, data)
 #define NEW_EVENT_SIGNAL(signal, handler, data) eventNew(signal, EVENT_TYPE_SIGNAL, 0, handler, data)
 #define DEL_EVENT(e) eventDel(e)
-#define CLR_EVENT(e) do { eventDel(e); eventFree(e); } while (0)
+#define CLR_EVENT(e) do { eventDel(e); eventFree(e); e = NULL; } while (0)
 
-eventLoop *eventLoopNew();
+eventLoop *eventLoopNew(int size);
 void eventLoopFree(eventLoop *el);
 void eventLoopRun(eventLoop *el);
 void eventLoopStop(eventLoop *el);

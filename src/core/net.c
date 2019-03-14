@@ -3,7 +3,6 @@
 
 #include "net.h"
 #include "error.h"
-#include "utils.h"
 
 #include "redis/anet.h"
 
@@ -20,6 +19,10 @@
 static int _netUdpServer(char *err, int port, char *bindaddr, int af);
 static int anetSetReuseAddr(char *err, int fd);
 static int anetBind(char *err, int s, sockAddr *saddr, socklen_t slen);
+
+int isIPv6Addr(char *ip) {
+    return strchr(ip, ':') ? 1 : 0;
+}
 
 int netTcpRead(char *err, int fd, char *buf, int buflen, int *closed) {
     int nread;

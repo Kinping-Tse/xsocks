@@ -72,6 +72,8 @@ static void tcpClientReset(tcpClient *client);
 static void tcpClientOnRead(void *data);
 static void tcpClientOnWrite(void *data);
 static void tcpClientOnConnect(void *data, int status);
+static void tcpClientOnClose(void *data);
+static void tcpClientOnError(void *data);
 static void tcpClientOnTimeout(void *data);
 
 int main(int argc, char *argv[]) {
@@ -83,7 +85,7 @@ int main(int argc, char *argv[]) {
     app->duration_list = xs_calloc(sizeof(double) * app->requests);
 
     LOGI("Use client type: %s", app->type_str);
-    LOGD("Use event type: %s", eventGetApiName());
+    LOGI("Use event type: %s", eventGetApiName());
     LOGI("Use remote addr: %s:%d", app->remote_addr, app->remote_port);
     LOGI("Use timeout: %ds", app->timeout);
     LOGI("Use requests: %d", app->requests);
@@ -92,10 +94,10 @@ int main(int argc, char *argv[]) {
     LOGI("Use keepalive: %d", app->keepalive);
 
     if (app->type == CLIENT_TYPE_SHADOWSOCKS) {
-        LOGD("Use tunnel addr: %s:%d", app->tunnel_addr, app->tunnel_port);
-        LOGD("Use crypto method: %s", app->method);
-        LOGD("Use crypto password: %s", app->password);
-        LOGD("Use crypto key: %s", app->key);
+        LOGI("Use tunnel addr: %s:%d", app->tunnel_addr, app->tunnel_port);
+        LOGI("Use crypto method: %s", app->method);
+        LOGI("Use crypto password: %s", app->password);
+        LOGI("Use crypto key: %s", app->key);
     }
 
     benchmark();
@@ -128,9 +130,11 @@ static void initClient() {
 
     logger *log = getLogger();
     log->level = LOGLEVEL_DEBUG;
+    // log->level = LOGLEVEL_INFO;
     log->color_enabled = 1;
+    // log->file_line_enabled = 1;
 
-    app->el = eventLoopNew();
+    app->el = eventLoopNew(1024*10);
     app->te = NEW_EVENT_REPEAT(250, showThroughput, NULL);
     ADD_EVENT_TIME(app);
 }
@@ -248,11 +252,10 @@ static void showReport() {
 static void showThroughput(event *e) {
     UNUSED(e);
 
-    //////
-    // if (app->liveclients == 0 && app->requests_finished != app->requests) {
-    //     fprintf(stderr,"All clients disconnected... aborting.\n");
-    //     exit(1);
-    // }
+    if (app->liveclients == 0 && app->requests_finished != app->requests) {
+        LOGE("All clients disconnected... aborting");
+        exit(EXIT_ERR);
+    }
 
     double dt = timerStop(app->start_time, SECOND_UNIT, NULL);
     double rps = app->requests_finished / dt;
@@ -262,28 +265,36 @@ static void showThroughput(event *e) {
 }
 
 static tcpClient *tcpClientCreate() {
-    tcpClient *client = xs_calloc(sizeof(*client));
-    if (!client) {
+    char err[XS_ERR_LEN];
+    tcpClient *client;
+    tcpConn *conn;
+
+    if ((client = xs_calloc(sizeof(*client))) == NULL) {
         LOGW("TCP client is NULL, please check the memory");
         return NULL;
     }
 
-    char err[XS_ERR_LEN];
-    tcpConn *conn = tcpConnect(err, app->el, app->remote_addr, app->remote_port, app->timeout, client);
+    conn = tcpConnect(err, app->el, app->remote_addr, app->remote_port, app->timeout, client);
     if (!conn) {
         LOGW("TCP client connect error: %s", err);
         exit(EXIT_ERR);
     }
-    client->conn = conn;
+    if (app->type == CLIENT_TYPE_RAW)
+        client->conn = (tcpConn *)tcpRawConnNew(conn);
+    else {
+        client->conn = (tcpConn *)tcpShadowsocksConnNew(conn, app->crypto);
+        tcpShadowsocksConnInit((tcpShadowsocksConn *)client->conn, app->tunnel_addr, app->tunnel_port);
+    }
 
-    TCP_ON_READ(conn, tcpClientOnRead);
-    TCP_ON_WRITE(conn, tcpClientOnWrite);
-    TCP_ON_CONN(conn, tcpClientOnConnect);
-    TCP_ON_TIME(conn, tcpClientOnTimeout);
-
-    ADD_EVENT_TIME(conn);
+    TCP_ON_READ(client->conn, tcpClientOnRead);
+    TCP_ON_WRITE(client->conn, tcpClientOnWrite);
+    TCP_ON_CONNECT(client->conn, tcpClientOnConnect);
+    TCP_ON_CLOSE(client->conn, tcpClientOnClose);
+    TCP_ON_ERROR(client->conn, tcpClientOnError);
+    TCP_ON_TIMEOUT(client->conn, tcpClientOnTimeout);
 
     app->liveclients++;
+    LOGI("TCP client current count: %d", app->liveclients);
 
     return client;
 }
@@ -296,6 +307,7 @@ static void tcpClientFree(tcpClient *client) {
     xs_free(client);
 
     app->liveclients--;
+    LOGI("TCP client current count: %d", app->liveclients);
 }
 
 static void tcpClientDone(tcpClient *client) {
@@ -317,7 +329,6 @@ static void tcpClientReset(tcpClient *client) {
     tcpConn *conn = client->conn;
 
     DEL_EVENT_READ(conn);
-    DEL_EVENT_TIME(conn);
     ADD_EVENT_WRITE(conn);
     conn->wbuf_len = 0;
     conn->rbuf_off = 0;
@@ -343,16 +354,31 @@ static void tcpClientOnConnect(void *data, int status) {
 
     if (status == TCP_ERR) {
         LOGE("TCP client connect error: %s", conn->errstr);
-        tcpClientFree(client);
         exit(EXIT_ERR);
     }
 
-    if (app->type == CLIENT_TYPE_RAW)
-        client->conn = (tcpConn *)tcpRawConnNew(conn);
-    else
-        client->conn = (tcpConn *)tcpShadowsocksConnNew(conn, app->crypto, app->tunnel_addr, app->tunnel_port);
+    LOGD("TCP client %s connect success", conn->addrinfo);
+    LOGI("TCP client current count: %d", app->liveclients);
 
     tcpClientReset(client);
+}
+
+static void tcpClientOnClose(void *data) {
+    tcpClient *client = data;
+    tcpConn *conn = client->conn;
+
+    LOGD("TCP client %s closed connection", tcpGetAddrinfo(conn));
+
+    tcpClientFree(client);
+    createMissingClients();
+}
+
+static void tcpClientOnError(void *data) {
+    tcpClient *client = data;
+    tcpConn *conn = client->conn;
+
+    LOGW("TCP client %s %s error: %s", conn->addrinfo,
+         conn->err == TCP_ERROR_READ ? "read" : "write", conn->errstr);
 }
 
 static void tcpClientOnTimeout(void *data) {
@@ -363,32 +389,20 @@ static void tcpClientOnTimeout(void *data) {
         LOGI("TCP client %s read timeout", conn->addrinfo);
     else
         LOGE("TCP client %s connect timeout", conn->addrinfo);
-
-    tcpClientFree(client);
-    exit(EXIT_ERR);
 }
 
 static void tcpClientOnRead(void *data) {
     tcpClient *client = data;
     tcpConn *conn = client->conn;
 
-    DEL_EVENT_TIME(conn);
-
     char *buf = conn->rbuf;
     int buflen = conn->rbuf_len;
     int nread;
-    char *addrinfo = conn->addrinfo;
 
+    bzero(buf, buflen);
     nread = TCP_READ(conn, buf, buflen);
-    if (nread == TCP_AGAIN)
-        goto end;
-    else if (nread == TCP_ERR) {
-        LOGW("TCP client %s read error: %s", addrinfo, conn->errstr);
-        goto error;
-    } else if (nread == 0) {
-        LOGD("TCP client %s closed connection", addrinfo);
-        goto error;
-    }
+    if (nread <= 0) return;
+
     conn->rbuf_off += nread;
 
     if (buf[0] != 'x') {
@@ -396,7 +410,9 @@ static void tcpClientOnRead(void *data) {
         exit(EXIT_ERR);
     }
 
-    if (conn->rbuf_off == app->buf_size) {
+    if (conn->rbuf_off >= app->buf_size) {
+        if (conn->rbuf_off > app->buf_size) LOGW("The server write more buffer");
+
         client->duration = timerStop(client->start_time, SECOND_UNIT, NULL);
         app->duration_list[app->requests_finished++] = client->duration;
         tcpClientDone(client);
@@ -407,14 +423,6 @@ static void tcpClientOnRead(void *data) {
         ADD_EVENT_WRITE(conn);
         DEL_EVENT_READ(conn);
     }
-
-end:
-    ADD_EVENT_TIME(conn);
-    return;
-
-error:
-    tcpClientFree(client);
-    exit(EXIT_ERR);
 }
 
 static void tcpClientOnWrite(void *data) {
@@ -437,19 +445,11 @@ static void tcpClientOnWrite(void *data) {
         memset(buf, 'x', buflen);
 
         nwrite = TCP_WRITE(conn, buf, buflen);
-        if (nwrite == TCP_ERR) {
-            LOGW("TCP client %s write error: %s", conn->addrinfo, conn->errstr);
-            goto error;
-        }
+        if (nwrite == TCP_ERR) return;
+
         conn->wbuf_len += nwrite;
     }
 
     ADD_EVENT_READ(conn);
     DEL_EVENT_WRITE(conn);
-
-    return;
-
-error:
-    tcpClientFree(client);
-    exit(EXIT_ERR);
 }

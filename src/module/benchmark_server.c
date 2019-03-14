@@ -15,10 +15,12 @@ static server *app = &s;
 
 typedef struct tcpServer {
     tcpListener *ln;
+    int client_count;
 } tcpServer;
 
 typedef struct tcpClient {
-    tcpRawConn *conn;
+    tcpConn *conn;
+    tcpServer *server;
 } tcpClient;
 
 static void initServer();
@@ -27,27 +29,26 @@ static void usage();
 
 static tcpServer *tcpServerNew();
 static void tcpServerFree(tcpServer *server);
-static void tcpOnAccept(void *data);
+static void tcpServerOnAccept(void *data);
 
-static tcpClient *tcpClientNew(int fd);
+static tcpClient *tcpClientNew(tcpServer *server);
 static void tcpClientFree(tcpClient *client);
-static void tcpOnRead(void *data);
-static void tcpOnWrite(void *data);
-static void tcpOnTime(void *data);
+static void tcpClientOnRead(void *data);
+static void tcpClientOnClose(void *data);
+static void tcpClientOnError(void *data);
+static void tcpClientOnTimeout(void *data);
 
 int main(int argc, char *argv[]) {
     initServer();
     parseOptions(argc, argv);
 
-    // Listen
     tcpServer *server = tcpServerNew();
     if (server == NULL) exit(EXIT_ERR);
 
-    LOGD("Use event type: %s", eventGetApiName());
+    LOGI("Use event type: %s", eventGetApiName());
     LOGI("Use server addr: %s:%d", app->host, app->port);
     LOGI("Use timeout: %ds", app->timeout);
 
-    // Run the loop
     eventLoopRun(app->el);
 
     tcpServerFree(server);
@@ -68,7 +69,7 @@ static void initServer() {
     log->color_enabled = 1;
     log->file_line_enabled = 0;
 
-    app->el = eventLoopNew();
+    app->el = eventLoopNew(1024*10);
 }
 
 static void parseOptions(int argc, char *argv[]) {
@@ -113,7 +114,7 @@ tcpServer *tcpServerNew() {
     }
 
     char err[XS_ERR_LEN];
-    tcpListener *ln = tcpListen(err, app->el, app->host, app->port, server, tcpOnAccept);
+    tcpListener *ln = tcpListen(err, app->el, app->host, app->port, server, tcpServerOnAccept);
     if (!ln) {
         LOGE(err);
         tcpServerFree(server);
@@ -132,16 +133,17 @@ static void tcpServerFree(tcpServer *server) {
     xs_free(server);
 }
 
-static void tcpOnAccept(void *data) {
+static void tcpServerOnAccept(void *data) {
     tcpServer *server = data;
-    tcpClient *client = tcpClientNew(server->ln->fd);
+    tcpClient *client = tcpClientNew(server);
     if (client) {
-        tcpConn *conn = (tcpConn *)client->conn;
+        tcpConn *conn = client->conn;
         LOGD("TCP server accepted client %s", conn->addrinfo_peer);
+        LOGI("TCP client current count: %d", ++server->client_count);
     }
 }
 
-static tcpClient *tcpClientNew(int fd) {
+static tcpClient *tcpClientNew(tcpServer *server) {
     tcpClient *client = xs_calloc(sizeof(*client));
     if (!client) {
         LOGW("TCP client is NULL, please check the memory");
@@ -149,21 +151,21 @@ static tcpClient *tcpClientNew(int fd) {
     }
 
     char err[XS_ERR_LEN];
-    tcpConn *conn = tcpAccept(err, app->el, fd, app->timeout, client);
+    tcpConn *conn = tcpAccept(err, app->el, server->ln->fd, app->timeout, client);
     if (!conn) {
         LOGW(err);
         tcpClientFree(client);
         return NULL;
     }
-    client->conn = tcpRawConnNew(conn);
+    client->conn = (tcpConn *)tcpRawConnNew(conn);
+    client->server = server;
 
-    TCP_ON_READ(conn, tcpOnRead);
-    TCP_ON_WRITE(conn, tcpOnWrite);
-    TCP_ON_TIME(conn, tcpOnTime);
+    TCP_ON_READ(client->conn, tcpClientOnRead);
+    TCP_ON_CLOSE(client->conn, tcpClientOnClose);
+    TCP_ON_ERROR(client->conn, tcpClientOnError);
+    TCP_ON_TIMEOUT(client->conn, tcpClientOnTimeout);
 
-    ADD_EVENT_READ(conn);
-    DEL_EVENT_WRITE(conn);
-    ADD_EVENT_TIME(conn);
+    ADD_EVENT_READ(client->conn);
 
     return client;
 }
@@ -174,66 +176,33 @@ static void tcpClientFree(tcpClient *client) {
     xs_free(client);
 }
 
-static void tcpOnRead(void *data) {
+static void tcpClientOnRead(void *data) {
     tcpClient *client = data;
-    tcpConn *conn = (tcpConn *)client->conn;
+    tcpConn *conn = client->conn;
 
-    DEL_EVENT_TIME(conn);
+    tcpPipe(conn, conn);
+}
 
-    int nread;
-    char *addrinfo = tcpGetAddrinfo(conn);
+static void tcpClientOnClose(void *data) {
+    tcpClient *client = data;
 
-    nread = tcpPipe(conn, conn);
-    if (nread == TCP_ERR) {
-        LOGW("TCP client %s pipe error: %s", addrinfo, conn->errstr);
-        goto error;
-    } else if (nread == 0) {
-        LOGD("TCP client %s closed connection", addrinfo);
-        goto error;
-    }
+    LOGD("TCP client %s closed connection", tcpGetAddrinfo(client->conn));
+    LOGD("TCP client current count: %d", --client->server->client_count);
 
-    ADD_EVENT_TIME(conn);
-    return;
-
-error:
     tcpClientFree(client);
 }
 
-static void tcpOnWrite(void *data) {
+static void tcpClientOnError(void *data) {
     tcpClient *client = data;
-    tcpConn *conn = (tcpConn *)client->conn;
+    tcpConn *conn = client->conn;
 
-    char *wbuf = conn->wbuf;
-    int wbuf_len = conn->wbuf_len;
-    int nwrite;
-
-    // Write done
-    if (wbuf_len == 0) {
-        conn->rbuf_off = 0;
-        conn->wbuf = NULL;
-        conn->wbuf_len = 0;
-        ADD_EVENT_READ(conn);
-        DEL_EVENT_WRITE(conn);
-        return;
-    }
-
-    nwrite = TCP_WRITE(conn, wbuf, wbuf_len);
-    if (nwrite == TCP_ERR) {
-        tcpClientFree(client);
-        return;
-    }
-
-    conn->wbuf += nwrite;
-    conn->wbuf_len -= nwrite;
-
-    ADD_EVENT_WRITE(conn);
+    LOGW("TCP client %s pipe (%s) error: %s", tcpGetAddrinfo(conn),
+         conn->err == TCP_ERROR_READ ? "read" : "write", conn->errstr);
 }
 
-static void tcpOnTime(void *data) {
+static void tcpClientOnTimeout(void *data) {
     tcpClient *client = data;
-    tcpConn *conn = (tcpConn *)client->conn;
+    tcpConn *conn = client->conn;
 
     LOGI("TCP client %s read timeout", conn->addrinfo_peer);
-
-    tcpClientFree(client);
 }

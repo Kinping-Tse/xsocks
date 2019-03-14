@@ -35,6 +35,8 @@ enum {
     NET_ERR_LEN = 256,
 };
 
+int isIPv6Addr(char *ip);
+
 int netTcpRead(char *err, int fd, char *buf, int buflen, int *closed);
 int netTcpWrite(char *err, int fd, char *buf, int buflen);
 

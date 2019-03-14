@@ -16,7 +16,7 @@
 #define ADD_EVENT(c, e) do { assert(c->el); assert(e); eventAdd(c->el, e); } while (0)
 #define ADD_EVENT_READ(c) ADD_EVENT(c, c->re)
 #define ADD_EVENT_WRITE(c) ADD_EVENT(c, c->we)
-#define ADD_EVENT_TIME(c) ADD_EVENT(c, c->te)
+#define ADD_EVENT_TIME(c) do { if (c->timeout > 0) ADD_EVENT(c, c->te); } while (0)
 #define DEL_EVENT_READ(c) DEL_EVENT(c->re)
 #define DEL_EVENT_WRITE(c) DEL_EVENT(c->we)
 #define DEL_EVENT_TIME(c) DEL_EVENT(c->te)

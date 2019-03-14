@@ -55,7 +55,7 @@ static void moduleInit(int type, moduleHook hook, module *m, int argc, char *arg
     if (config->daemonize) xs_daemonize();
     createPidFile();
 
-    mod->el = eventLoopNew();
+    mod->el = eventLoopNew(1024);
     setupSignalHandlers();
 
     mod->crypto = crypto_init(mod->config->password, mod->config->key, mod->config->method);

@@ -11,9 +11,9 @@
     #error "Must use one event"
 #endif
 
-eventLoop *eventLoopNew() {
+eventLoop *eventLoopNew(int size) {
     eventLoop *el = xs_calloc(sizeof(*el));
-    el->ctx = eventApiNewLoop();
+    el->ctx = eventApiNewLoop(size);
     return el;
 }
 
@@ -53,7 +53,11 @@ int eventAdd(eventLoop *el, event *e) {
     if (e->el) return EVENT_OK;
 
     e->el = el;
-    return eventApiAddEvent(el->ctx, e->ctx);
+    if (eventApiAddEvent(el->ctx, e->ctx) == EVENT_ERR) {
+        LOGE("Add Event error, please check the max open file size!");
+        return EVENT_ERR;
+    }
+    return EVENT_OK;
 }
 
 void eventDel(event *e) {

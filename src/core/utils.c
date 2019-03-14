@@ -83,7 +83,3 @@ char *xs_itoa(int i) {
     }
     return p;
 }
-
-int isIPv6Addr(char *ip) {
-    return strchr(ip, ':') ? 1 : 0;
-}

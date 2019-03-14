@@ -1,43 +1,34 @@
 
-#include "common.h"
+#include "../core/common.h"
 
 #include "socks5.h"
-#include "error.h"
-#include "net.h"
+
+#include "../core/utils.h"
+#include "../core/net.h"
 
 static int socks5HostParse(char *host) {
-    if (strchr(host, ':')) {
+    if (isIPv6Addr(host)) {
         return SOCKS5_ATYP_IPV6;
     } else {
         for (char *c = host; *c != '\0'; c++) {
-            switch (*c) {
-                case '0':
-                case '1':
-                case '2':
-                case '3':
-                case '4':
-                case '5':
-                case '6':
-                case '7':
-                case '8':
-                case '9':
-                case '.': break;
-                default: return SOCKS5_ATYP_DOMAIN;
-            }
+            if (!((*c >= '0' && *c <= '9') || *c == '.')) return SOCKS5_ATYP_DOMAIN;
         }
         return SOCKS5_ATYP_IPV4;
     }
 }
 
-/*
- * Socks5 addr buffer
- *
- *    +------+----------+----------+
- *    | ATYP | DST.ADDR | DST.PORT |
- *    +------+----------+----------+
- *    |  1   | Variable |    2     |
- *    +------+----------+----------+
- */
+int socks5AddrCreate(char *err, char *host, int port, char *addr_buf, int *buf_len) {
+    sds addr;
+
+    addr = socks5AddrInit(err, host, port);
+    if (!addr) return SOCKS5_ERR;
+
+    memcpy(addr_buf, addr, sdslen(addr));
+    if (buf_len) *buf_len = sdslen(addr);
+
+    return SOCKS5_OK;
+}
+
 sds socks5AddrInit(char *err, char *host, int port) {
     sds addr = sdsempty();
     int addr_type = socks5HostParse(host);
@@ -99,7 +90,10 @@ int socks5AddrParse(char *addr_buf, int buf_len, int *atyp, char *host, int *hos
 
         if (host) {
             assert(host_len);
-            inet_ntop(!is_v6 ? AF_INET : AF_INET6, addr_buf, host, *host_len);
+            if (inet_ntop(!is_v6 ? AF_INET : AF_INET6, addr_buf, host, *host_len) == NULL) {
+                LOGW(STRERR);
+                return SOCKS5_ERR;
+            }
         }
 
         real_buf_len += addr_len + 2;

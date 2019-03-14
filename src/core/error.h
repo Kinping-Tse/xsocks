@@ -10,9 +10,8 @@
         exit(EXIT_ERR);    \
     } while (0)
 
-#define LOG_STRERROR(err) do { LOGE("%s: %s", err, strerror(errno)); } while (0)
-
 #define STRERR (strerror(errno))
+#define LOG_STRERROR(err) do { LOGE("%s: %s", err, STRERR); } while (0)
 
 void errorSet(char *err, const char *fmt, ...);
 

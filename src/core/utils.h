@@ -9,7 +9,6 @@ void setupIgnoreHandlers();
 
 void hexdump(const void *memory, size_t bytes);
 char *xs_itoa(int i);
-int isIPv6Addr(char *ip);
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))

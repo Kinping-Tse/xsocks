@@ -1,8 +1,6 @@
 
 #include "common.h"
 
-#include "error.h"
-
 #include <stdarg.h>
 
 void errorSet(char *err, const char *fmt, ...) {

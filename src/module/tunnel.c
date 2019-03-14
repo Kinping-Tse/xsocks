@@ -2,7 +2,7 @@
 #include "module.h"
 #include "module_udp.h"
 
-#include "../core/socks5.h"
+#include "../protocol/socks5.h"
 
 #include "redis/anet.h"
 

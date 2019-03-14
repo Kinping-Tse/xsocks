@@ -21,7 +21,7 @@ RUN set -xe \
         && make -j "$(getconf _NPROCESSORS_ONLN)" \
             PREFIX="$XSOCKS_PATH" \
             OPTIMIZATION=-O3 DEBUG= \
-            USE_JEMALLOC=yes USE_LIBEV=no USE_SHARED=yes \
+            USE_JEMALLOC=yes USE_LIBEV=yes USE_SHARED=no \
         && make install USE_STRIP=yes \
         && make distclean \
     ) \

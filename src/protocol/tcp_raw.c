@@ -9,7 +9,7 @@ tcpRawConn *tcpRawConnNew(tcpConn *conn) {
 
     conn = &c->conn;
 
-    anetDisableTcpNoDelay(NULL, conn->fd);
+    tcpInit(conn);
 
     return c;
 }

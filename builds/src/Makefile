@@ -14,7 +14,7 @@ MODULE_OBJS = $(OBJS) module.o module_tcp.o module_udp.o
 
 DEPENDENCY_TARGETS = redis json-parser shadowsocks-libev
 
-EVENT = ae
+EVENT = libev
 ifeq ($(USE_AE), yes)
 	EVENT = ae
 endif
@@ -186,7 +186,7 @@ distclean: clean
 bench: $(XSOCKS_BENCHMAKR_EXE)
 
 gcov:
-	$(MAKE) $(MFLAGS) CFLAGS="-fprofile-arcs -ftest-coverage" LDFLAGS="-fprofile-arcs -ftest-coverage"
+	$(MAKE) $(MFLAGS) all bench CFLAGS="-fprofile-arcs -ftest-coverage" LDFLAGS="-fprofile-arcs -ftest-coverage"
 
 lcov:
 	$(MAKE) $(MFLAGS) gcov
