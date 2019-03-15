@@ -6,6 +6,7 @@
 static void tcpShadowsocksConnFree(void *data);
 static int tcpShadowsocksConnRead(void *data, char *buf, int buf_len);
 static int tcpShadowsocksConnWrite(void *data, char *buf, int buf_len);
+static char *tcpShadowsocksGetAddrinfo(tcpConn *conn);
 
 tcpShadowsocksConn *tcpShadowsocksConnNew(tcpConn *conn, crypto_t *crypto) {
     tcpShadowsocksConn *c;
@@ -18,6 +19,7 @@ tcpShadowsocksConn *tcpShadowsocksConnNew(tcpConn *conn, crypto_t *crypto) {
     conn->read = tcpShadowsocksConnRead;
     conn->write = tcpShadowsocksConnWrite;
     conn->close = tcpShadowsocksConnFree;
+    conn->getAddrinfo = tcpShadowsocksGetAddrinfo;
 
     c->crypto = crypto;
     c->state = SHADOWSOCKS_STATE_INIT;
@@ -53,6 +55,11 @@ int tcpShadowsocksConnInit(tcpShadowsocksConn *conn, char *host, int port) {
     return TCP_OK;
 }
 
+static char *tcpShadowsocksGetAddrinfo(tcpConn *conn) {
+    tcpShadowsocksConn *c = (tcpShadowsocksConn *)conn;
+    return c->state == SHADOWSOCKS_STATE_STREAM ? c->addrinfo_dest : tcpGetAddrinfo(conn);
+}
+
 static void tcpShadowsocksConnFree(void *data) {
     tcpShadowsocksConn *c = data;
     if (!c) return;
@@ -73,35 +80,37 @@ static void tcpShadowsocksConnFree(void *data) {
 static int tcpShadowsocksConnRead(void *data, char *buf, int buf_len) {
     tcpShadowsocksConn *c = data;
     tcpConn *conn = &c->conn;
+    int nread;
 
     if (c->state == SHADOWSOCKS_STATE_HANDSHAKE) c->state = SHADOWSOCKS_STATE_STREAM;
 
-    int nread = tcpRead(conn, buf, buf_len);
-    if (nread > 0) {
-        buffer_t tmp_buf = {.idx = 0, .len = nread, .capacity = buf_len, .data = buf};
-        if (c->crypto->decrypt(&tmp_buf, c->d_ctx, buf_len)) {
-            conn->err = ERROR_SHADOWSOCKS_DECRYPT;
-            xs_error(conn->errstr, "Decrypt shadowsocks stream buffer error");
+    nread = tcpRead(conn, buf, buf_len);
+    if (nread <= 0) return nread;
+
+    buffer_t tmp_buf = {.idx = 0, .len = nread, .capacity = buf_len, .data = buf};
+    if (c->crypto->decrypt(&tmp_buf, c->d_ctx, buf_len)) {
+        conn->err = ERROR_SHADOWSOCKS_DECRYPT;
+        xs_error(conn->errstr, "Decrypt shadowsocks stream buffer error");
+        goto error;
+    }
+    nread = tmp_buf.len;
+
+    if (c->state == SHADOWSOCKS_STATE_INIT) {
+        char host[HOSTNAME_MAX_LEN];
+        int host_len = sizeof(host);
+        int port;
+        int raddr_len;
+
+        if ((raddr_len = socks5AddrParse(buf, nread, NULL, host, &host_len, &port)) == SOCKS5_ERR) {
+            conn->err = ERROR_SHADOWSOCKS_SOCKS5;
+            xs_error(conn->errstr, "Parse shadowsocks socks5 addr error");
             goto error;
         }
-        nread = tmp_buf.len;
 
-        if (c->state == SHADOWSOCKS_STATE_INIT) {
-            char host[HOSTNAME_MAX_LEN];
-            int host_len = sizeof(host);
-            int port;
-            int raddr_len;
-
-            if ((raddr_len = socks5AddrParse(buf, nread, NULL, host, &host_len, &port)) == SOCKS5_ERR) {
-                conn->err = ERROR_SHADOWSOCKS_SOCKS5;
-                xs_error(conn->errstr, "Parse shadowsocks socks5 addr error");
-                goto error;
-            }
-
-            tcpShadowsocksConnInit(c, host, port);
-            c->state = SHADOWSOCKS_STATE_HANDSHAKE;
-        }
+        tcpShadowsocksConnInit(c, host, port);
+        c->state = SHADOWSOCKS_STATE_HANDSHAKE;
     }
+
     return nread;
 
 error:
@@ -120,8 +129,10 @@ static int tcpShadowsocksConnWrite(void *data, char *buf, int buf_len) {
             xs_error(conn->errstr, "Encrypt shadowsocks handshake buffer error");
             goto error;
         }
-        if (tcpWrite(conn, c->addrbuf_dest->data, c->addrbuf_dest->len) != (int)c->addrbuf_dest->len) {
-            xs_error(conn->errstr, "Write shadowsocks handshake buffer error: %s", conn->errstr);
+        int nwrite = tcpWrite(conn, c->addrbuf_dest->data, c->addrbuf_dest->len);
+        if (nwrite < 0) return nwrite;
+        else if (nwrite != (int)c->addrbuf_dest->len) {
+            xs_error(conn->errstr, "Write shadowsocks handshake buffer error");
             goto error;
         }
 

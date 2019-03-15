@@ -10,11 +10,6 @@ enum {
     GETOPT_VAL_KEEPALIVE,
 };
 
-enum {
-    CLIENT_TYPE_SHADOWSOCKS = 1,
-    CLIENT_TYPE_RAW,
-};
-
 #define KB_UNIT (1024)
 #define MB_UNIT (1024*1024)
 #define GB_UNIT (1024*1024*1024)
@@ -93,7 +88,7 @@ int main(int argc, char *argv[]) {
     LOGI("Use buffer size: %d", app->buf_size);
     LOGI("Use keepalive: %d", app->keepalive);
 
-    if (app->type == CLIENT_TYPE_SHADOWSOCKS) {
+    if (app->type == CONN_TYPE_SHADOWSOCKS) {
         LOGI("Use tunnel addr: %s:%d", app->tunnel_addr, app->tunnel_port);
         LOGI("Use crypto method: %s", app->method);
         LOGI("Use crypto password: %s", app->password);
@@ -115,7 +110,7 @@ static void initClient() {
     app->tunnel_address = "127.0.0.1:19999";
     app->timeout = 60;
     app->buf_size = 1024*500;
-    app->type = CLIENT_TYPE_SHADOWSOCKS;
+    app->type = CONN_TYPE_SHADOWSOCKS;
     app->type_str = "shadowsocks";
     app->requests = 10000;
     app->numclients = 20;
@@ -165,10 +160,10 @@ static void parseOptions(int argc, char *argv[]) {
             case GETOPT_VAL_TYPE:
                 if (strcmp(optarg, "raw") == 0) {
                     app->type_str = optarg;
-                    app->type = CLIENT_TYPE_RAW;
+                    app->type = CONN_TYPE_RAW;
                 } else if (strcmp(optarg, "shadowsocks") == 0) {
                     app->type_str = optarg;
-                    app->type = CLIENT_TYPE_SHADOWSOCKS;
+                    app->type = CONN_TYPE_SHADOWSOCKS;
                 } else {
                     LOGW("ignore unknown type: %s, use %s as fallback", optarg, app->type_str);
                 }
@@ -237,14 +232,15 @@ static void showReport() {
     LOGIR("  keep alive: %d\n", app->keepalive);
     LOGIR("\n");
 
-    qsort(app->duration_list, app->requests, sizeof(double), compareLatency);
-    for (i = 0; i < app->requests; i++) {
-        if (app->duration_list[i] != curlat || i == (app->requests-1)) {
-            curlat = app->duration_list[i];
-            perc = ((float)(i+1)*100)/app->requests;
-            // printf("%.2f%% <= %d milliseconds\n", perc, curlat);
-        }
-    }
+    UNUSED(perc);
+    // qsort(app->duration_list, app->requests, sizeof(double), compareLatency);
+    // for (i = 0; i < app->requests; i++) {
+    //     if (app->duration_list[i] != curlat || i == (app->requests-1)) {
+    //         curlat = app->duration_list[i];
+    //         perc = ((float)(i+1)*100)/app->requests;
+    //         printf("%.2f%% <= %d milliseconds\n", perc, curlat);
+    //     }
+    // }
     LOGIR("%.2f requests per second\n\n", reqpersec);
     LOGIR("%.2f MB per second\n\n", bytesec/MB_UNIT);
 }
@@ -279,7 +275,7 @@ static tcpClient *tcpClientCreate() {
         LOGW("TCP client connect error: %s", err);
         exit(EXIT_ERR);
     }
-    if (app->type == CLIENT_TYPE_RAW)
+    if (app->type == CONN_TYPE_RAW)
         client->conn = (tcpConn *)tcpRawConnNew(conn);
     else {
         client->conn = (tcpConn *)tcpShadowsocksConnNew(conn, app->crypto);

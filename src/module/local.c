@@ -1,30 +1,26 @@
 
 #include "module.h"
 
-#include "../protocol/socks5.h"
-#include "module_tcp.h"
+#undef ADD_EVENT
+#include "../protocol/tcp_socks5.h"
+#include "../protocol/tcp_shadowsocks.h"
 
-#include "redis/anet.h"
+typedef struct tcpServer {
+    tcpListener *ln;
+    int client_count;
+    int remote_count;
+} tcpServer;
 
-/*
-c: client lo: local r: remote
-lc: localClient rs: remoteServer
-amrq: auth method req
-amrp: auth method resp
-hrq: handshake req (addr)
-hrp: handshake resp (addr)
-ss: shadowsocks
-client                      local                     remote
-1. socks5:      (amrq)-----> lc
-2. socks5:      <-----(amrp) lc
-3. socks5:      (hrq)------> lc
-4. socks5:      <-----(hrp)  lc
-5. ss req:                       rs enc(addr) --------->
-6. ss stream: (raw)------> lc enc(raw) -> rs  (enc_buf)-------->
-7. ss stream: <-----(raw) lc <- dec(enc_buf) rs <--------------(enc_buf)
-8. (6.7 loop).....
+typedef struct tcpClient {
+    tcpConn *conn;
+    tcpServer *server;
+    struct tcpRemote *remote;
+} tcpClient;
 
-*/
+typedef struct tcpRemote {
+    tcpConn *conn;
+    tcpClient *client;
+} tcpRemote;
 
 typedef struct server {
     module mod;
@@ -38,24 +34,47 @@ static void localExit();
 static void tcpServerInit();
 static void tcpServerExit();
 
-static int tcpClientReadHandler(tcpClient *client);
-static int handleSocks5Auth(tcpClient *client);
-static int handleSocks5Handshake(tcpClient *client);
-static int handleSocks5Stream(tcpClient *client);
-static int shadowSocksHandshake(tcpClient *client);
+static tcpServer *tcpServerNew();
+static void tcpServerFree(tcpServer *server);
+static void tcpServerOnAccept(void *data);
+
+static void tcpConnectionFree(tcpClient *client);
+
+static tcpClient *tcpClientNew(tcpServer *server);
+static void tcpClientFree(tcpClient *client);
+
+static tcpRemote *tcpRemoteNew(tcpClient *client);
+static void tcpRemoteFree(tcpRemote *remote);
+
+static void tcpClientOnRead(void *data);
+static void tcpClientOnClose(void *data);
+static void tcpClientOnError(void *data);
+static void tcpClientOnTimeout(void *data);
+
+static void tcpRemoteOnConnect(void *data, int status);
+static void tcpRemoteOnRead(void *data);
+static void tcpRemoteOnClose(void *data);
+static void tcpRemoteOnError(void *data);
+static void tcpRemoteOnTimeout(void *data);
 
 static server s;
 module *app = (module *)&s;
 
 int main(int argc, char *argv[]) {
-    moduleHook hook = {localInit, localRun, localExit};
+    moduleHook hook = {
+        .init = localInit,
+        .run = localRun,
+        .exit = localExit,
+    };
 
     return moduleMain(MODULE_LOCAL, hook, app, argc, argv);
 }
 
 static void localInit() {
     getLogger()->syslog_ident = "xs-local";
+}
 
+static void localRun() {
     if (app->config->mode & MODE_TCP_ONLY) tcpServerInit();
 
     if (app->config->mode & MODE_UDP_ONLY) {
@@ -64,12 +83,8 @@ static void localInit() {
     }
 
     if (!s.ts) exit(EXIT_ERR);
-}
 
-static void localRun() {
-    char addr_info[ADDR_INFO_STR_LEN];
-
-    if (s.ts && anetFormatSock(s.ts->fd, addr_info, ADDR_INFO_STR_LEN) > 0) LOGN("TCP server listen at: %s", addr_info);
+    if (s.ts) LOGN("TCP server listen at: %s", s.ts->ln->addrinfo);
 }
 
 static void localExit() {
@@ -77,254 +92,239 @@ static void localExit() {
 }
 
 static void tcpServerInit() {
-    s.ts = moduleTcpServerCreate(app->config->local_addr, app->config->local_port, tcpClientReadHandler);
+    s.ts = tcpServerNew();
 }
 
 static void tcpServerExit() {
-    moduleTcpServerFree(s.ts);
+    tcpServerFree(s.ts);
 }
 
-static int tcpClientReadHandler(tcpClient *client) {
-    if (client->stage == STAGE_INIT) {
-        return handleSocks5Auth(client);
-    } else if (client->stage == STAGE_HANDSHAKE) {
-        return handleSocks5Handshake(client);
+static tcpServer *tcpServerNew() {
+    tcpServer *server = xs_calloc(sizeof(*server));
+    if (!server) {
+        LOGW("TCP server is NULL, please check the memory");
+        return NULL;
     }
 
-    assert(client->stage == STAGE_STREAM);
-    return handleSocks5Stream(client);
+    char err[XS_ERR_LEN];
+    tcpListener *ln = tcpListen(err, app->el, app->config->local_addr, app->config->local_port, server, tcpServerOnAccept);
+    if (!ln) {
+        LOGE(err);
+        tcpServerFree(server);
+        return NULL;
+    }
+    server->ln = ln;
+
+    return server;
 }
 
-static int handleSocks5Auth(tcpClient *client) {
-    char buf[NET_IOBUF_LEN];
-    int readlen = NET_IOBUF_LEN;
-    int cfd = client->re->id;
-    int nread;
+static void tcpServerFree(tcpServer *server) {
+    if (!server) return;
+    TCP_L_CLOSE(server->ln);
+    xs_free(server);
+}
 
-    nread = read(cfd, buf, readlen);
-    if (nread == -1) {
-        if (errno == EAGAIN) return TCP_OK;
+static void tcpServerOnAccept(void *data) {
+    tcpServer *server = data;
+    tcpClient *client = tcpClientNew(server);
+    if (client) {
+        LOGD("TCP server accepted client %s", TCP_GET_ADDRINFO(client->conn));
+        LOGD("TCP client current count: %d", ++server->client_count);
+    }
+}
 
-        LOG_STRERROR("TCP client socks5 auth read error");
-        return TCP_ERR;
-    } else if (nread == 0) {
-        LOGD("TCP client socks5 auth closed connection");
-        return TCP_ERR;
-    } else if (nread <= (int)sizeof(socks5AuthReq)) {
-        LOGW("TCP client socks5 authenticates error");
-        return TCP_ERR;
+void tcpConnectionFree(tcpClient *client) {
+    if (!client) return;
+
+    tcpServer *server = client->server;
+
+    server->client_count--;
+    if (client->remote) server->remote_count--;
+
+    LOGD("TCP client current count: %d", server->client_count);
+    LOGD("TCP remote current count: %d", server->remote_count);
+
+    tcpRemoteFree(client->remote);
+    tcpClientFree(client);
+}
+
+static tcpClient *tcpClientNew(tcpServer *server) {
+    tcpClient *client;
+    tcpConn *conn;
+    char err[XS_ERR_LEN];
+
+    if ((client = xs_calloc(sizeof(*client))) == NULL) {
+        LOGE("TCP client is NULL, please check the memory");
+        return NULL;
     }
 
-    socks5AuthReq *auth_req = (socks5AuthReq *)buf;
-    int auth_len = sizeof(socks5AuthReq) + auth_req->nmethods;
-    if (nread < auth_len || auth_req->ver != SVERSION) {
-        LOGW("TCP client socks5 authenticates error");
-        return TCP_ERR;
+    if ((conn = tcpAccept(err, app->el, server->ln->fd, app->config->timeout, client)) == NULL) {
+        LOGW(err);
+        tcpClientFree(client);
+        return NULL;
+    }
+    client->conn = (tcpConn *)tcpSocks5ConnNew(conn);
+    client->server = server;
+
+    anetEnableTcpNoDelay(err, conn->fd);
+
+    TCP_ON_READ(client->conn, tcpClientOnRead);
+    TCP_ON_CLOSE(client->conn, tcpClientOnClose);
+    TCP_ON_ERROR(client->conn, tcpClientOnError);
+    TCP_ON_TIMEOUT(client->conn, tcpClientOnTimeout);
+
+    ADD_EVENT_READ(client->conn);
+
+    return client;
+}
+
+static void tcpClientFree(tcpClient *client) {
+    if (!client) return;
+
+    TCP_CLOSE(client->conn);
+    xs_free(client);
+}
+
+static void tcpClientOnRead(void *data) {
+    tcpClient *client = data;
+    tcpRemote *remote = client->remote;
+    tcpSocks5Conn *conn_client = (tcpSocks5Conn *)client->conn;
+
+    if (conn_client->state != SOCKS5_STATE_STREAM) {
+        int nread = TCP_READ(client->conn, client->conn->rbuf, client->conn->rbuf_len);
+        if (nread > 0) TCP_WRITE(client->conn, client->conn->rbuf, nread);
+        return;
     }
 
-    // Must be noauth here
-    socks5AuthResp auth_resp = {
-        SVERSION,
-        METHOD_UNACCEPTABLE,
-    };
-    for (int i = 0; i < auth_req->nmethods; i++) {
-        if (auth_req->methods[i] == METHOD_NOAUTH) {
-            auth_resp.method = METHOD_NOAUTH;
-            break;
+    if (!client->remote) {
+        client->remote = tcpRemoteNew(client);
+        if (!client->remote) {
+            tcpConnectionFree(client);
+            return;
         }
+
+        tcpSetTimeout(client->conn, -1);
+        DEL_EVENT_READ(client->conn);
+    } else {
+        tcpPipe(client->conn, remote->conn);
     }
-
-    if (auth_resp.method == METHOD_UNACCEPTABLE) return TCP_ERR;
-    if (write(cfd, &auth_resp, sizeof(auth_resp)) != sizeof(auth_resp)) return TCP_ERR;
-
-    client->stage = STAGE_HANDSHAKE;
-
-    return TCP_OK;
 }
 
-static int handleSocks5Handshake(tcpClient *client) {
-    char buf[NET_IOBUF_LEN];
-    int readlen = NET_IOBUF_LEN;
-    int cfd = client->re->id;
-    int nread;
+static void tcpClientOnClose(void *data) {
+    tcpClient *client = data;
 
-    nread = read(cfd, buf, readlen);
-    if (nread == -1) {
-        if (errno == EAGAIN) return TCP_OK;
+    LOGD("TCP client %s closed connection", TCP_GET_ADDRINFO(client->conn));
 
-        LOG_STRERROR("TCP client socks5 handshake read error");
-        return TCP_ERR;
-    } else if (nread == 0) {
-        LOGD("TCP client socks5 handshake closed connection");
-        return TCP_ERR;
-    }
-
-    socks5Req *request = (socks5Req *)buf;
-    int request_len = sizeof(socks5Req);
-    if (nread < request_len || request->ver != SVERSION) {
-        LOGW("TCP client socks5 request error");
-        return TCP_ERR;
-    }
-
-    socks5Resp resp = {
-        SVERSION,
-        SOCKS5_REP_SUCCEEDED,
-        0,
-        SOCKS5_ATYP_IPV4,
-    };
-
-    if (request->cmd != SOCKS5_CMD_CONNECT) {
-        LOGW("TCP client request error, unsupported cmd: %d", request->cmd);
-        resp.rep = SOCKS5_REP_CMD_NOT_SUPPORTED;
-        if (write(cfd, &resp, sizeof(resp)) == -1) {
-            // Do nothing, just avoid warning
-        }
-        return TCP_ERR;
-    }
-
-    int port;
-    int addr_type;
-    int addr_len = HOSTNAME_MAX_LEN;
-    char addr[HOSTNAME_MAX_LEN];
-
-    char *addr_buf = buf + request_len - 1;
-    int buf_len = nread - request_len + 1;
-    if (socks5AddrParse(addr_buf, buf_len, &addr_type, addr, &addr_len, &port) == SOCKS5_ERR) {
-        LOGW("TCP client request error, long addrlen: %d or addrtype: %d", addr_len, addr_type);
-        resp.rep = SOCKS5_REP_ADDRTYPE_NOT_SUPPORTED;
-        if (write(cfd, &resp, sizeof(resp)) == -1) {
-            // Do nothing, just avoid warning
-        }
-        return TCP_ERR;
-    }
-
-    snprintf(client->remote_addr_info, ADDR_INFO_STR_LEN, "%s:%d", addr, port);
-    LOGI("TCP client request addr: [%s]", client->remote_addr_info);
-
-    sockAddrIpV4 sock_addr;
-    bzero(&sock_addr, sizeof(sock_addr));
-
-    char resp_buf[NET_IOBUF_LEN];
-    memcpy(resp_buf, &resp, sizeof(resp));
-    memcpy(resp_buf + sizeof(resp), &sock_addr.sin_addr, sizeof(sock_addr.sin_addr));
-    memcpy(resp_buf + sizeof(resp) + sizeof(sock_addr.sin_addr), &sock_addr.sin_port, sizeof(sock_addr.sin_port));
-
-    int reply_size = sizeof(resp) + sizeof(sock_addr.sin_addr) + sizeof(sock_addr.sin_port);
-
-    int nwrite = write(cfd, &resp_buf, reply_size);
-    if (nwrite != reply_size) {
-        LOGW("TCP client replay error");
-        return TCP_ERR;
-    }
-
-    // Connect to remote server
-    char err[ANET_ERR_LEN];
-    char *remote_addr = app->config->remote_addr;
-    int remote_port = app->config->remote_port;
-    int rfd = anetTcpConnect(err, remote_addr, remote_port);
-    if (rfd == ANET_ERR) {
-        LOGE("TCP remote [%s:%d] connenct error: %s", remote_addr, remote_port, err);
-        return TCP_ERR;
-    }
-    LOGD("TCP remote connect suceess, fd:%d", rfd);
-
-    // Prepare stream
-    tcpRemote *remote = tcpRemoteNew(rfd);
-    if (!remote) {
-        LOGW("TCP remote is NULL, please check the memory");
-        return TCP_ERR;
-    }
-
-    remote->client = client;
-
-    // Because of block connect
-    DEL_EVENT(remote->we);
-    ADD_EVENT(remote->re);
-
-    client->remote = remote;
-    client->stage = STAGE_STREAM;
-    client->addr_buf = sdsnewlen(addr_buf, buf_len);
-
-    s.ts->remote_count++;
-    LOGD("TCP remote current count: %d", s.ts->remote_count);
-
-    if (shadowSocksHandshake(client) == TCP_ERR) return TCP_ERR;
-
-    anetDisableTcpNoDelay(err, client->fd);
-    anetDisableTcpNoDelay(err, remote->fd);
-
-    return TCP_OK;
+    tcpConnectionFree(client);
 }
 
-static int handleSocks5Stream(tcpClient *client) {
+static void tcpClientOnError(void *data) {
+    tcpClient *client = data;
     tcpRemote *remote = client->remote;
 
-    int readlen = NET_IOBUF_LEN;
-    int cfd = client->fd;
-    int nread;
-
-    // Read client buffer
-    nread = read(cfd, client->buf.data, readlen);
-    if (nread == -1) {
-        if (errno == EAGAIN) return TCP_OK;
-
-        LOGW("TCP client [%s] read error: %s", client->client_addr_info, STRERR);
-        return TCP_ERR;
-    } else if (nread == 0) {
-        LOGD("TCP client [%s] closed connection", client->client_addr_info);
-        return TCP_ERR;
-    }
-    client->buf.len = nread;
-
-    // Do buffer encrypt
-    if (app->crypto->encrypt(&client->buf, client->e_ctx, NET_IOBUF_LEN)) {
-        LOGW("TCP client encrypt buffer error");
-        return TCP_ERR;
-    }
-
-    // Write to remote
-    int rfd = remote->re->id;
-    int nwrite;
-
-    nwrite = anetWrite(rfd, client->buf.data, client->buf.len);
-    if (nwrite != (int)client->buf.len) {
-        LOGW("TCP remote [%s] write error: %s", client->remote_addr_info, STRERR);
-        return TCP_ERR;
-    }
-
-    return TCP_OK;
+    LOGW("TCP client %s pipe error: %s", TCP_GET_ADDRINFO(client->conn),
+         client->conn->err != 0 ? client->conn->errstr : remote->conn->errstr);
 }
 
-/*
- * Just Send Shadowsocks TCP Relay Header:
- *
- *    +------+----------+----------+
- *    | ATYP | DST.ADDR | DST.PORT |
- *    +------+----------+----------+
- *    |  1   | Variable |    2     |
- *    +------+----------+----------+
- */
-static int shadowSocksHandshake(tcpClient *client) {
-    assert(client->addr_buf);
+static void tcpClientOnTimeout(void *data) {
+    tcpClient *client = data;
 
-    int ok = TCP_OK;
-    buffer_t tmp_buf = {0, 0, 0, NULL};
+    LOGI("TCP client %s read timeout", TCP_GET_ADDRINFO(client->conn));
+}
 
-    balloc(&tmp_buf, NET_IOBUF_LEN);
-    memcpy(tmp_buf.data, client->addr_buf, sdslen(client->addr_buf));
-    tmp_buf.len = sdslen(client->addr_buf);
-
-    if (app->crypto->encrypt(&tmp_buf, client->e_ctx, NET_IOBUF_LEN)) LOGW("TCP client encrypt buffer error");
-
-    int nwrite = write(client->remote->fd, tmp_buf.data, tmp_buf.len);
-    if (nwrite != (int)tmp_buf.len) {
-        LOGW("TCP remote [%s] write error", client->remote_addr_info);
-        ok = TCP_ERR;
+static tcpRemote *tcpRemoteNew(tcpClient *client) {
+    tcpRemote *remote = xs_calloc(sizeof(*remote));
+    if (!remote) {
+        LOGE("TCP remote is NULL, please check the memory");
+        return NULL;
     }
 
-    bfree(&tmp_buf);
-    sdsfree(client->addr_buf);
-    client->addr_buf = NULL;
+    tcpSocks5Conn *conn_client = (tcpSocks5Conn *)client->conn;
+    tcpConn *conn_remote;
 
-    return ok;
+    char err[XS_ERR_LEN];
+    char host[HOSTNAME_MAX_LEN];
+    int host_len = sizeof(host);
+    int port;
+
+    socks5AddrParse(conn_client->addrbuf_dest, sdslen(conn_client->addrbuf_dest),
+                    NULL, host, &host_len, &port);
+    conn_remote = tcpConnect(err, app->el, app->config->remote_addr, app->config->remote_port,
+                             app->config->timeout, remote);
+    if (!conn_remote) {
+        LOGW("TCP remote %s connect error: %s", err, TCP_GET_ADDRINFO(conn_remote));
+        tcpRemoteFree(remote);
+        return NULL;
+    }
+    remote->client = client;
+    remote->conn = (tcpConn *)tcpShadowsocksConnNew(conn_remote, app->crypto);
+    tcpShadowsocksConnInit((tcpShadowsocksConn *)remote->conn, host, port);
+
+    TCP_ON_READ(remote->conn, tcpRemoteOnRead);
+    TCP_ON_CONNECT(remote->conn, tcpRemoteOnConnect);
+    TCP_ON_CLOSE(remote->conn, tcpRemoteOnClose);
+    TCP_ON_ERROR(remote->conn, tcpRemoteOnError);
+    TCP_ON_TIMEOUT(remote->conn, tcpRemoteOnTimeout);
+
+    LOGD("TCP remote %s is connecting ...", TCP_GET_ADDRINFO(client->conn));
+    LOGD("TCP remote current count: %d", ++s.ts->remote_count);
+
+    return remote;
+}
+
+static void tcpRemoteFree(tcpRemote *remote) {
+    if (!remote) return;
+    TCP_CLOSE(remote->conn);
+    xs_free(remote);
+}
+
+static void tcpRemoteOnConnect(void *data, int status) {
+    tcpRemote *remote = data;
+    tcpClient *client = remote->client;
+    char *addrinfo = TCP_GET_ADDRINFO(client->conn);
+
+    if (status == TCP_ERR) {
+        LOGW("TCP remote %s connect error: %s", addrinfo, remote->conn->errstr);
+        return;
+    }
+    LOGD("TCP remote %s connect success", addrinfo);
+
+    // Prepare pipe
+    ADD_EVENT_READ(remote->conn);
+    ADD_EVENT_READ(client->conn);
+}
+
+static void tcpRemoteOnRead(void *data) {
+    tcpRemote *remote = data;
+    tcpClient *client = remote->client;
+
+    tcpPipe(remote->conn, client->conn);
+}
+
+static void tcpRemoteOnClose(void *data) {
+    tcpRemote *remote = data;
+    tcpClient *client = remote->client;
+
+    LOGD("TCP remote %s closed connection", TCP_GET_ADDRINFO(client->conn));
+
+    tcpConnectionFree(client);
+}
+
+static void tcpRemoteOnError(void *data) {
+    tcpRemote *remote = data;
+    tcpClient *client = remote->client;
+
+    LOGW("TCP remote %s pipe error: %s", TCP_GET_ADDRINFO(client->conn),
+         client->conn->err != 0 ? client->conn->errstr : remote->conn->errstr);
+}
+
+static void tcpRemoteOnTimeout(void *data) {
+    tcpRemote *remote = data;
+    tcpClient *client = remote->client;
+    char *addr_info = TCP_GET_ADDRINFO(client->conn);
+
+    if (tcpIsConnected(remote->conn))
+        LOGI("TCP remote %s read timeout", addr_info);
+    else
+        LOGW("TCP remote %s connect timeout", addr_info);
 }

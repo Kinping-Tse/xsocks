@@ -8,12 +8,14 @@ enum {
     TCP_OK = 0,
     TCP_ERR = -1,
     TCP_AGAIN = -2,
+
     TCP_FLAG_INIT = 1<<0,
     TCP_FLAG_CONNECTING = 1<<1,
     TCP_FLAG_CONNECTED = 1<<2,
     TCP_FLAG_LISTEN = 1<<3,
     TCP_FLAG_PIPE = 1<<4,
     TCP_FLAG_CLOSED = 1<<5,
+
     TCP_ERROR_READ = 10000,
     TCP_ERROR_WRITE = 10001,
     TCP_ERROR_TIMEOUT = 10002,
@@ -54,6 +56,7 @@ typedef struct tcpConn {
     tcpReadHandler read;
     tcpWriteHandler write;
     tcpCloseHandler close;
+    char *(*getAddrinfo)(struct tcpConn *conn);
     void *data;
     char addrinfo[ADDR_INFO_STR_LEN];
     char addrinfo_peer[ADDR_INFO_STR_LEN];
@@ -84,6 +87,7 @@ typedef struct tcpConn {
 #define TCP_READ(c, buf, len) ((tcpConn *)c)->read(c, buf, len)
 #define TCP_WRITE(c, buf, len) ((tcpConn *)c)->write(c, buf, len)
 #define TCP_CLOSE(c) do { if (c) ((tcpConn *)c)->close(c); } while (0)
+#define TCP_GET_ADDRINFO(c) ((tcpConn *)c)->getAddrinfo(c)
 
 tcpListener *tcpListen(char *err, eventLoop *el, char *host, int port,
                        void *data, tcpEventHandler onAccept);

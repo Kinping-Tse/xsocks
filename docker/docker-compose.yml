@@ -10,7 +10,7 @@ services:
           memory: 10M
         reservations:
           cpus: '0.25'
-          memory: 2M
+          memory: 5M
       restart_policy:
         max_attempts: 0
     privileged: true

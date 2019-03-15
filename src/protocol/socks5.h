@@ -16,7 +16,46 @@ typedef struct method_select_response socks5AuthResp;
 typedef struct socks5_request socks5Req;
 typedef struct socks5_response socks5Resp;
 
+int socks5AddrCreate(char *err, char *host, int port, char *addr_buf, int *buf_len);
+sds socks5AddrInit(char *err, char *host, int port);
+
+int socks5AddrParse(char *addr_buf, int buf_len, int *atyp, char *host, int *host_len, int *port);
+
 /**
+ *
+ * Socks5 auth req
+ *
+ *    +-----+----------+-----------------+
+ *    | VER | NMETHODS |      METHODS    |
+ *    +-----+----------+-----------------+
+ *    |  1  |    1     | Variable(1-255) |
+ *    +-----+----------+-----------------+
+ *
+ * Socks5 auth resp
+ *
+ *    +-----+--------+
+ *    | VER | METHOD |
+ *    +-----+--------+
+ *    |  1  |   1    |
+ *    +-----+--------+
+ *
+ * Socks5 request
+ *
+ *    +-----+-----+---------+--------------------+
+ *    | VER | CMD |   RSV   | Socks5 addr buffer |
+ *    +-----+---------------+--------------------+
+ *    |  1  |  1  | 1(0x00) |      Variable      |
+ *    +-----+-----+---------+--------------------+
+ *
+ * Socks5 response
+ *
+ *    +-----+-----+---------+--------------------+
+ *    | VER | REP |   RSV   | Socks5 addr buffer |
+ *    +-----+---------------+--------------------+
+ *    |  1  |  1  | 1(0x00) |      Variable      |
+ *    +-----+-----+---------+--------------------+
+ *
+ *
  * Socks5 addr buffer
  *
  *    +------+----------+----------+
@@ -25,9 +64,5 @@ typedef struct socks5_response socks5Resp;
  *    |  1   | Variable |    2     |
  *    +------+----------+----------+
  */
-
-int socks5AddrCreate(char *err, char *host, int port, char *addr_buf, int *buf_len);
-int socks5AddrParse(char *addr_buf, int buf_len, int *atyp, char *host, int *host_len, int *port);
-sds socks5AddrInit(char *err, char *host, int port);
 
 #endif /* __PROTOCOL_SOCKS5_H */

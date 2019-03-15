@@ -41,7 +41,7 @@ static void tcpServerExit();
 
 static tcpServer *tcpServerNew();
 static void tcpServerFree(tcpServer *server);
-static void tcpOnAccept(void *data);
+static void tcpServerOnAccept(void *data);
 
 static void tcpConnectionFree(tcpClient *client);
 
@@ -83,14 +83,14 @@ int main(int argc, char *argv[]) {
 
 static void serverInit() {
     getLogger()->syslog_ident = "xs-server";
+}
 
+static void serverRun() {
     if (app->config->mode & MODE_TCP_ONLY) tcpServerInit();
     if (app->config->mode & MODE_UDP_ONLY) udpServerInit();
 
     if (!s.ts && !s.us) exit(EXIT_ERR);
-}
 
-static void serverRun() {
     char addr_info[ADDR_INFO_STR_LEN];
 
     if (s.ts) LOGN("TCP server listen at: %s", s.ts->ln->addrinfo);
@@ -119,7 +119,7 @@ static tcpServer *tcpServerNew() {
     }
 
     char err[XS_ERR_LEN];
-    tcpListener *ln = tcpListen(err, app->el, app->config->remote_addr, app->config->remote_port, server, tcpOnAccept);
+    tcpListener *ln = tcpListen(err, app->el, app->config->remote_addr, app->config->remote_port, server, tcpServerOnAccept);
     if (!ln) {
         LOGE(err);
         tcpServerFree(server);
@@ -136,7 +136,7 @@ static void tcpServerFree(tcpServer *server) {
     xs_free(server);
 }
 
-static void tcpOnAccept(void *data) {
+static void tcpServerOnAccept(void *data) {
     tcpServer *server = data;
     tcpClient *client = tcpClientNew(server);
     if (client) {
@@ -222,7 +222,6 @@ static void tcpClientOnRead(void *data) {
 
         tcpSetTimeout(client->conn, -1);
         DEL_EVENT_READ(client->conn);
-        DEL_EVENT_WRITE(client->conn);
     } else {
         tcpPipe(client->conn, remote->conn);
     }
@@ -313,7 +312,8 @@ static void tcpRemoteOnConnect(void *data, int status) {
     // Write shadowsocks client handshake left buffer
     if (client->conn->rbuf_off) {
         int nwrite = TCP_WRITE(remote->conn, client->conn->rbuf, client->conn->rbuf_off);
-        if (nwrite < client->conn->rbuf_off) {
+        if (nwrite == TCP_ERR) return;
+        else if (nwrite < client->conn->rbuf_off) {
             tcpConnectionFree(client);
             return;
         }

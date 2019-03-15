@@ -167,6 +167,7 @@ static tcpConn *tcpConnNew(int fd, int timeout, eventLoop *el, void *data) {
     c->read = (tcpReadHandler)tcpRead;
     c->write = (tcpWriteHandler)tcpWrite;
     c->close = (tcpCloseHandler)tcpClose;
+    c->getAddrinfo = tcpGetAddrinfo;
 
     c->rbuf = xs_calloc(NET_IOBUF_LEN);
     c->rbuf_len = NET_IOBUF_LEN;
@@ -174,6 +175,7 @@ static tcpConn *tcpConnNew(int fd, int timeout, eventLoop *el, void *data) {
     c->wbuf = NULL;
     c->wbuf_len = 0;
 
+    anetNonBlock(NULL, fd);
     anetFormatSock(fd, c->addrinfo, sizeof(c->addrinfo));
 
     return c;
@@ -187,7 +189,6 @@ static void tcpConnInit(tcpConn *c) {
 
     anetFormatPeer(fd, c->addrinfo_peer, sizeof(c->addrinfo_peer));
 
-    anetNonBlock(NULL, fd);
     anetDisableTcpNoDelay(NULL, fd);
     netNoSigPipe(NULL, fd);
 

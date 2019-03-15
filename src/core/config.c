@@ -59,7 +59,7 @@ xsocksConfig *configNew() {
 
     config->pidfile = NULL;
     config->daemonize = CONFIG_DEFAULT_DAEMONIZE;
-    config->remote_addr = NULL;
+    configStringDup(config->remote_addr, CONFIG_DEFAULT_REMOTE_ADDR);
     config->remote_port = CONFIG_DEFAULT_REMOTE_PORT;
     config->local_addr = NULL;
     config->local_port = CONFIG_DEFAULT_LOCAL_PORT;

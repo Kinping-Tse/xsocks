@@ -24,4 +24,10 @@
 #define CLR_EVENT_WRITE(c) CLR_EVENT(c->we)
 #define CLR_EVENT_TIME(c) CLR_EVENT(c->te)
 
+enum {
+    CONN_TYPE_SHADOWSOCKS = 1,
+    CONN_TYPE_RAW,
+    CONN_TYPE_SOCKS5,
+};
+
 #endif /* __PROTOCOL_PROXY_H */
