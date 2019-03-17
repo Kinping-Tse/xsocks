@@ -35,6 +35,8 @@ tcpShadowsocksConn *tcpShadowsocksConnNew(tcpConn *conn, crypto_t *crypto) {
 
     c->tmp_buf = xs_calloc(sizeof(*c->tmp_buf));
     balloc(c->tmp_buf, NET_IOBUF_LEN);
+    c->tmp_buf->len = 0;
+    c->tmp_buf_off = 0;
 
     tcpInit(conn);
 
@@ -122,6 +124,7 @@ error:
 static int tcpShadowsocksConnWrite(void *data, char *buf, int buf_len) {
     tcpShadowsocksConn *c = data;
     tcpConn *conn = &c->conn;
+    int nwrite;
 
     if (c->state == SHADOWSOCKS_STATE_INIT) {
         if (c->crypto->encrypt(c->addrbuf_dest, c->e_ctx, c->addrbuf_dest->capacity)) {
@@ -129,7 +132,7 @@ static int tcpShadowsocksConnWrite(void *data, char *buf, int buf_len) {
             xs_error(conn->errstr, "Encrypt shadowsocks handshake buffer error");
             goto error;
         }
-        int nwrite = tcpWrite(conn, c->addrbuf_dest->data, c->addrbuf_dest->len);
+        nwrite = tcpWrite(conn, c->addrbuf_dest->data, c->addrbuf_dest->len);
         if (nwrite < 0) return nwrite;
         else if (nwrite != (int)c->addrbuf_dest->len) {
             xs_error(conn->errstr, "Write shadowsocks handshake buffer error");
@@ -140,17 +143,28 @@ static int tcpShadowsocksConnWrite(void *data, char *buf, int buf_len) {
     } else if (c->state == SHADOWSOCKS_STATE_HANDSHAKE)
         c->state = SHADOWSOCKS_STATE_STREAM;
 
-    // If don't copy here, it will crash when free
-    memcpy(c->tmp_buf->data, buf, buf_len);
-    c->tmp_buf->len = buf_len;
+    if (c->tmp_buf->len == 0) {
+        memcpy(c->tmp_buf->data, buf, buf_len);
+        c->tmp_buf->len = buf_len;
 
-    if (c->crypto->encrypt(c->tmp_buf, c->e_ctx, c->tmp_buf->capacity)) {
-        conn->err = ERROR_SHADOWSOCKS_ENCRYPT;
-        xs_error(conn->errstr, "Encrypt shadowsocks stream buffer error");
-        goto error;
+        if (c->crypto->encrypt(c->tmp_buf, c->e_ctx, c->tmp_buf->capacity)) {
+            conn->err = ERROR_SHADOWSOCKS_ENCRYPT;
+            xs_error(conn->errstr, "Encrypt shadowsocks stream buffer error");
+            goto error;
+        }
     }
 
-    return tcpWrite(conn, c->tmp_buf->data, c->tmp_buf->len);
+    char *wbuf = c->tmp_buf->data + c->tmp_buf_off;
+    int wbuf_len = c->tmp_buf->len - c->tmp_buf_off;
+
+    nwrite = tcpWrite(conn, wbuf, wbuf_len);
+    if (nwrite == wbuf_len) {
+        c->tmp_buf->len = 0;
+        c->tmp_buf_off = 0;
+    } else if (nwrite > 0 && nwrite < wbuf_len) {
+        c->tmp_buf_off += nwrite;
+    }
+    return nwrite;
 
 error:
     FIRE_ERROR(conn);

@@ -22,6 +22,7 @@ typedef struct tcpShadowsocksConn {
     tcpConn conn;
     int state;
     buffer_t *tmp_buf;
+    int tmp_buf_off;
     buffer_t *addrbuf_dest;
     char addrinfo_dest[ADDR_INFO_STR_LEN];
     crypto_t *crypto;

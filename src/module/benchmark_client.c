@@ -128,6 +128,7 @@ static void initClient() {
     // log->level = LOGLEVEL_INFO;
     log->color_enabled = 1;
     // log->file_line_enabled = 1;
+    log->syslog_ident = "xs-benchmark-client";
 
     app->el = eventLoopNew(1024*10);
     app->te = NEW_EVENT_REPEAT(250, showThroughput, NULL);
@@ -219,7 +220,7 @@ static int compareLatency(const void *a, const void *b) {
 }
 
 static void showReport() {
-    int i, curlat = 0;
+    // int i, curlat = 0;
     double perc, reqpersec, bytesec;
 
     reqpersec = app->requests_finished / app->duration;
@@ -233,7 +234,7 @@ static void showReport() {
     LOGIR("\n");
 
     UNUSED(perc);
-    // qsort(app->duration_list, app->requests, sizeof(double), compareLatency);
+    qsort(app->duration_list, app->requests, sizeof(double), compareLatency);
     // for (i = 0; i < app->requests; i++) {
     //     if (app->duration_list[i] != curlat || i == (app->requests-1)) {
     //         curlat = app->duration_list[i];
@@ -441,7 +442,7 @@ static void tcpClientOnWrite(void *data) {
         memset(buf, 'x', buflen);
 
         nwrite = TCP_WRITE(conn, buf, buflen);
-        if (nwrite == TCP_ERR) return;
+        if (nwrite <= 0) return;
 
         conn->wbuf_len += nwrite;
     }

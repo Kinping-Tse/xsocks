@@ -13,7 +13,7 @@ static void tcpListenReadHandler(event *e);
 
 static tcpConn *tcpConnNew(int fd, int timeout, eventLoop *el, void *data);
 static void tcpConnInit(tcpConn *c);
-static int tcpCheckConnectDone(tcpConn *c);
+static int tcpCheckConnectDone(tcpConn *c, int *done);
 
 static int tcpPipeWrite(tcpConn *c);
 
@@ -195,15 +195,19 @@ static void tcpConnInit(tcpConn *c) {
     c->flags |= TCP_FLAG_CONNECTED;
 }
 
-static int tcpCheckConnectDone(tcpConn *c) {
+static int tcpCheckConnectDone(tcpConn *c, int *done) {
     int rc = connect(c->fd, (sockAddr *)&c->rsa.sa, c->rsa.sa_len);
-    if (rc == 0) return TCP_OK;
+    if (rc == 0) {
+        if (done) *done = 1;
+        return TCP_OK;
+    }
 
+    if (done) *done = 0;
     switch (errno) {
-        case EISCONN: return TCP_OK;
+        case EISCONN: if (done) *done = 1; return TCP_OK;
         case EALREADY:
         case EINPROGRESS:
-        case EWOULDBLOCK: return TCP_AGAIN;
+        case EWOULDBLOCK: return TCP_OK;
         default:
             c->err = TCP_ERROR_CONNECT;
             xs_error(c->errstr, STRERR);
@@ -233,7 +237,6 @@ int tcpRead(tcpConn *c, char *buf, int buf_len) {
             FIRE_CLOSE(c);
             return TCP_ERR;
         }
-        nread = TCP_AGAIN;
     }
 
     ADD_EVENT_TIME(c);
@@ -251,6 +254,7 @@ int tcpWrite(tcpConn *c, char *buf, int buf_len) {
         FIRE_CLOSE(c);
         return TCP_ERR;
     }
+
     return nwrite;
 }
 
@@ -327,12 +331,16 @@ char *tcpGetAddrinfo(tcpConn *c) {
 static int handleTcpConnection(tcpConn *c) {
     if (!tcpIsConnected(c)) {
         int status;
+        int done;
 
-        status = tcpCheckConnectDone(c);
+        status = tcpCheckConnectDone(c, &done);
         if (status == TCP_OK) {
+            if (done == 0) return TCP_ERR;
+
             tcpConnInit(c);
             DEL_EVENT_WRITE(c);
         }
+
         FIRE_CONNECT(c, status);
         if (status == TCP_ERR) FIRE_CLOSE(c);
 
@@ -347,7 +355,7 @@ static void tcpConnReadHandler(event *e) {
     int status;
 
     status = handleTcpConnection(c);
-    if (status == TCP_ERR || status == TCP_AGAIN) return;
+    if (status != TCP_OK) return;
 
     FIRE_READ(c);
 }
@@ -357,7 +365,7 @@ static void tcpConnWriteHandler(event *e) {
     int status;
 
     status = handleTcpConnection(c);
-    if (status == TCP_ERR || status == TCP_AGAIN) return;
+    if (status != TCP_OK) return;
 
     if (c->flags & TCP_FLAG_PIPE) {
         tcpPipeWrite(c);

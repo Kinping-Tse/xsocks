@@ -68,6 +68,7 @@ static void initServer() {
     log->level = LOGLEVEL_DEBUG;
     log->color_enabled = 1;
     log->file_line_enabled = 0;
+    log->syslog_ident = "xs-benchmark-server";
 
     app->el = eventLoopNew(1024*10);
 }

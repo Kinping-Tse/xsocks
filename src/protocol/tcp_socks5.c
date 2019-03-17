@@ -139,8 +139,8 @@ static int tcpSocks5ConnWrite(void *data, char *buf, int buf_len) {
             METHOD_NOAUTH,
         };
         nwrite = tcpWrite(conn, (char *)&auth_resp, sizeof(auth_resp));
-
-        if (nwrite >= 0 && nwrite != sizeof(auth_resp)) {
+        if (nwrite < 0) return nwrite;
+        if (nwrite != sizeof(auth_resp)) {
             xs_error(conn->errstr, "Socks5 write auth resp error");
             goto error;
         }
@@ -166,7 +166,8 @@ static int tcpSocks5ConnWrite(void *data, char *buf, int buf_len) {
         int reply_size = sizeof(resp) + sizeof(sock_addr.sin_addr) + sizeof(sock_addr.sin_port);
 
         nwrite = tcpWrite(conn, resp_buf, reply_size);
-        if (nwrite >= 0 && nwrite != reply_size) {
+        if (nwrite < 0) return nwrite;
+        if (nwrite != reply_size) {
             xs_error(conn->errstr, "Socks5 write resp error");
             goto error;
         }

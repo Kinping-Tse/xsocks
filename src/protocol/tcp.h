@@ -7,7 +7,6 @@
 enum {
     TCP_OK = 0,
     TCP_ERR = -1,
-    TCP_AGAIN = -2,
 
     TCP_FLAG_INIT = 1<<0,
     TCP_FLAG_CONNECTING = 1<<1,

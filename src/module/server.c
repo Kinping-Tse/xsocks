@@ -229,9 +229,8 @@ static void tcpClientOnRead(void *data) {
 
 static void tcpClientOnClose(void *data) {
     tcpClient *client = data;
-    tcpShadowsocksConn *conn = (tcpShadowsocksConn *)client->conn;
 
-    LOGD("TCP client %s closed connection", conn->addrinfo_dest);
+    LOGD("TCP client %s closed connection", TCP_GET_ADDRINFO(client->conn));
 
     tcpConnectionFree(client);
 }
@@ -239,18 +238,15 @@ static void tcpClientOnClose(void *data) {
 static void tcpClientOnError(void *data) {
     tcpClient *client = data;
     tcpRemote *remote = client->remote;
-    tcpShadowsocksConn *conn = (tcpShadowsocksConn *)client->conn;
 
-    LOGW("TCP client %s pipe error: %s",
-         conn->state == SHADOWSOCKS_STATE_STREAM ? conn->addrinfo_dest : client->conn->addrinfo_peer,
+    LOGW("TCP client %s pipe error: %s", TCP_GET_ADDRINFO(client->conn),
          client->conn->err != 0 ? client->conn->errstr : remote->conn->errstr);
 }
 
 static void tcpClientOnTimeout(void *data) {
     tcpClient *client = data;
-    tcpConn *conn = client->conn;
 
-    LOGI("TCP client %s read timeout", conn->addrinfo_peer);
+    LOGI("TCP client %s read timeout", TCP_GET_ADDRINFO(client->conn));
 }
 
 static tcpRemote *tcpRemoteNew(tcpClient *client) {
