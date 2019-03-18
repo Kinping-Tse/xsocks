@@ -4,8 +4,8 @@
 #include "socks5.h"
 
 static void tcpShadowsocksConnFree(void *data);
-static int tcpShadowsocksConnRead(void *data, char *buf, int buf_len);
-static int tcpShadowsocksConnWrite(void *data, char *buf, int buf_len);
+static int tcpShadowsocksConnRead(tcpConn *conn, char *buf, int buf_len);
+static int tcpShadowsocksConnWrite(tcpConn *conn, char *buf, int buf_len);
 static char *tcpShadowsocksGetAddrinfo(tcpConn *conn);
 
 tcpShadowsocksConn *tcpShadowsocksConnNew(tcpConn *conn, crypto_t *crypto) {
@@ -79,9 +79,8 @@ static void tcpShadowsocksConnFree(void *data) {
     tcpClose(&c->conn);
 }
 
-static int tcpShadowsocksConnRead(void *data, char *buf, int buf_len) {
-    tcpShadowsocksConn *c = data;
-    tcpConn *conn = &c->conn;
+static int tcpShadowsocksConnRead(tcpConn *conn, char *buf, int buf_len) {
+    tcpShadowsocksConn *c = (tcpShadowsocksConn *)conn;
     int nread;
 
     if (c->state == SHADOWSOCKS_STATE_HANDSHAKE) c->state = SHADOWSOCKS_STATE_STREAM;
@@ -121,9 +120,8 @@ error:
     return TCP_ERR;
 }
 
-static int tcpShadowsocksConnWrite(void *data, char *buf, int buf_len) {
-    tcpShadowsocksConn *c = data;
-    tcpConn *conn = &c->conn;
+static int tcpShadowsocksConnWrite(tcpConn *conn, char *buf, int buf_len) {
+    tcpShadowsocksConn *c = (tcpShadowsocksConn *)conn;
     int nwrite;
 
     if (c->state == SHADOWSOCKS_STATE_INIT) {

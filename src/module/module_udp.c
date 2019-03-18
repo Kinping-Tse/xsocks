@@ -4,6 +4,8 @@
 
 #include "redis/anet.h"
 
+#define ADD_EVENT(e) eventAdd(app->el, e);
+
 static udpServer *udpServerNew(int fd);
 static void udpServerReadHandler(event *e);
 static void udpConnectionFree(udpClient *client);
@@ -15,7 +17,7 @@ static udpRemote *udpRemoteNew(int fd);
 static void udpRemoteReadHandler(event *e);
 static void udpRemoteReadTimeHandler(event *e);
 
-udpServer *udpServerCreate(char *host, int port, udpHook hook, void *data) {
+udpServer *moduleUdpServerCreate(char *host, int port, udpHook hook, void *data) {
     char err[ANET_ERR_LEN];
     int fd;
 
@@ -53,7 +55,7 @@ static udpServer *udpServerNew(int fd) {
     return server;
 }
 
-void udpServerFree(udpServer *server) {
+void moduleUdpServerFree(udpServer *server) {
     if (!server) return;
 
     if (server->hook.free) server->hook.free(server);

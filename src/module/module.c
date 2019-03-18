@@ -1,6 +1,7 @@
 
 #include "module.h"
 #include "../core/version.h"
+#include "../protocol/proxy.h"
 
 #include "shadowsocks-libev/ppbloom.h"
 
@@ -218,9 +219,9 @@ static void setupSignalHandlers() {
     event *ev_sigint = NEW_EVENT_SIGNAL(SIGINT, signalExitHandler, NULL);
     event *ev_sigterm = NEW_EVENT_SIGNAL(SIGTERM, signalExitHandler, NULL);
     event *ev_sigquit = NEW_EVENT_SIGNAL(SIGQUIT, signalExitHandler, NULL);
-    ADD_EVENT(ev_sigint);
-    ADD_EVENT(ev_sigterm);
-    ADD_EVENT(ev_sigquit);
+    ADD_EVENT(mod, ev_sigint);
+    ADD_EVENT(mod, ev_sigterm);
+    ADD_EVENT(mod, ev_sigquit);
 
     listAddNodeTail(mod->sigexit_events, ev_sigint);
     listAddNodeTail(mod->sigexit_events, ev_sigterm);

@@ -2,87 +2,50 @@
 #include "module_tcp.h"
 #include "module.h"
 
-#include "redis/anet.h"
+#include "../protocol/tcp_shadowsocks.h"
+#include "../protocol/tcp_raw.h"
+#include "../protocol/tcp_socks5.h"
 
-static void tcpServerReadHandler(event *e);
+static tcpConn *tcpConnNew(int type, tcpConn *conn);
 
-static void tcpClientReadHandler(event *e);
-static void tcpClientWriteHandler(event *e);
-static void tcpClientReadTimeHandler(event *e);
+static void tcpClientFree(tcpClient *client);
+static void tcpRemoteFree(tcpRemote *remote);
 
-static void tcpRemoteReadHandler(event *e);
-static void tcpRemoteWriteHandler(event *e);
+static void tcpClientOnClose(void *data);
+static void tcpClientOnError(void *data);
+static void tcpClientOnTimeout(void *data);
 
-tcpServer *moduleTcpServerCreate(char *host, int port, clientReadHandler handler) {
-    char err[ANET_ERR_LEN];
-    int backlog = 256;
-    int fd;
+static void tcpRemoteOnRead(void *data);
+static void tcpRemoteOnClose(void *data);
+static void tcpRemoteOnError(void *data);
+static void tcpRemoteOnTimeout(void *data);
 
-    if ((host && isIPv6Addr(host)))
-        fd = anetTcp6Server(err, port, host, backlog);
-    else
-        fd = anetTcpServer(err, port, host, backlog);
+tcpServer *tcpServerNew(char *host, int port, tcpEventHandler onAccept) {
+    tcpServer *server;
 
-    if (fd == ANET_ERR) {
-        LOGE("TCP server create error %s:%d: %s", host ? host : "*", port, err);
+    server = xs_calloc(sizeof(*server));
+    if (!server) {
+        LOGW("TCP server is NULL, please check the memory");
         return NULL;
     }
 
-    tcpServer *server = tcpServerNew(fd);
-    if (server) { server->crHandler = handler; }
-    return server;
-}
-
-tcpServer *tcpServerNew(int fd) {
-    tcpServer *server = xs_calloc(sizeof(*server));
-
-    if (server) {
-        server->fd = fd;
-        server->re = NEW_EVENT_READ(fd, tcpServerReadHandler, server);
-
-        anetNonBlock(NULL, server->fd);
-        ADD_EVENT(server->re);
+    char err[XS_ERR_LEN];
+    tcpListener *ln = tcpListen(err, app->el, host, port, server, onAccept);
+    if (!ln) {
+        LOGE(err);
+        tcpServerFree(server);
+        return NULL;
     }
+    server->ln = ln;
 
     return server;
 }
 
-void moduleTcpServerFree(tcpServer *server) {
+void tcpServerFree(tcpServer *server) {
     if (!server) return;
 
-    CLR_EVENT(server->re);
-    close(server->fd);
-
+    CONN_CLOSE(server->ln);
     xs_free(server);
-}
-
-static void tcpServerReadHandler(event *e) {
-    tcpServer *server = e->data;
-
-    int cfd, cport;
-    char cip[NET_IP_MAX_STR_LEN];
-    char err[ANET_ERR_LEN];
-
-    cfd = anetTcpAccept(err, e->id, cip, sizeof(cip), &cport);
-    if (cfd == ANET_ERR) {
-        if (errno != EWOULDBLOCK) LOGW("TCP server accept: %s", err);
-
-        return;
-    }
-
-    tcpClient *client = tcpClientNew(cfd);
-    if (!client) {
-        LOGW("TCP client is NULL, please check the memory");
-        return;
-    }
-
-    client->server = server;
-    anetFormatAddr(client->client_addr_info, ADDR_INFO_STR_LEN, cip, cport);
-
-    server->client_count++;
-
-    LOGD("TCP server accepted client (%d) [%s]", cfd, client->client_addr_info);
-    LOGD("TCP client current count: %d", server->client_count);
 }
 
 void tcpConnectionFree(tcpClient *client) {
@@ -100,255 +63,147 @@ void tcpConnectionFree(tcpClient *client) {
     tcpClientFree(client);
 }
 
-tcpClient *tcpClientNew(int fd) {
-    tcpClient *client = xs_calloc(sizeof(*client));
-    if (!client) return NULL;
+static tcpConn *tcpConnNew(int type, tcpConn *conn) {
+    switch (type) {
+        case CONN_TYPE_SHADOWSOCKS: return (tcpConn *)tcpShadowsocksConnNew(conn, app->crypto);
+        case CONN_TYPE_RAW: return (tcpConn *)tcpRawConnNew(conn);
+        case CONN_TYPE_SOCKS5: return (tcpConn *)tcpSocks5ConnNew(conn);
+        default: return conn;
+    }
+}
 
-    client->fd = fd;
-    client->re = NEW_EVENT_READ(fd, tcpClientReadHandler, client);
-    client->we = NEW_EVENT_WRITE(fd, tcpClientWriteHandler, client);
-    client->te = NEW_EVENT_ONCE(app->config->timeout * MILLISECOND_UNIT, tcpClientReadTimeHandler, client);
-    client->server = NULL;
-    client->remote = NULL;
-    client->stage = STAGE_INIT;
-    client->buf_off = 0;
-    client->addr_buf = NULL;
-    client->e_ctx = xs_calloc(sizeof(*client->e_ctx));
-    client->d_ctx = xs_calloc(sizeof(*client->d_ctx));
+tcpClient *tcpClientNew(tcpServer *server, int type, tcpEventHandler onRead) {
+    tcpClient *client;
+    tcpConn *conn;
+    char err[XS_ERR_LEN];
 
-    anetNonBlock(NULL, fd);
-    anetEnableTcpNoDelay(NULL, fd);
+    if ((client = xs_calloc(sizeof(*client))) == NULL) {
+        LOGE("TCP client is NULL, please check the memory");
+        return NULL;
+    }
 
-    ADD_EVENT(client->re);
-    ADD_EVENT(client->te);
+    if ((conn = tcpAccept(err, app->el, server->ln->fd, app->config->timeout, client)) == NULL) {
+        LOGW(err);
+        tcpClientFree(client);
+        return NULL;
+    }
+    client->conn = tcpConnNew(type, conn);
+    client->server = server;
 
-    app->crypto->ctx_init(app->crypto->cipher, client->e_ctx, 1);
-    app->crypto->ctx_init(app->crypto->cipher, client->d_ctx, 0);
+    CONN_ON_READ(client->conn, onRead);
+    CONN_ON_CLOSE(client->conn, tcpClientOnClose);
+    CONN_ON_ERROR(client->conn, tcpClientOnError);
+    CONN_ON_TIMEOUT(client->conn, tcpClientOnTimeout);
 
-    bzero(&client->buf, sizeof(client->buf));
-    balloc(&client->buf, NET_IOBUF_LEN);
+    ADD_EVENT_READ(client->conn);
 
     return client;
 }
 
-void tcpClientFree(tcpClient *client) {
+static void tcpClientFree(tcpClient *client) {
     if (!client) return;
 
-    bfree(&client->buf);
-    sdsfree(client->addr_buf);
-
-    CLR_EVENT(client->re);
-    CLR_EVENT(client->we);
-    CLR_EVENT(client->te);
-    close(client->fd);
-
-    app->crypto->ctx_release(client->e_ctx);
-    app->crypto->ctx_release(client->d_ctx);
-    xs_free(client->e_ctx);
-    xs_free(client->d_ctx);
-
+    CONN_CLOSE(client->conn);
     xs_free(client);
 }
 
-static void tcpClientReadHandler(event *e) {
-    tcpClient *client = e->data;
+static void tcpClientOnClose(void *data) {
+    tcpClient *client = data;
 
-    DEL_EVENT(client->te);
+    LOGD("TCP client %s closed connection", TCP_GET_ADDRINFO(client->conn));
 
-    if (client->server->crHandler && client->server->crHandler(client) == TCP_ERR) goto error;
-
-    ADD_EVENT(client->te);
-
-    return;
-
-error:
     tcpConnectionFree(client);
 }
 
-static void tcpClientWriteHandler(event *e) {
-    tcpClient *client = e->data;
+static void tcpClientOnError(void *data) {
+    tcpClient *client = data;
     tcpRemote *remote = client->remote;
 
-    int nwrite;
-    int cfd = client->fd;
-    int write_len = remote->buf.len - remote->buf_off;
-    char *write_buf = remote->buf.data + remote->buf_off;
-
-    if (write_len == 0) {
-        remote->buf_off = 0;
-        DEL_EVENT(client->we);
-        ADD_EVENT(client->re);
-        ADD_EVENT(remote->re);
-        return;
-    }
-
-    nwrite = write(cfd, write_buf, write_len);
-    if (nwrite <= write_len) {
-        if (nwrite == -1) {
-            if (errno == EAGAIN) return;
-
-            LOGW("TCP client [%s] write error: %s", client->remote_addr_info, STRERR);
-            goto error;
-        }
-
-        remote->buf_off += nwrite;
-    }
-
-    return;
-
-error:
-    tcpConnectionFree(client);
+    LOGW("TCP client %s pipe error: %s", TCP_GET_ADDRINFO(client->conn),
+         client->conn->err != 0 ? client->conn->errstr : remote->conn->errstr);
 }
 
-static void tcpClientReadTimeHandler(event *e) {
-    tcpClient *client = e->data;
+static void tcpClientOnTimeout(void *data) {
+    tcpClient *client = data;
 
-    LOGN("TCP client (%d) [%s] read timeout", client->fd,
-         client->stage == STAGE_STREAM ? client->remote_addr_info : client->client_addr_info);
-
-    tcpConnectionFree(client);
+    LOGI("TCP client %s read timeout", TCP_GET_ADDRINFO(client->conn));
 }
 
-tcpRemote *tcpRemoteCreate(char *host, int port) {
-    char err[ANET_ERR_LEN];
-    int fd;
+tcpRemote *tcpRemoteNew(tcpClient *client, int type, char *host, int port, tcpConnectHandler onConnect) {
+    tcpRemote *remote;
+    tcpConn *conn;
+    char err[XS_ERR_LEN];
 
-    if ((fd = anetTcpNonBlockConnect(err, host, port)) == ANET_ERR) {
-        LOGW("TCP remote connect error: %s", err);
-        return NULL;
-    }
-
-    tcpRemote *remote = tcpRemoteNew(fd);
+    remote = xs_calloc(sizeof(*remote));
     if (!remote) {
-        LOGW("TCP remote is NULL, please check the memory");
-        close(fd);
+        LOGE("TCP remote is NULL, please check the memory");
         return NULL;
     }
+
+    conn = tcpConnect(err, app->el, host, port, app->config->timeout, remote);
+    if (!conn) {
+        LOGW("TCP remote %s connect error: %s", err, TCP_GET_ADDRINFO(client->conn));
+        tcpRemoteFree(remote);
+        return NULL;
+    }
+    remote->client = client;
+    remote->conn = tcpConnNew(type, conn);
+
+    CONN_ON_CONNECT(remote->conn, onConnect);
+    CONN_ON_READ(remote->conn, tcpRemoteOnRead);
+    CONN_ON_CLOSE(remote->conn, tcpRemoteOnClose);
+    CONN_ON_ERROR(remote->conn, tcpRemoteOnError);
+    CONN_ON_TIMEOUT(remote->conn, tcpRemoteOnTimeout);
+
+    LOGD("TCP remote %s is connecting ...", TCP_GET_ADDRINFO(client->conn));
+    LOGD("TCP remote current count: %d", ++client->server->remote_count);
+
+    // Prepare remote connect
+    client->remote = remote;
+    tcpSetTimeout(client->conn, -1);
+    DEL_EVENT_READ(client->conn);
+
     return remote;
 }
 
-tcpRemote *tcpRemoteNew(int fd) {
-    tcpRemote *remote = xs_calloc(sizeof(*remote));
-    if (!remote) return NULL;
-
-    remote->fd = fd;
-    remote->re = NEW_EVENT_READ(fd, tcpRemoteReadHandler, remote);
-    remote->we = NEW_EVENT_WRITE(fd, tcpRemoteWriteHandler, remote);
-    remote->buf_off = 0;
-
-    anetNonBlock(NULL, fd);
-    anetEnableTcpNoDelay(NULL, fd);
-    netNoSigPipe(NULL, fd);
-
-    ADD_EVENT(remote->we);
-
-    bzero(&remote->buf, sizeof(remote->buf));
-    balloc(&remote->buf, NET_IOBUF_LEN);
-
-    return remote;
-}
-
-void tcpRemoteFree(tcpRemote *remote) {
+static void tcpRemoteFree(tcpRemote *remote) {
     if (!remote) return;
 
-    bfree(&remote->buf);
-
-    CLR_EVENT(remote->re);
-    CLR_EVENT(remote->we);
-    close(remote->fd);
-
+    CONN_CLOSE(remote->conn);
     xs_free(remote);
 }
 
-static void tcpRemoteReadHandler(event *e) {
-    tcpRemote *remote = e->data;
+static void tcpRemoteOnRead(void *data) {
+    tcpRemote *remote = data;
     tcpClient *client = remote->client;
 
-    int readlen = NET_IOBUF_LEN;
-    int rfd = remote->fd;
-    int cfd = client->fd;
-    int nread, nwrite;
+    tcpPipe(remote->conn, client->conn);
+}
 
-    // Read remote buffer
-    nread = read(rfd, remote->buf.data, readlen);
-    if (nread == -1) {
-        if (errno == EAGAIN) return;
+static void tcpRemoteOnClose(void *data) {
+    tcpRemote *remote = data;
+    tcpClient *client = remote->client;
 
-        LOGW("TCP remote [%s] read error: %s", client->remote_addr_info, STRERR);
-        goto error;
-    } else if (nread == 0) {
-        LOGD("TCP remote [%s] closed connection", client->remote_addr_info);
-        goto error;
-    }
-    remote->buf.len = nread;
+    LOGD("TCP remote %s closed connection", TCP_GET_ADDRINFO(client->conn));
 
-    if (app->type == MODULE_REMOTE) {
-        if (app->crypto->encrypt(&remote->buf, client->e_ctx, NET_IOBUF_LEN)) {
-            LOGW("TCP remote [%s] encrypt buffer error", client->remote_addr_info);
-            goto error;
-        }
-    } else if (app->type == MODULE_LOCAL || app->type == MODULE_REDIR) {
-        if (app->crypto->decrypt(&remote->buf, client->d_ctx, NET_IOBUF_LEN)) {
-            LOGW("TCP remote [%s] decrypt buffer error", client->remote_addr_info);
-            goto error;
-        }
-    }
-
-    // Write buffer to client
-    nwrite = write(cfd, remote->buf.data, remote->buf.len);
-    if (nwrite == -1) {
-        if (errno == EAGAIN) goto write_again;
-
-        LOGW("TCP client [%s] write error: %s", client->client_addr_info, STRERR);
-        goto error;
-    } else if (nwrite < (int)remote->buf.len) {
-        remote->buf_off = nwrite;
-        goto write_again;
-    }
-
-    return;
-
-write_again:
-    DEL_EVENT(remote->re);
-    DEL_EVENT(client->re);
-    ADD_EVENT(client->we);
-    return;
-
-error:
     tcpConnectionFree(client);
 }
 
-static void tcpRemoteWriteHandler(event *e) {
-    tcpRemote *remote = e->data;
+static void tcpRemoteOnError(void *data) {
+    tcpRemote *remote = data;
     tcpClient *client = remote->client;
 
-    int nwrite;
-    int rfd = remote->fd;
-    int write_len = client->buf.len - client->buf_off;
-    char *write_buf = client->buf.data + client->buf_off;
+    LOGW("TCP remote %s pipe error: %s", TCP_GET_ADDRINFO(client->conn),
+         client->conn->err != 0 ? client->conn->errstr : remote->conn->errstr);
+}
 
-    if (write_len == 0) {
-        client->buf_off = 0;
-        DEL_EVENT(remote->we);
-        ADD_EVENT(remote->re);
-        ADD_EVENT(client->re);
-        return;
-    }
+static void tcpRemoteOnTimeout(void *data) {
+    tcpRemote *remote = data;
+    tcpClient *client = remote->client;
+    char *addr_info = TCP_GET_ADDRINFO(client->conn);
 
-    nwrite = write(rfd, write_buf, write_len);
-    if (nwrite <= write_len) {
-        if (nwrite == -1) {
-            if (errno == EAGAIN) return;
-
-            LOGW("TCP remote [%s] write error: %s", client->remote_addr_info, STRERR);
-            goto error;
-        }
-
-        client->buf_off += nwrite;
-    }
-
-    return;
-
-error:
-    tcpConnectionFree(client);
+    if (tcpIsConnected(remote->conn))
+        LOGI("TCP remote %s read timeout", addr_info);
+    else
+        LOGW("TCP remote %s connect timeout", addr_info);
 }

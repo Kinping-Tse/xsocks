@@ -283,12 +283,12 @@ static tcpClient *tcpClientCreate() {
         tcpShadowsocksConnInit((tcpShadowsocksConn *)client->conn, app->tunnel_addr, app->tunnel_port);
     }
 
-    TCP_ON_READ(client->conn, tcpClientOnRead);
-    TCP_ON_WRITE(client->conn, tcpClientOnWrite);
-    TCP_ON_CONNECT(client->conn, tcpClientOnConnect);
-    TCP_ON_CLOSE(client->conn, tcpClientOnClose);
-    TCP_ON_ERROR(client->conn, tcpClientOnError);
-    TCP_ON_TIMEOUT(client->conn, tcpClientOnTimeout);
+    CONN_ON_READ(client->conn, tcpClientOnRead);
+    CONN_ON_WRITE(client->conn, tcpClientOnWrite);
+    CONN_ON_CONNECT(client->conn, tcpClientOnConnect);
+    CONN_ON_CLOSE(client->conn, tcpClientOnClose);
+    CONN_ON_ERROR(client->conn, tcpClientOnError);
+    CONN_ON_TIMEOUT(client->conn, tcpClientOnTimeout);
 
     app->liveclients++;
     LOGI("TCP client current count: %d", app->liveclients);
@@ -299,7 +299,7 @@ static tcpClient *tcpClientCreate() {
 static void tcpClientFree(tcpClient *client) {
     if (!client) return;
 
-    TCP_CLOSE(client->conn);
+    CONN_CLOSE(client->conn);
 
     xs_free(client);
 

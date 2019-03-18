@@ -130,7 +130,7 @@ tcpServer *tcpServerNew() {
 
 static void tcpServerFree(tcpServer *server) {
     if (!server) return;
-    TCP_L_CLOSE(server->ln);
+    CONN_CLOSE(server->ln);
     xs_free(server);
 }
 
@@ -161,10 +161,10 @@ static tcpClient *tcpClientNew(tcpServer *server) {
     client->conn = (tcpConn *)tcpRawConnNew(conn);
     client->server = server;
 
-    TCP_ON_READ(client->conn, tcpClientOnRead);
-    TCP_ON_CLOSE(client->conn, tcpClientOnClose);
-    TCP_ON_ERROR(client->conn, tcpClientOnError);
-    TCP_ON_TIMEOUT(client->conn, tcpClientOnTimeout);
+    CONN_ON_READ(client->conn, tcpClientOnRead);
+    CONN_ON_CLOSE(client->conn, tcpClientOnClose);
+    CONN_ON_ERROR(client->conn, tcpClientOnError);
+    CONN_ON_TIMEOUT(client->conn, tcpClientOnTimeout);
 
     ADD_EVENT_READ(client->conn);
 
@@ -173,7 +173,8 @@ static tcpClient *tcpClientNew(tcpServer *server) {
 
 static void tcpClientFree(tcpClient *client) {
     if (!client) return;
-    TCP_CLOSE(client->conn);
+
+    CONN_CLOSE(client->conn);
     xs_free(client);
 }
 

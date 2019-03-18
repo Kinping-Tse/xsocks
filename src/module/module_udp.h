@@ -48,8 +48,8 @@ typedef struct udpRemote {
     void *data;
 } udpRemote;
 
-udpServer *udpServerCreate(char *host, int port, udpHook hook, void *data);
-void udpServerFree(udpServer *server);
+udpServer *moduleUdpServerCreate(char *host, int port, udpHook hook, void *data);
+void moduleUdpServerFree(udpServer *server);
 
 udpRemote *udpRemoteCreate(udpHook *hook, void *data);
 void udpRemoteFree(udpRemote *remote);

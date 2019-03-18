@@ -2,8 +2,8 @@
 #include "tcp_socks5.h"
 
 static void tcpSocks5ConnFree(void *data);
-static int tcpSocks5ConnRead(void *data, char *buf, int buf_len);
-static int tcpSocks5ConnWrite(void *data, char *buf, int buf_len);
+static int tcpSocks5ConnRead(tcpConn *conn, char *buf, int buf_len);
+static int tcpSocks5ConnWrite(tcpConn *conn, char *buf, int buf_len);
 static char *tcpSocks5GetAddrinfo(tcpConn *conn);
 
 tcpSocks5Conn *tcpSocks5ConnNew(tcpConn *conn) {
@@ -47,9 +47,8 @@ static void tcpSocks5ConnFree(void *data) {
     tcpClose(&c->conn);
 }
 
-static int tcpSocks5ConnRead(void *data, char *buf, int buf_len) {
-    tcpSocks5Conn *c = data;
-    tcpConn *conn = &c->conn;
+static int tcpSocks5ConnRead(tcpConn *conn, char *buf, int buf_len) {
+    tcpSocks5Conn *c = (tcpSocks5Conn *)conn;
     int nread;
 
     if (c->flags & SOCKS5_FLAG_CLIENT) {
@@ -122,9 +121,8 @@ error:
     return TCP_ERR;
 }
 
-static int tcpSocks5ConnWrite(void *data, char *buf, int buf_len) {
-    tcpSocks5Conn *c = data;
-    tcpConn *conn = &c->conn;
+static int tcpSocks5ConnWrite(tcpConn *conn, char *buf, int buf_len) {
+    tcpSocks5Conn *c = (tcpSocks5Conn *)conn;
     int nwrite;
 
     if (c->flags & SOCKS5_FLAG_CLIENT) {

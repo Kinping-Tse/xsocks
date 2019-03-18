@@ -44,8 +44,6 @@ enum {
 
 extern module *app;
 
-#define ADD_EVENT(e) eventAdd(app->el, e)
-
 int moduleMain(int type, moduleHook hook, module *m, int argc, char *argv[]);
 
 #endif /* __MODULE_H */

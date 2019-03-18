@@ -2,11 +2,6 @@
 #include "tcp.h"
 #include "../core/utils.h"
 
-#define FIRE_READ(c) do { if (c->onRead) c->onRead(c->data); } while (0)
-#define FIRE_WRITE(c) do { if (c->onWrite) c->onWrite(c->data); } while (0)
-#define FIRE_TIMEOUT(c) do { if (c->onTimeout) c->onTimeout(c->data); } while (0)
-#define FIRE_CONNECT(c, s) do { if (c->onConnect) c->onConnect(c->data, s); } while (0)
-
 static tcpListener *tcpListenNew(int fd, eventLoop *el, void *data);
 static void tcpListenFree(void *data);
 static void tcpListenReadHandler(event *e);
@@ -164,8 +159,8 @@ static tcpConn *tcpConnNew(int fd, int timeout, eventLoop *el, void *data) {
     c->el = el;
     c->data = data;
 
-    c->read = (tcpReadHandler)tcpRead;
-    c->write = (tcpWriteHandler)tcpWrite;
+    c->read = tcpRead;
+    c->write = tcpWrite;
     c->close = (tcpCloseHandler)tcpClose;
     c->getAddrinfo = tcpGetAddrinfo;
 

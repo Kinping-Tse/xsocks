@@ -22,10 +22,12 @@ enum {
     TCP_ERROR_CONNECT = 10004,
 };
 
+struct tcpConn;
+
 typedef void (*tcpEventHandler)(void *data);
-typedef int (*tcpReadHandler)(void *data, char *buf, int buf_len);
-typedef int (*tcpWriteHandler)(void *data, char *buf, int buf_len);
+typedef int (*tcpIoHandler)(struct tcpConn *conn, char *buf, int buf_len);
 typedef void (*tcpCloseHandler)(void *data);
+typedef void (*tcpConnectHandler)(void *data, int status);
 
 typedef struct tcpListener {
     int fd;
@@ -51,9 +53,9 @@ typedef struct tcpConn {
     tcpEventHandler onTimeout;
     tcpEventHandler onClose;
     tcpEventHandler onError;
-    void (*onConnect)(void *data, int status);
-    tcpReadHandler read;
-    tcpWriteHandler write;
+    tcpConnectHandler onConnect;
+    tcpIoHandler read;
+    tcpIoHandler write;
     tcpCloseHandler close;
     char *(*getAddrinfo)(struct tcpConn *conn);
     void *data;
@@ -69,24 +71,6 @@ typedef struct tcpConn {
     char errstr[XS_ERR_LEN];
     struct tcpConn *pipe;
 } tcpConn;
-
-#define TCP_ON_ACCEPT(ln, h) ((tcpListener *)ln)->onAccept = (h)
-#define TCP_L_CLOSE(ln) do { if (ln) ((tcpListener *)ln)->close(ln); } while (0)
-
-#define TCP_ON_READ(c, h) ((tcpConn *)c)->onRead = (h)
-#define TCP_ON_WRITE(c, h) ((tcpConn *)c)->onWrite = (h)
-#define TCP_ON_CONNECT(c, h) ((tcpConn *)c)->onConnect = (h)
-#define TCP_ON_TIMEOUT(c, h) ((tcpConn *)c)->onTimeout = (h)
-#define TCP_ON_CLOSE(c, h) ((tcpConn *)c)->onClose = (h)
-#define TCP_ON_ERROR(c, h) ((tcpConn *)c)->onError = (h)
-
-#define FIRE_CLOSE(c) do { if (c->onClose) c->onClose(c->data); } while (0)
-#define FIRE_ERROR(c) do { if (c->onError) c->onError(c->data); } while (0)
-
-#define TCP_READ(c, buf, len) ((tcpConn *)c)->read(c, buf, len)
-#define TCP_WRITE(c, buf, len) ((tcpConn *)c)->write(c, buf, len)
-#define TCP_CLOSE(c) do { if (c) ((tcpConn *)c)->close(c); } while (0)
-#define TCP_GET_ADDRINFO(c) ((tcpConn *)c)->getAddrinfo(c)
 
 tcpListener *tcpListen(char *err, eventLoop *el, char *host, int port,
                        void *data, tcpEventHandler onAccept);
