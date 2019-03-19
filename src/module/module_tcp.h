@@ -27,7 +27,8 @@ tcpServer *tcpServerNew(char *host, int port, tcpEventHandler onAccept);
 void tcpServerFree(tcpServer *server);
 
 tcpClient *tcpClientNew(tcpServer *server, int type, tcpEventHandler onRead);
-tcpRemote *tcpRemoteNew(tcpClient *client, int type, char *host, int port, tcpConnectHandler onConnect);
+tcpRemote *tcpRemoteNew(tcpClient *client, int type, char *host, int port,
+                        tcpConnectHandler onConnect);
 void tcpConnectionFree(tcpClient *client);
 
 #endif /* __MODULE_TCP_H */

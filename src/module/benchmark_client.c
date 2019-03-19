@@ -1,5 +1,5 @@
 
-#include "../protocol/tcp_raw.h"
+#include "../protocol/raw.h"
 #include "../protocol/tcp_shadowsocks.h"
 
 #include <getopt.h>
@@ -364,7 +364,7 @@ static void tcpClientOnClose(void *data) {
     tcpClient *client = data;
     tcpConn *conn = client->conn;
 
-    LOGD("TCP client %s closed connection", tcpGetAddrinfo(conn));
+    LOGD("TCP client %s closed connection", CONN_GET_ADDRINFO(conn));
 
     tcpClientFree(client);
     createMissingClients();

@@ -14,9 +14,6 @@ static void localInit();
 static void localRun();
 static void localExit();
 
-static void tcpServerInit();
-static void tcpServerExit();
-
 static void tcpServerOnAccept(void *data);
 static void tcpClientOnRead(void *data);
 static void tcpRemoteOnConnect(void *data, int status);
@@ -39,7 +36,8 @@ static void localInit() {
 }
 
 static void localRun() {
-    if (app->config->mode & MODE_TCP_ONLY) tcpServerInit();
+    if (app->config->mode & MODE_TCP_ONLY)
+        s.ts = tcpServerNew(app->config->local_addr, app->config->local_port, tcpServerOnAccept);
 
     if (app->config->mode & MODE_UDP_ONLY) {
         LOGW("Only support TCP now!");
@@ -47,19 +45,10 @@ static void localRun() {
     }
 
     if (!s.ts) exit(EXIT_ERR);
-
     if (s.ts) LOGN("TCP server listen at: %s", s.ts->ln->addrinfo);
 }
 
 static void localExit() {
-    tcpServerExit();
-}
-
-static void tcpServerInit() {
-    s.ts = tcpServerNew(app->config->local_addr, app->config->local_port, tcpServerOnAccept);
-}
-
-static void tcpServerExit() {
     tcpServerFree(s.ts);
 }
 
@@ -67,7 +56,7 @@ static void tcpServerOnAccept(void *data) {
     tcpServer *server = data;
     tcpClient *client = tcpClientNew(server, CONN_TYPE_SOCKS5, tcpClientOnRead);
     if (client) {
-        LOGD("TCP server accepted client %s", TCP_GET_ADDRINFO(client->conn));
+        LOGD("TCP server accepted client %s", CONN_GET_ADDRINFO(client->conn));
         LOGD("TCP client current count: %d", ++server->client_count);
     }
 }
@@ -98,6 +87,8 @@ static void tcpClientOnRead(void *data) {
         socks5AddrParse(conn_client->addrbuf_dest, sdslen(conn_client->addrbuf_dest),
                         NULL, host, &host_len, &port);
         tcpShadowsocksConnInit((tcpShadowsocksConn *)remote->conn, host, port);
+
+        LOGD("TCP client proxy dest addr: %s:%d", host, port);
     } else {
         tcpPipe(client->conn, remote->conn);
     }
@@ -106,7 +97,7 @@ static void tcpClientOnRead(void *data) {
 static void tcpRemoteOnConnect(void *data, int status) {
     tcpRemote *remote = data;
     tcpClient *client = remote->client;
-    char *addrinfo = TCP_GET_ADDRINFO(client->conn);
+    char *addrinfo = CONN_GET_ADDRINFO(client->conn);
 
     if (status == TCP_ERR) {
         LOGW("TCP remote %s connect error: %s", addrinfo, remote->conn->errstr);

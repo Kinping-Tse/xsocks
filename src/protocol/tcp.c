@@ -3,7 +3,7 @@
 #include "../core/utils.h"
 
 static tcpListener *tcpListenNew(int fd, eventLoop *el, void *data);
-static void tcpListenFree(void *data);
+static void tcpListenFree(tcpListener *ln);
 static void tcpListenReadHandler(event *e);
 
 static tcpConn *tcpConnNew(int fd, int timeout, eventLoop *el, void *data);
@@ -62,8 +62,11 @@ static tcpListener *tcpListenNew(int fd, eventLoop *el, void *data) {
     return ln;
 }
 
-static void tcpListenFree(void *data) {
-    tcpListener *ln = data;
+static void tcpListenFree(tcpListener *ln) {
+    if (!ln) return;
+
+    CLR_EVENT_READ(ln);
+    close(ln->fd);
 
     xs_free(ln);
 }
@@ -161,7 +164,7 @@ static tcpConn *tcpConnNew(int fd, int timeout, eventLoop *el, void *data) {
 
     c->read = tcpRead;
     c->write = tcpWrite;
-    c->close = (tcpCloseHandler)tcpClose;
+    c->close = tcpClose;
     c->getAddrinfo = tcpGetAddrinfo;
 
     c->rbuf = xs_calloc(NET_IOBUF_LEN);

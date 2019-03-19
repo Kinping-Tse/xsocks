@@ -26,7 +26,6 @@ struct tcpConn;
 
 typedef void (*tcpEventHandler)(void *data);
 typedef int (*tcpIoHandler)(struct tcpConn *conn, char *buf, int buf_len);
-typedef void (*tcpCloseHandler)(void *data);
 typedef void (*tcpConnectHandler)(void *data, int status);
 
 typedef struct tcpListener {
@@ -35,7 +34,7 @@ typedef struct tcpListener {
     eventLoop *el;
     event *re;
     tcpEventHandler onAccept;
-    tcpCloseHandler close;
+    void (*close)(struct tcpListener *c);
     char addrinfo[ADDR_INFO_STR_LEN];
     void *data;
 } tcpListener;
@@ -56,8 +55,8 @@ typedef struct tcpConn {
     tcpConnectHandler onConnect;
     tcpIoHandler read;
     tcpIoHandler write;
-    tcpCloseHandler close;
-    char *(*getAddrinfo)(struct tcpConn *conn);
+    void (*close)(struct tcpConn *c);
+    char *(*getAddrinfo)(struct tcpConn *c);
     void *data;
     char addrinfo[ADDR_INFO_STR_LEN];
     char addrinfo_peer[ADDR_INFO_STR_LEN];
@@ -77,15 +76,14 @@ tcpListener *tcpListen(char *err, eventLoop *el, char *host, int port,
 
 tcpConn *tcpAccept(char *err, eventLoop *el, int fd, int timeout, void *data);
 tcpConn *tcpConnect(char *err, eventLoop *el, char *host, int port, int timeout, void *data);
-int tcpInit(tcpConn *c);
 int tcpSetTimeout(tcpConn *c, int timeout);
-void tcpClose(tcpConn *c);
-
 int tcpIsConnected(tcpConn *c);
-int tcpRead(tcpConn *c, char *buf, int buf_len);
-int tcpWrite(tcpConn *c, char *buf, int buf_len);
 int tcpPipe(tcpConn *src, tcpConn *dst);
 
+int tcpInit(tcpConn *c);
+void tcpClose(tcpConn *c);
+int tcpRead(tcpConn *c, char *buf, int buf_len);
+int tcpWrite(tcpConn *c, char *buf, int buf_len);
 char *tcpGetAddrinfo(tcpConn *c);
 
 #endif /* __PROTOCOL_TCP_H */

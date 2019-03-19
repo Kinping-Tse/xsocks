@@ -16,13 +16,11 @@ enum {
 
 struct udpConn;
 
-typedef void (*udpEventHandler)(struct udpConn *c);
-typedef int (*udpIoHandler)(struct udpConn *c, char *buf, int buf_len, sockAddrEx *sa);
-typedef void (*udpCloseHandler)(struct udpConn *c);
+typedef void (*udpEventHandler)(void *data);
+typedef int (*udpIoHandler)(struct udpConn *conn, char *buf, int buf_len, sockAddrEx *sa);
 
 typedef struct udpConn {
     int fd;
-    // int flags;
     int timeout;
     eventLoop *el;
     event *re;
@@ -34,20 +32,21 @@ typedef struct udpConn {
     udpEventHandler onError;
     udpIoHandler read;
     udpIoHandler write;
-    udpEventHandler close;
+    void (*close)(struct udpConn *c);
+    char *(*getAddrinfo)(struct udpConn *c);
     void *data;
     char addrinfo[ADDR_INFO_STR_LEN];
     int err;
     char errstr[XS_ERR_LEN];
-    // struct udpConn *pipe;
 } udpConn;
 
-udpConn *udpCreate(char *err, eventLoop *el, char *host, int port, int timeout, void *data);
-int udpInit(udpConn *c);
+udpConn *udpCreate(char *err, eventLoop *el, char *host, int port, int ipv6_first, int timeout, void *data);
 int udpSetTimeout(udpConn *c, int timeout);
-void udpClose(udpConn *c);
 
+int udpInit(udpConn *c);
+void udpClose(udpConn *c);
 int udpRead(udpConn *c, char *buf, int buf_len, sockAddrEx *sa);
 int udpWrite(udpConn *c, char *buf, int buf_len, sockAddrEx *sa);
+char *udpGetAddrinfo(udpConn *c);
 
 #endif /* __PROTOCOL_UDP_H */

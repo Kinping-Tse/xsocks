@@ -1,5 +1,5 @@
 
-#include "../protocol/tcp_raw.h"
+#include "../protocol/raw.h"
 
 #include <getopt.h>
 
@@ -188,7 +188,7 @@ static void tcpClientOnRead(void *data) {
 static void tcpClientOnClose(void *data) {
     tcpClient *client = data;
 
-    LOGD("TCP client %s closed connection", tcpGetAddrinfo(client->conn));
+    LOGD("TCP client %s closed connection", CONN_GET_ADDRINFO(client->conn));
     LOGD("TCP client current count: %d", --client->server->client_count);
 
     tcpClientFree(client);
@@ -198,7 +198,7 @@ static void tcpClientOnError(void *data) {
     tcpClient *client = data;
     tcpConn *conn = client->conn;
 
-    LOGW("TCP client %s pipe (%s) error: %s", tcpGetAddrinfo(conn),
+    LOGW("TCP client %s pipe (%s) error: %s", CONN_GET_ADDRINFO(conn),
          conn->err == TCP_ERROR_READ ? "read" : "write", conn->errstr);
 }
 

@@ -1,7 +1,7 @@
 
 #include "tcp_socks5.h"
 
-static void tcpSocks5ConnFree(void *data);
+static void tcpSocks5ConnFree(tcpConn *conn);
 static int tcpSocks5ConnRead(tcpConn *conn, char *buf, int buf_len);
 static int tcpSocks5ConnWrite(tcpConn *conn, char *buf, int buf_len);
 static char *tcpSocks5GetAddrinfo(tcpConn *conn);
@@ -38,13 +38,13 @@ static char *tcpSocks5GetAddrinfo(tcpConn *conn) {
     return c->state == SOCKS5_STATE_STREAM ? c->addrinfo_dest : tcpGetAddrinfo(conn);
 }
 
-static void tcpSocks5ConnFree(void *data) {
-    tcpSocks5Conn *c = data;
+static void tcpSocks5ConnFree(tcpConn *conn) {
+    tcpSocks5Conn *c = (tcpSocks5Conn *)conn;
     if (!c) return;
 
     sdsfree(c->addrbuf_dest);
 
-    tcpClose(&c->conn);
+    tcpClose(conn);
 }
 
 static int tcpSocks5ConnRead(tcpConn *conn, char *buf, int buf_len) {

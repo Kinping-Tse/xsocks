@@ -5,7 +5,6 @@
 #include "../core/common.h"
 
 #include "../core/config.h"
-#include "../core/error.h"
 #include "../core/time.h"
 #include "../core/utils.h"
 #include "../event/event.h"

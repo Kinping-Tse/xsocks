@@ -4,7 +4,6 @@
 
 #include "../core/common.h"
 
-#include "../core/error.h"
 #include "../core/net.h"
 #include "../core/time.h"
 #include "../core/utils.h"
@@ -41,12 +40,12 @@ enum {
 
 #define TCP_READ(c, buf, len) (c)->read(c, buf, len)
 #define TCP_WRITE(c, buf, len) (c)->write(c, buf, len)
-#define TCP_GET_ADDRINFO(c) (c)->getAddrinfo(c)
 
 #define UDP_READ(c, buf, len, sa) (c)->read(c, buf, len, sa)
 #define UDP_WRITE(c, buf, len, sa) (c)->write(c, buf, len, sa)
 
 #define CONN_CLOSE(c) do { if (c) (c)->close(c); } while (0)
+#define CONN_GET_ADDRINFO(c) (c)->getAddrinfo(c)
 
 #define FIRE_READ(c) do { if (c->onRead) c->onRead(c->data); } while (0)
 #define FIRE_WRITE(c) do { if (c->onWrite) c->onWrite(c->data); } while (0)

@@ -3,8 +3,9 @@
 #include "module_tcp.h"
 #include "module_udp.h"
 
-#include "../protocol/socks5.h"
 #include "../protocol/tcp_shadowsocks.h"
+#include "../protocol/udp_shadowsocks.h"
+#include "../protocol/socks5.h"
 
 typedef struct server {
     module mod;
@@ -16,18 +17,11 @@ static void serverInit();
 static void serverRun();
 static void serverExit();
 
-static void tcpServerInit();
-static void tcpServerExit();
-
 static void tcpServerOnAccept(void *data);
 static void tcpClientOnRead(void *data);
 static void tcpRemoteOnConnect(void *data, int status);
 
-static void udpServerInit();
-static void udpServerExit();
-
-static int udpServerHookProcess(void *data);
-static int udpRemoteHookProcess(void *data);
+static void udpServerOnRead(void *data);
 
 static server s;
 module *app = (module *)&s;
@@ -47,29 +41,21 @@ static void serverInit() {
 }
 
 static void serverRun() {
-    if (app->config->mode & MODE_TCP_ONLY) tcpServerInit();
-    if (app->config->mode & MODE_UDP_ONLY) udpServerInit();
+    if (app->config->mode & MODE_TCP_ONLY)
+        s.ts = tcpServerNew(app->config->remote_addr, app->config->remote_port, tcpServerOnAccept);
+    if (app->config->mode & MODE_UDP_ONLY)
+        s.us = udpServerNew(app->config->remote_addr, app->config->remote_port,
+                            CONN_TYPE_SHADOWSOCKS, udpServerOnRead);
 
     if (!s.ts && !s.us) exit(EXIT_ERR);
 
-    char addr_info[ADDR_INFO_STR_LEN];
-
     if (s.ts) LOGN("TCP server listen at: %s", s.ts->ln->addrinfo);
-
-    if (s.us && anetFormatSock(s.us->fd, addr_info, ADDR_INFO_STR_LEN) > 0) LOGN("UDP server read at: %s", addr_info);
+    if (s.us) LOGN("UDP server listen at: %s", s.us->conn->addrinfo);
 }
 
 static void serverExit() {
-    tcpServerExit();
-    udpServerExit();
-}
-
-static void tcpServerInit() {
-    s.ts = tcpServerNew(app->config->remote_addr, app->config->remote_port, tcpServerOnAccept);
-}
-
-static void tcpServerExit() {
     tcpServerFree(s.ts);
+    udpServerFree(s.us);
 }
 
 static void tcpServerOnAccept(void *data) {
@@ -97,6 +83,9 @@ static void tcpClientOnRead(void *data) {
 
         socks5AddrParse(conn_client->addrbuf_dest->data, conn_client->addrbuf_dest->len,
                         NULL, host, &host_len, &port);
+
+        LOGD("TCP client proxy dest addr: %s:%d", host, port);
+
         client->remote = tcpRemoteNew(client, CONN_TYPE_RAW, host, port, tcpRemoteOnConnect);
         if (!client->remote) {
             tcpConnectionFree(client);
@@ -121,10 +110,10 @@ static void tcpRemoteOnConnect(void *data, int status) {
     tcpClient *client = remote->client;
 
     if (status == TCP_ERR) {
-        LOGW("TCP remote %s connect error: %s", TCP_GET_ADDRINFO(client->conn), remote->conn->errstr);
+        LOGW("TCP remote %s connect error: %s", CONN_GET_ADDRINFO(client->conn), remote->conn->errstr);
         return;
     }
-    LOGD("TCP remote %s connect success", TCP_GET_ADDRINFO(client->conn));
+    LOGD("TCP remote %s connect success", CONN_GET_ADDRINFO(client->conn));
 
     // Write shadowsocks client handshake left buffer
     if (client->conn->rbuf_off) {
@@ -142,93 +131,44 @@ static void tcpRemoteOnConnect(void *data, int status) {
     ADD_EVENT_READ(client->conn);
 }
 
-static void udpServerInit() {
-    udpHook hook = {.init = NULL, .process = udpServerHookProcess, .free = NULL};
-    s.us = moduleUdpServerCreate(app->config->remote_addr, app->config->remote_port, hook, NULL);
-}
-
-static void udpServerExit() {
-    moduleUdpServerFree(s.us);
-}
-
-static int udpServerHookProcess(void *data) {
-    udpClient *client = data;
+static void udpServerOnRead(void *data) {
+    udpServer *server = data;
+    udpShadowsocksConn *conn = (udpShadowsocksConn *)server->conn;
+    udpClient *client;
     udpRemote *remote;
 
-    char err[ANET_ERR_LEN];
-    int buflen = NET_IOBUF_LEN;
+    char buf[NET_IOBUF_LEN];
+    int buf_len = sizeof(buf);
+    int nread;
 
-    // Decrypt client buffer
-    if (app->crypto->decrypt_all(&client->buf, app->crypto->cipher, buflen)) {
-        LOGW("UDP server decrypt buffer error");
-        return UDP_ERR;
-    }
+    char host[HOSTNAME_MAX_LEN];
+    int host_len = sizeof(host);
+    int port;
 
-    // Get remote addr from the buffer
-    char rip[HOSTNAME_MAX_LEN];
-    int rip_len = sizeof(rip);
-    int rport;
-    int raddr_len;
+    char cip[HOSTNAME_MAX_LEN];
+    int cip_len = sizeof(cip);
+    int cport;
 
-    if ((raddr_len = socks5AddrParse(client->buf.data, client->buf.len, NULL, rip, &rip_len, &rport)) == -1) {
-        LOGW("UDP server parse buffer error");
-        return UDP_ERR;
-    }
+    if ((client = udpClientNew(server)) == NULL) return;
 
-    if (netUdpGetSockAddrEx(err, rip, rport, app->config->ipv6_first, &client->sa_remote) == NET_ERR) {
-        LOGW("Get UDP remote sockaddr error: %s", err);
-        return UDP_ERR;
-    }
+    nread = UDP_READ(server->conn, buf, buf_len, &client->sa_client);
+    if (nread == UDP_ERR) goto error;
 
-    // Log the remote info
-    char raddr_info[ADDR_INFO_STR_LEN];
-    anetFormatAddr(raddr_info, ADDR_INFO_STR_LEN, rip, rport);
-    LOGI("UDP client request addr: %s", raddr_info);
+    if (netIpPresentBySockAddr(NULL, cip, cip_len, &cport, &client->sa_client) == NET_OK)
+        LOGD("UDP server read from %s:%d", cip, cport);
 
-    // Prepare remote
-    udpHook hook = {.init = NULL, .process = udpRemoteHookProcess, .free = NULL};
-    if ((remote = udpRemoteCreate(&hook, NULL)) == NULL) return UDP_ERR;
+    socks5AddrParse(conn->addrbuf_dest->data, conn->addrbuf_dest->len,
+                    NULL, host, &host_len, &port);
 
-    remote->client = client;
+    LOGD("UDP client proxy dest addr: %s:%d", host, port);
 
-    client->remote = remote;
-    client->buf_off = raddr_len;
+    remote = udpRemoteNew(client, CONN_TYPE_RAW, host, port);
+    if (!remote) goto error;
 
-    return UDP_OK;
-}
+    UDP_WRITE(remote->conn, buf, nread, &client->sa_remote);
 
-static int udpRemoteHookProcess(void *data) {
-    udpRemote *remote = data;
-    udpClient *client = remote->client;
+    return;
 
-    int buflen = NET_IOBUF_LEN;
-
-    // Append address buffer
-    char rip[HOSTNAME_MAX_LEN];
-    int rport;
-    buffer_t addr_buf;
-    sds sbuf;
-    int addr_len;
-
-    netIpPresentBySockAddr(NULL, rip, sizeof(rip), &rport, &client->sa_remote);
-    sbuf = socks5AddrInit(NULL, rip, rport);
-    addr_len = sdslen(sbuf);
-
-    bzero(&addr_buf, sizeof(addr_buf));
-    balloc(&addr_buf, addr_len);
-    memcpy(addr_buf.data, sbuf, addr_len);
-    addr_buf.len = addr_len;
-
-    bprepend(&remote->buf, &addr_buf, buflen);
-
-    sdsfree(sbuf);
-    bfree(&addr_buf);
-
-    // Encrypt remote buffer
-    if (app->crypto->encrypt_all(&remote->buf, app->crypto->cipher, buflen)) {
-        LOGW("UDP remote encrypt buffer error");
-        return UDP_ERR;
-    }
-
-    return UDP_OK;
+error:
+    udpConnectionFree(client);
 }

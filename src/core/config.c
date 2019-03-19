@@ -64,7 +64,7 @@ xsocksConfig *configNew() {
     config->local_addr = NULL;
     config->local_port = CONFIG_DEFAULT_LOCAL_PORT;
     configStringDup(config->password, CONFIG_DEFAULT_PASSWORD);
-    config->tunnel_address = NULL;
+    configStringDup(config->tunnel_address, CONFIG_DEFAULT_TUNNEL_ADDRESS);
     config->key = NULL;
     configStringDup(config->method, CONFIG_DEFAULT_METHOD);
     config->timeout = CONFIG_DEFAULT_TIMEOUT;
@@ -360,7 +360,7 @@ int configParse(xsocksConfig *config, int argc, char *argv[]) {
     configIntDup(config->fast_open, fast_open);
 
     if (config->tunnel_address) {
-        config->tunnel_addr = xs_malloc(HOSTNAME_MAX_LEN);
+        config->tunnel_addr = xs_calloc(HOSTNAME_MAX_LEN);
         netHostPortParse(config->tunnel_address, config->tunnel_addr, &config->tunnel_port);
         xs_free(config->tunnel_address);
         config->tunnel_address = NULL;

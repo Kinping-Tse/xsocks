@@ -3,19 +3,12 @@
 #define __PROTOCOL_TCP_SHADOWSOCKS_H
 
 #include "tcp.h"
-
-#include "shadowsocks-libev/crypto.h"
+#include "shadowsocks.h"
 
 enum {
     SHADOWSOCKS_STATE_INIT = 0,
     SHADOWSOCKS_STATE_HANDSHAKE,
     SHADOWSOCKS_STATE_STREAM,
-};
-
-enum {
-    ERROR_SHADOWSOCKS_ENCRYPT = 10000,
-    ERROR_SHADOWSOCKS_DECRYPT,
-    ERROR_SHADOWSOCKS_SOCKS5,
 };
 
 typedef struct tcpShadowsocksConn {

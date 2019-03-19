@@ -2,125 +2,109 @@
 #include "module_udp.h"
 #include "module.h"
 
-#include "redis/anet.h"
+#include "../protocol/udp_shadowsocks.h"
+#include "../protocol/raw.h"
 
-#define ADD_EVENT(e) eventAdd(app->el, e);
+static udpConn *udpConnNew(int type, udpConn *conn);
 
-static udpServer *udpServerNew(int fd);
-static void udpServerReadHandler(event *e);
-static void udpConnectionFree(udpClient *client);
-
-static udpClient *udpClientNew();
 static void udpClientFree(udpClient *client);
+static void udpRemoteFree(udpRemote *remote);
 
-static udpRemote *udpRemoteNew(int fd);
-static void udpRemoteReadHandler(event *e);
-static void udpRemoteReadTimeHandler(event *e);
+static void udpRemoteOnRead(void *data);
+static void udpRemoteOnClose(void *data);
+static void udpRemoteOnError(void *data);
+static void udpRemoteOnTimeout(void *data);
 
-udpServer *moduleUdpServerCreate(char *host, int port, udpHook hook, void *data) {
-    char err[ANET_ERR_LEN];
-    int fd;
+udpServer *udpServerNew(char *host, int port, int type, udpEventHandler onRead) {
+    udpServer *server;
+    udpConn *conn;
+    char err[XS_ERR_LEN];
 
-    if ((host && isIPv6Addr(host)))
-        fd = netUdp6Server(err, port, host);
-    else
-        fd = netUdpServer(err, port, host);
-
-    if (fd == ANET_ERR) {
-        LOGE("UDP server create error %s:%d: %s", host ? host : "*", port, err);
+    if (CALLOC_P(server) == NULL) {
+        LOGW("UDP server is NULL, please check the memory");
         return NULL;
     }
 
-    udpServer *server = udpServerNew(fd);
-    if (server) {
-        server->hook = hook;
-        server->data = data;
-
-        if (server->hook.init) server->hook.init(server);
+    if ((conn = udpCreate(err, app->el, host, port, app->config->ipv6_first,
+                          app->config->timeout, server)) == NULL) {
+        LOGW("UDP server create error: %s", err);
+        udpServerFree(server);
+        return NULL;
     }
-    return server;
-}
+    server->conn = udpConnNew(type, conn);
 
-static udpServer *udpServerNew(int fd) {
-    udpServer *server = xs_calloc(sizeof(*server));
-
-    if (server) {
-        server->fd = fd;
-        server->re = NEW_EVENT_READ(fd, udpServerReadHandler, server);
-
-        anetNonBlock(NULL, server->fd);
-        ADD_EVENT(server->re);
-    }
+    CONN_ON_READ(server->conn, onRead);
 
     return server;
 }
 
-void moduleUdpServerFree(udpServer *server) {
+void udpServerFree(udpServer *server) {
     if (!server) return;
 
-    if (server->hook.free) server->hook.free(server);
-
-    CLR_EVENT(server->re);
-    close(server->fd);
-
+    CONN_CLOSE(server->conn);
     xs_free(server);
 }
 
-static void udpServerReadHandler(event *e) {
-    udpServer *server = e->data;
-    udpClient *client = udpClientNew();
+static udpConn *udpConnNew(int type, udpConn *conn) {
+    switch (type) {
+        case CONN_TYPE_SHADOWSOCKS: return (udpConn *)udpShadowsocksConnNew(conn, app->crypto);
+        case CONN_TYPE_RAW: return (udpConn *)udpRawConnNew(conn);
+        default: return conn;
+    }
+}
 
-    if (!client) {
+udpClient *udpClientNew(udpServer *server) {
+    udpClient *client;
+
+    if (CALLOC_P(client) == NULL) {
         LOGW("UDP client is NULL, please check the memory");
-        goto error;
+        return NULL;
     }
 
     client->server = server;
-    char err[ANET_ERR_LEN];
+    netSockAddrExInit(&client->sa_client);
+    netSockAddrExInit(&client->sa_remote);
 
-    // Read from client
-    int buflen = NET_IOBUF_LEN;
-    int sfd = server->fd;
-    int nread;
-
-    nread = netUdpRead(err, sfd, client->buf.data, buflen, &client->sa_client);
-    if (nread == -1) {
-        LOGW("UDP server read error: %s", err);
-        goto error;
-    }
-    client->buf.len = nread;
-
-    // Log client info
-    char cip[HOSTNAME_MAX_LEN];
-    int cport;
-    netIpPresentBySockAddr(NULL, cip, sizeof(cip), &cport, &client->sa_client);
-    LOGD("UDP server read from [%s:%d]", cip, cport);
-
-    // Process buffer
-    if (server->hook.process && server->hook.process(client) == UDP_ERR) goto error;
-    assert(client->remote);
-
-    // Write to remote
-    int rfd = client->remote->fd;
-    int nwrite;
-
-    nwrite = netUdpWrite(err, rfd, client->buf.data + client->buf_off, client->buf.len - client->buf_off,
-                         &client->sa_remote);
-    if (nwrite == -1) {
-        LOGW("UDP server write error: %s", err);
-        goto error;
-    }
-
-    server->remote_count++;
-    LOGD("UDP remote current count: %d", server->remote_count);
-
-    return;
-
-error:
-    udpConnectionFree(client);
+    return client;
 }
 
-static void udpConnectionFree(udpClient *client) {
+udpRemote *udpRemoteNew(udpClient *client, int type, char *host, int port) {
+    udpRemote *remote;
+    udpConn *conn;
+    char err[XS_ERR_LEN];
+
+    if (CALLOC_P(remote) == NULL) {
+        LOGW("UDP remote is NULL, please check the memory");
+        return NULL;
+    }
+
+    conn = udpCreate(err, app->el, NULL, 0, app->config->ipv6_first, app->config->timeout, remote);
+    if (!conn) {
+        LOGW("UDP remote create error: %s", err);
+        udpRemoteFree(remote);
+        return NULL;
+    }
+    remote->client = client;
+    remote->conn = udpConnNew(type, conn);
+
+    CONN_ON_READ(remote->conn, udpRemoteOnRead);
+    CONN_ON_CLOSE(remote->conn, udpRemoteOnClose);
+    CONN_ON_ERROR(remote->conn, udpRemoteOnError);
+    CONN_ON_TIMEOUT(remote->conn, udpRemoteOnTimeout);
+
+    client->remote = remote;
+    if (netUdpGetSockAddrEx(err, host, port, app->config->ipv6_first, &client->sa_remote) == NET_ERR) {
+        LOGW("Get UDP remote sockaddr error: %s", err);
+        udpRemoteFree(remote);
+        return NULL;
+    }
+
+    LOGD("UDP remote current count: %d", ++client->server->remote_count);
+
+    return remote;
+}
+
+void udpConnectionFree(udpClient *client) {
     if (!client) return;
 
     udpServer *server = client->server;
@@ -132,137 +116,60 @@ static void udpConnectionFree(udpClient *client) {
     udpClientFree(client);
 }
 
-static udpClient *udpClientNew() {
-    udpClient *client = xs_calloc(sizeof(*client));
-
-    if (client) {
-        bzero(&client->buf, sizeof(client->buf));
-        balloc(&client->buf, NET_IOBUF_LEN);
-
-        netSockAddrExInit(&client->sa_client);
-        netSockAddrExInit(&client->sa_remote);
-    }
-
-    return client;
-}
-
 static void udpClientFree(udpClient *client) {
     if (!client) return;
 
-    bfree(&client->buf);
-
-    xs_free(client);
+    FREE_P(client);
 }
 
-udpRemote *udpRemoteCreate(udpHook *hook, void *data) {
-    char err[ANET_ERR_LEN];
-    int fd = ANET_ERR;
-
-    // Todo: order by app->config->ipv6_first
-    fd = netUdpServer(err, 0, NULL);
-    if (fd == ANET_ERR) fd = netUdp6Server(err, 0, NULL);
-
-    if (fd == ANET_ERR) {
-        LOGW("UDP remote create error: %s", err);
-        return NULL;
-    }
-
-    udpRemote *remote = udpRemoteNew(fd);
-    if (!remote) {
-        LOGW("UDP remote is NULL, please check the memory");
-        return NULL;
-    }
-
-    if (hook) memcpy(&remote->hook, hook, sizeof(*hook));
-    remote->data = data;
-
-    if (remote->hook.init) remote->hook.init(remote);
-
-    return remote;
-}
-
-static udpRemote *udpRemoteNew(int fd) {
-    udpRemote *remote = xs_calloc(sizeof(*remote));
-
-    if (remote) {
-        remote->fd = fd;
-        remote->re = NEW_EVENT_READ(fd, udpRemoteReadHandler, remote);
-        remote->te = NEW_EVENT_ONCE(app->config->timeout * MILLISECOND_UNIT_F, udpRemoteReadTimeHandler, remote);
-
-        bzero(&remote->buf, sizeof(remote->buf));
-        balloc(&remote->buf, NET_IOBUF_LEN);
-
-        anetNonBlock(NULL, remote->fd);
-        ADD_EVENT(remote->re);
-        ADD_EVENT(remote->te);
-    }
-
-    return remote;
-}
-
-void udpRemoteFree(udpRemote *remote) {
+static void udpRemoteFree(udpRemote *remote) {
     if (!remote) return;
 
-    if (remote->hook.free) remote->hook.free(remote);
-
-    bfree(&remote->buf);
-
-    CLR_EVENT(remote->re);
-    CLR_EVENT(remote->te);
-    close(remote->fd);
-
-    xs_free(remote);
+    CONN_CLOSE(remote->conn);
+    FREE_P(remote);
 }
 
-static void udpRemoteReadHandler(event *e) {
-    udpRemote *remote = e->data;
+static void udpRemoteOnRead(void *data) {
+    udpRemote *remote = data;
     udpClient *client = remote->client;
 
-    char err[ANET_ERR_LEN];
-
-    int readlen = NET_IOBUF_LEN;
-    int rfd = remote->fd;
+    char buf[NET_IOBUF_LEN];
+    int buf_len = sizeof(buf);
     int nread;
-    sockAddrEx remote_addr;
 
-    netSockAddrExInit(&remote_addr);
-
-    // Read from remote
-    nread = netUdpRead(err, rfd, remote->buf.data, readlen, NULL);
-    if (nread == -1) {
-        LOGW("UDP remote read error: %s", err);
-        goto error;
-    }
-    remote->buf.len = nread;
-
-    // Log remote info
     char rip[HOSTNAME_MAX_LEN];
+    int rip_len = sizeof(rip);
     int rport;
-    netIpPresentBySockAddr(NULL, rip, sizeof(rip), &rport, &client->sa_remote);
-    LOGD("UDP remote read from [%s:%d] ", rip, rport);
 
-    // Process buffer
-    if (remote->hook.process && remote->hook.process(remote) == UDP_ERR) goto error;
+    nread = UDP_READ(remote->conn, buf, buf_len, NULL);
+    if (nread == UDP_ERR) return;
 
-    // Write to client
-    int cfd = client->server->fd;
-    int nwrite;
+    if (netIpPresentBySockAddr(NULL, rip, rip_len, &rport, &client->sa_remote) == NET_OK)
+        LOGD("UDP remote read from %s:%d", rip, rport);
 
-    nwrite = netUdpWrite(err, cfd, remote->buf.data + remote->buf_off, remote->buf.len - remote->buf_off,
-                         &client->sa_client);
-    if (nwrite == -1) {
-        LOGW("UDP remote write error: %s", err);
-        goto error;
-    }
+    UDP_WRITE(client->server->conn, buf, nread, &client->sa_client);
 
-error:
     udpConnectionFree(client);
 }
 
-static void udpRemoteReadTimeHandler(event *e) {
-    udpRemote *remote = e->data;
+static void udpRemoteOnClose(void *data) {
+    udpRemote *remote = data;
 
-    LOGN("UDP remote read timeout");
+    LOGD("UDP remote %s closed connection", CONN_GET_ADDRINFO(remote->conn));
 
     udpConnectionFree(remote->client);
+}
+
+static void udpRemoteOnError(void *data) {
+    udpRemote *remote = data;
+    udpConn *conn = remote->conn;
+
+    LOGW("UDP remote %s %s error: %s", CONN_GET_ADDRINFO(conn),
+         conn->err == UDP_ERROR_READ ? "read" : "write", conn->errstr);
+}
+
+static void udpRemoteOnTimeout(void *data) {
+    udpRemote *remote = data;
+
+    LOGI("UDP remote %s read timeout", CONN_GET_ADDRINFO(remote->conn));
 }

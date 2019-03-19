@@ -2,35 +2,14 @@
 #ifndef __MODULE_UDP_H
 #define __MODULE_UDP_H
 
-#include "../core/net.h"
-#include "../event/event.h"
-
-#include "shadowsocks-libev/crypto.h"
-
-enum {
-    UDP_OK = 0,
-    UDP_ERR = -1,
-};
-
-typedef int (*udpHandler)(void *data);
-
-typedef struct udpHook {
-    udpHandler init;
-    udpHandler process;
-    udpHandler free;
-} udpHook;
+#include "../protocol/udp.h"
 
 typedef struct udpServer {
-    int fd;
-    event *re;
+    udpConn *conn;
     int remote_count;
-    udpHook hook;
-    void *data;
 } udpServer;
 
 typedef struct udpClient {
-    buffer_t buf;
-    int buf_off;
     udpServer *server;
     struct udpRemote *remote;
     sockAddrEx sa_client;
@@ -38,20 +17,15 @@ typedef struct udpClient {
 } udpClient;
 
 typedef struct udpRemote {
-    int fd;
-    event *re;
-    event *te;
-    buffer_t buf;
-    int buf_off;
+    udpConn *conn;
     udpClient *client;
-    udpHook hook;
-    void *data;
 } udpRemote;
 
-udpServer *moduleUdpServerCreate(char *host, int port, udpHook hook, void *data);
-void moduleUdpServerFree(udpServer *server);
+udpServer *udpServerNew(char *host, int port, int type, udpEventHandler onRead);
+void udpServerFree(udpServer *server);
 
-udpRemote *udpRemoteCreate(udpHook *hook, void *data);
-void udpRemoteFree(udpRemote *remote);
+udpClient *udpClientNew(udpServer *server);
+udpRemote *udpRemoteNew(udpClient *client, int type, char *host, int port);
+void udpConnectionFree(udpClient *client);
 
 #endif /* __MODULE_UDP_H */

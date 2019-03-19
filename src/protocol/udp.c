@@ -6,8 +6,8 @@ static udpConn *udpConnNew(int fd, int timeout, eventLoop *el, void *data);
 static void udpConnReadHandler(event *e);
 static void udpConnTimeoutHandler(event *e);
 
-udpConn *udpCreate(char *err, eventLoop *el, char *host, int port, int timeout, void *data) {
-    int fd;
+udpConn *udpCreate(char *err, eventLoop *el, char *host, int port, int ipv6_first, int timeout, void *data) {
+    int fd = ANET_ERR;
     udpConn *conn;
 
     if (host) {
@@ -16,9 +16,9 @@ udpConn *udpCreate(char *err, eventLoop *el, char *host, int port, int timeout, 
         else
             fd = netUdpServer(err, port, host);
     } else {
-        // Todo: order by app->config->ipv6_first
-        fd = netUdpServer(err, 0, NULL);
-        if (fd == ANET_ERR) fd = netUdp6Server(err, 0, NULL);
+        if (ipv6_first) fd = netUdp6Server(err, port, NULL);
+        if (fd == ANET_ERR) fd = netUdpServer(err, port, NULL);
+        if (!ipv6_first && fd == ANET_ERR) fd = netUdp6Server(err, port, NULL);
     }
 
     if (fd == ANET_ERR) return NULL;
@@ -37,6 +37,8 @@ int udpInit(udpConn *c) {
     c->re = NEW_EVENT_READ(c->fd, udpConnReadHandler, c);
     udpSetTimeout(c, c->timeout);
 
+    ADD_EVENT_READ(c);
+
     return UDP_OK;
 }
 
@@ -52,10 +54,12 @@ static udpConn *udpConnNew(int fd, int timeout, eventLoop *el, void *data) {
     c->data = data;
 
     c->read = udpRead;
-    c->write = udpRead;
+    c->write = udpWrite;
     c->close = udpClose;
+    c->getAddrinfo = udpGetAddrinfo;
 
     anetNonBlock(NULL, c->fd);
+    anetFormatSock(fd, c->addrinfo, sizeof(c->addrinfo));
 
     return c;
 }
@@ -115,6 +119,10 @@ int udpWrite(udpConn *c, char *buf, int buf_len, sockAddrEx *sa) {
     }
 
     return nwrite;
+}
+
+char *udpGetAddrinfo(udpConn *c) {
+    return c->addrinfo;
 }
 
 static void udpConnReadHandler(event *e) {

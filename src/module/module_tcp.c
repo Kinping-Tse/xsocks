@@ -2,8 +2,8 @@
 #include "module_tcp.h"
 #include "module.h"
 
+#include "../protocol/raw.h"
 #include "../protocol/tcp_shadowsocks.h"
-#include "../protocol/tcp_raw.h"
 #include "../protocol/tcp_socks5.h"
 
 static tcpConn *tcpConnNew(int type, tcpConn *conn);
@@ -110,7 +110,7 @@ static void tcpClientFree(tcpClient *client) {
 static void tcpClientOnClose(void *data) {
     tcpClient *client = data;
 
-    LOGD("TCP client %s closed connection", TCP_GET_ADDRINFO(client->conn));
+    LOGD("TCP client %s closed connection", CONN_GET_ADDRINFO(client->conn));
 
     tcpConnectionFree(client);
 }
@@ -119,14 +119,14 @@ static void tcpClientOnError(void *data) {
     tcpClient *client = data;
     tcpRemote *remote = client->remote;
 
-    LOGW("TCP client %s pipe error: %s", TCP_GET_ADDRINFO(client->conn),
+    LOGW("TCP client %s pipe error: %s", CONN_GET_ADDRINFO(client->conn),
          client->conn->err != 0 ? client->conn->errstr : remote->conn->errstr);
 }
 
 static void tcpClientOnTimeout(void *data) {
     tcpClient *client = data;
 
-    LOGI("TCP client %s read timeout", TCP_GET_ADDRINFO(client->conn));
+    LOGI("TCP client %s read timeout", CONN_GET_ADDRINFO(client->conn));
 }
 
 tcpRemote *tcpRemoteNew(tcpClient *client, int type, char *host, int port, tcpConnectHandler onConnect) {
@@ -142,7 +142,7 @@ tcpRemote *tcpRemoteNew(tcpClient *client, int type, char *host, int port, tcpCo
 
     conn = tcpConnect(err, app->el, host, port, app->config->timeout, remote);
     if (!conn) {
-        LOGW("TCP remote %s connect error: %s", err, TCP_GET_ADDRINFO(client->conn));
+        LOGW("TCP remote %s connect error: %s", err, CONN_GET_ADDRINFO(client->conn));
         tcpRemoteFree(remote);
         return NULL;
     }
@@ -155,7 +155,7 @@ tcpRemote *tcpRemoteNew(tcpClient *client, int type, char *host, int port, tcpCo
     CONN_ON_ERROR(remote->conn, tcpRemoteOnError);
     CONN_ON_TIMEOUT(remote->conn, tcpRemoteOnTimeout);
 
-    LOGD("TCP remote %s is connecting ...", TCP_GET_ADDRINFO(client->conn));
+    LOGD("TCP remote %s is connecting ...", CONN_GET_ADDRINFO(client->conn));
     LOGD("TCP remote current count: %d", ++client->server->remote_count);
 
     // Prepare remote connect
@@ -184,7 +184,7 @@ static void tcpRemoteOnClose(void *data) {
     tcpRemote *remote = data;
     tcpClient *client = remote->client;
 
-    LOGD("TCP remote %s closed connection", TCP_GET_ADDRINFO(client->conn));
+    LOGD("TCP remote %s closed connection", CONN_GET_ADDRINFO(client->conn));
 
     tcpConnectionFree(client);
 }
@@ -193,14 +193,14 @@ static void tcpRemoteOnError(void *data) {
     tcpRemote *remote = data;
     tcpClient *client = remote->client;
 
-    LOGW("TCP remote %s pipe error: %s", TCP_GET_ADDRINFO(client->conn),
+    LOGW("TCP remote %s pipe error: %s", CONN_GET_ADDRINFO(client->conn),
          client->conn->err != 0 ? client->conn->errstr : remote->conn->errstr);
 }
 
 static void tcpRemoteOnTimeout(void *data) {
     tcpRemote *remote = data;
     tcpClient *client = remote->client;
-    char *addr_info = TCP_GET_ADDRINFO(client->conn);
+    char *addr_info = CONN_GET_ADDRINFO(client->conn);
 
     if (tcpIsConnected(remote->conn))
         LOGI("TCP remote %s read timeout", addr_info);

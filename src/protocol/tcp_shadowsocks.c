@@ -3,7 +3,7 @@
 
 #include "socks5.h"
 
-static void tcpShadowsocksConnFree(void *data);
+static void tcpShadowsocksConnFree(tcpConn *conn);
 static int tcpShadowsocksConnRead(tcpConn *conn, char *buf, int buf_len);
 static int tcpShadowsocksConnWrite(tcpConn *conn, char *buf, int buf_len);
 static char *tcpShadowsocksGetAddrinfo(tcpConn *conn);
@@ -62,8 +62,8 @@ static char *tcpShadowsocksGetAddrinfo(tcpConn *conn) {
     return c->state == SHADOWSOCKS_STATE_STREAM ? c->addrinfo_dest : tcpGetAddrinfo(conn);
 }
 
-static void tcpShadowsocksConnFree(void *data) {
-    tcpShadowsocksConn *c = data;
+static void tcpShadowsocksConnFree(tcpConn *conn) {
+    tcpShadowsocksConn *c = (tcpShadowsocksConn *)conn;
     if (!c) return;
 
     c->crypto->ctx_release(c->e_ctx);
@@ -76,7 +76,7 @@ static void tcpShadowsocksConnFree(void *data) {
     xs_free(c->tmp_buf);
     xs_free(c->addrbuf_dest);
 
-    tcpClose(&c->conn);
+    tcpClose(conn);
 }
 
 static int tcpShadowsocksConnRead(tcpConn *conn, char *buf, int buf_len) {
@@ -89,7 +89,7 @@ static int tcpShadowsocksConnRead(tcpConn *conn, char *buf, int buf_len) {
     if (nread <= 0) return nread;
 
     buffer_t tmp_buf = {.idx = 0, .len = nread, .capacity = buf_len, .data = buf};
-    if (c->crypto->decrypt(&tmp_buf, c->d_ctx, buf_len)) {
+    if (c->crypto->decrypt(&tmp_buf, c->d_ctx, tmp_buf.capacity)) {
         conn->err = ERROR_SHADOWSOCKS_DECRYPT;
         xs_error(conn->errstr, "Decrypt shadowsocks stream buffer error");
         goto error;
@@ -100,9 +100,9 @@ static int tcpShadowsocksConnRead(tcpConn *conn, char *buf, int buf_len) {
         char host[HOSTNAME_MAX_LEN];
         int host_len = sizeof(host);
         int port;
-        int raddr_len;
+        int addr_len;
 
-        if ((raddr_len = socks5AddrParse(buf, nread, NULL, host, &host_len, &port)) == SOCKS5_ERR) {
+        if ((addr_len = socks5AddrParse(buf, nread, NULL, host, &host_len, &port)) == SOCKS5_ERR) {
             conn->err = ERROR_SHADOWSOCKS_SOCKS5;
             xs_error(conn->errstr, "Parse shadowsocks socks5 addr error");
             goto error;

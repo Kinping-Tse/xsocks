@@ -1,0 +1,13 @@
+
+#ifndef __PROTOCOL_SHADOWSOCKS_H
+#define __PROTOCOL_SHADOWSOCKS_H
+
+#include "shadowsocks-libev/crypto.h"
+
+enum {
+    ERROR_SHADOWSOCKS_ENCRYPT = 10000,
+    ERROR_SHADOWSOCKS_DECRYPT,
+    ERROR_SHADOWSOCKS_SOCKS5,
+};
+
+#endif /* __PROTOCOL_SHADOWSOCKS_H */

@@ -2,9 +2,8 @@
 #include "module.h"
 #include "module_tcp.h"
 
-#include "../protocol/socks5.h"
-
-#include "redis/anet.h"
+#include "../protocol/tcp_socks5.h"
+#include "../protocol/tcp_shadowsocks.h"
 
 typedef struct server {
     module mod;
@@ -15,10 +14,9 @@ static void redirInit();
 static void redirRun();
 static void redirExit();
 
-static void tcpServerInit();
-static void tcpServerExit();
-
-static int tcpClientReadHandler(tcpClient *client);
+static void tcpServerOnAccept(void *data);
+static void tcpClientOnRead(void *data);
+static void tcpRemoteOnConnect(void *data, int status);
 
 static server s;
 module *app = (module *)&s;
@@ -35,8 +33,11 @@ int main(int argc, char *argv[]) {
 
 static void redirInit() {
     getLogger()->syslog_ident = "xs-redir";
+}
 
-    if (app->config->mode & MODE_TCP_ONLY) tcpServerInit();
+static void redirRun() {
+    if (app->config->mode & MODE_TCP_ONLY)
+        s.ts = tcpServerNew(app->config->local_addr, app->config->local_port, tcpServerOnAccept);
 
     if (app->config->mode & MODE_UDP_ONLY) {
         LOGW("Only support TCP now!");
@@ -44,131 +45,70 @@ static void redirInit() {
     }
 
     if (!s.ts) exit(EXIT_ERR);
-}
-
-static void redirRun() {
-    char addr_info[ADDR_INFO_STR_LEN];
-
-    if (s.ts && anetFormatSock(s.ts->fd, addr_info, ADDR_INFO_STR_LEN) > 0) LOGN("TCP server listen at: %s", addr_info);
+    if (s.ts) LOGN("TCP server listen at: %s", s.ts->ln->addrinfo);
 }
 
 static void redirExit() {
-    tcpServerExit();
+    tcpServerFree(s.ts);
 }
 
-static void tcpServerInit() {
-    s.ts = moduleTcpServerCreate(app->config->local_addr, app->config->local_port, tcpClientReadHandler);
+static void tcpServerOnAccept(void *data) {
+    tcpServer *server = data;
+    tcpClient *client;
+    tcpRemote *remote;
+
+    if ((client = tcpClientNew(server, CONN_TYPE_RAW, tcpClientOnRead)) == NULL) return;
+
+    LOGD("TCP server accepted client %s", CONN_GET_ADDRINFO(client->conn));
+    LOGD("TCP client current count: %d", ++server->client_count);
+
+    remote = tcpRemoteNew(client, CONN_TYPE_SHADOWSOCKS, app->config->remote_addr,
+                          app->config->remote_port, tcpRemoteOnConnect);
+    if (!remote) goto error;
+
+    char host[HOSTNAME_MAX_LEN];
+    int host_len = sizeof(host);
+    int port;
+    char err[NET_ERR_LEN];
+    sockAddrEx sa;
+
+    if (netTcpGetDestSockAddr(err, client->conn->fd, app->config->ipv6_first, &sa) == NET_ERR) {
+        LOGW("TCP client get dest sockaddr error: %s", err);
+        goto error;
+    }
+    if (netIpPresentBySockAddr(err, host, host_len, &port, &sa) == NET_ERR) {
+        LOGW("TCP client get dest addr error: %s", err);
+        goto error;
+    }
+    LOGD("TCP client proxy dest addr: %s:%d", host, port);
+
+    tcpShadowsocksConnInit((tcpShadowsocksConn *)remote->conn, host, port);
+
+    return;
+
+error:
+    tcpConnectionFree(client);
 }
 
-static void tcpServerExit() {
-    moduleTcpServerFree(s.ts);
-}
-
-static int tcpClientReadHandler(tcpClient *client) {
+static void tcpClientOnRead(void *data) {
+    tcpClient *client = data;
     tcpRemote *remote = client->remote;
 
-    char err[ANET_ERR_LEN];
-    int buflen = NET_IOBUF_LEN;
+    tcpPipe(client->conn, remote->conn);
+}
 
-    int cfd = client->fd;
-    int nread;
+static void tcpRemoteOnConnect(void *data, int status) {
+    tcpRemote *remote = data;
+    tcpClient *client = remote->client;
+    char *addrinfo = CONN_GET_ADDRINFO(client->conn);
 
-    // Read client buffer
-    nread = read(cfd, client->buf.data, buflen);
-    if (nread == -1) {
-        if (errno == EAGAIN) return TCP_OK;
-
-        LOGW("TCP client [%s] read error: %s", client->client_addr_info, STRERR);
-        return TCP_ERR;
-    } else if (nread == 0) {
-        LOGD("TCP client [%s] closed connection", client->client_addr_info);
-        return TCP_ERR;
+    if (status == TCP_ERR) {
+        LOGW("TCP remote %s connect error: %s", addrinfo, remote->conn->errstr);
+        return;
     }
-    client->buf.len = nread;
+    LOGD("TCP remote %s connect success", addrinfo);
 
-    if (client->stage == STAGE_INIT) {
-        sockAddrEx sa;
-        char ip[HOSTNAME_MAX_LEN];
-        int port;
-
-        if (netTcpGetDestSockAddr(err, cfd, app->config->ipv6_first, &sa) == NET_ERR) {
-            LOGW("TCP client get dest sockaddr error: %s", err);
-            return TCP_ERR;
-        }
-
-        if (netIpPresentBySockAddr(err, ip, sizeof(ip), &port, &sa) == NET_ERR) {
-            LOGW("TCP client get dest addr error: %s", err);
-            return TCP_ERR;
-        }
-
-        anetFormatAddr(client->remote_addr_info, ADDR_INFO_STR_LEN, ip, port);
-        LOGI("TCP client (%d) [%s] request remote addr [%s]", client->fd, client->client_addr_info,
-             client->remote_addr_info);
-
-        sds addr = socks5AddrInit(NULL, ip, port);
-        int addr_len = sdslen(addr);
-        buffer_t addr_buf;
-        bzero(&addr_buf, sizeof(addr_buf));
-        balloc(&addr_buf, sdslen(addr));
-        memcpy(addr_buf.data, addr, addr_len);
-        addr_buf.len = addr_len;
-
-        bprepend(&client->buf, &addr_buf, buflen);
-
-        sdsfree(addr);
-        bfree(&addr_buf);
-    }
-
-    // Do buffer encrypt
-    if (app->crypto->encrypt(&client->buf, client->e_ctx, buflen)) {
-        LOGW("TCP client encrypt buffer error");
-        return TCP_ERR;
-    }
-
-    if (client->stage == STAGE_INIT) {
-        remote = tcpRemoteCreate(app->config->remote_addr, app->config->remote_port);
-        LOGD("TCP remote (%d) [%s] is connecting ...", remote->fd, client->remote_addr_info);
-
-        remote->client = client;
-
-        client->remote = remote;
-        client->stage = STAGE_HANDSHAKE;
-
-        DEL_EVENT(client->re);
-
-        s.ts->remote_count++;
-        LOGD("TCP remote current count: %d", s.ts->remote_count);
-        return TCP_OK;
-    }
-
-    // Write to remote
-    int nwrite;
-    int rfd = remote->fd;
-
-    if (client->stage == STAGE_HANDSHAKE) {
-        LOGD("TCP remote (%d) [%s] connect success", rfd, client->remote_addr_info);
-        client->stage = STAGE_STREAM;
-
-        anetDisableTcpNoDelay(NULL, client->fd);
-        anetDisableTcpNoDelay(NULL, remote->fd);
-    }
-
-    nwrite = write(rfd, client->buf.data, client->buf.len);
-    if (nwrite == -1) {
-        if (errno == EAGAIN) goto write_again;
-
-        LOGW("TCP remote (%d) [%s] write error: %s", rfd, client->remote_addr_info, STRERR);
-        return TCP_ERR;
-    } else if (nwrite < (int)client->buf.len) {
-        client->buf_off = nwrite;
-        goto write_again;
-    }
-
-    return TCP_OK;
-
-write_again:
-    DEL_EVENT(client->re);
-    DEL_EVENT(remote->re);
-    ADD_EVENT(remote->we);
-    return TCP_OK;
+    // Prepare pipe
+    ADD_EVENT_READ(remote->conn);
+    ADD_EVENT_READ(client->conn);
 }
