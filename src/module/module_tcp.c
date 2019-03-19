@@ -142,7 +142,7 @@ tcpRemote *tcpRemoteNew(tcpClient *client, int type, char *host, int port, tcpCo
 
     conn = tcpConnect(err, app->el, host, port, app->config->timeout, remote);
     if (!conn) {
-        LOGW("TCP remote %s connect error: %s", err, CONN_GET_ADDRINFO(client->conn));
+        LOGW("TCP remote %s connect error: %s", CONN_GET_ADDRINFO(client->conn), err);
         tcpRemoteFree(remote);
         return NULL;
     }

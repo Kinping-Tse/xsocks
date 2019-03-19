@@ -26,6 +26,8 @@ int socks5AddrCreate(char *err, char *host, int port, char *addr_buf, int *buf_l
     memcpy(addr_buf, addr, sdslen(addr));
     if (buf_len) *buf_len = sdslen(addr);
 
+    sdsfree(addr);
+
     return SOCKS5_OK;
 }
 
