@@ -3,9 +3,9 @@
 #include "module_tcp.h"
 #include "module_udp.h"
 
+#include "../protocol/socks5.h"
 #include "../protocol/tcp_shadowsocks.h"
 #include "../protocol/udp_shadowsocks.h"
-#include "../protocol/socks5.h"
 
 typedef struct server {
     module mod;
@@ -81,8 +81,8 @@ static void tcpClientOnRead(void *data) {
         int host_len = sizeof(host);
         int port;
 
-        socks5AddrParse(conn_client->addrbuf_dest->data, conn_client->addrbuf_dest->len,
-                        NULL, host, &host_len, &port);
+        socks5AddrParse(conn_client->addrbuf_dest->data, conn_client->addrbuf_dest->len, NULL, host,
+                        &host_len, &port);
 
         LOGD("TCP client proxy dest addr: %s:%d", host, port);
 
@@ -110,7 +110,8 @@ static void tcpRemoteOnConnect(void *data, int status) {
     tcpClient *client = remote->client;
 
     if (status == TCP_ERR) {
-        LOGW("TCP remote %s connect error: %s", CONN_GET_ADDRINFO(client->conn), remote->conn->errstr);
+        LOGW("TCP remote %s connect error: %s", CONN_GET_ADDRINFO(client->conn),
+             remote->conn->errstr);
         return;
     }
     LOGD("TCP remote %s connect success", CONN_GET_ADDRINFO(client->conn));
@@ -118,7 +119,8 @@ static void tcpRemoteOnConnect(void *data, int status) {
     // Write shadowsocks client handshake left buffer
     if (client->conn->rbuf_off) {
         int nwrite = TCP_WRITE(remote->conn, client->conn->rbuf, client->conn->rbuf_off);
-        if (nwrite == TCP_ERR) return;
+        if (nwrite == TCP_ERR)
+            return;
         else if (nwrite < client->conn->rbuf_off) {
             tcpConnectionFree(client);
             return;
@@ -157,8 +159,8 @@ static void udpServerOnRead(void *data) {
     if (netIpPresentBySockAddr(NULL, cip, cip_len, &cport, &client->sa_client) == NET_OK)
         LOGD("UDP server read from %s:%d", cip, cport);
 
-    socks5AddrParse(conn->addrbuf_dest->data, conn->addrbuf_dest->len,
-                    NULL, host, &host_len, &port);
+    socks5AddrParse(conn->addrbuf_dest->data, conn->addrbuf_dest->len, NULL, host, &host_len,
+                    &port);
 
     LOGD("UDP client proxy dest addr: %s:%d", host, port);
 

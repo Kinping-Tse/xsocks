@@ -314,7 +314,7 @@ int netHostPortParse(char *addr, char *host, int *port) {
             memcpy(host, addr, offset);
             host[offset] = '\0';
         }
-        if (port) *port = atoi(p+1);
+        if (port) *port = atoi(p + 1);
         return NET_OK;
     }
     return NET_ERR;

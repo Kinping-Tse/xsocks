@@ -2,8 +2,8 @@
 #include "module.h"
 #include "module_tcp.h"
 
-#include "../protocol/tcp_socks5.h"
 #include "../protocol/tcp_shadowsocks.h"
+#include "../protocol/tcp_socks5.h"
 
 typedef struct server {
     module mod;

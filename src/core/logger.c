@@ -86,11 +86,11 @@ static void loggerLogRaw(logger *log, int level, const char *file, int line, con
         const char *colorMap[] = {"\x1b[94m", "\x1b[36m", "\x1b[32m", "\x1b[33m", "\x1b[31m", "\x1b[35m"};
 
         if (log->color_enabled && log_to_stdout)
-            fprintf(fp, "%s %s[%d] %s<%s>\x1b[0m\x1b[90m%s\x1b[0m: %s\n", buf_tm, log->syslog_ident, getpid(),
-                    colorMap[level], loglevelMap[level], buf_fl, msg);
+            fprintf(fp, "%s %s[%d] %s<%s>\x1b[0m\x1b[90m%s\x1b[0m: %s\n", buf_tm, log->syslog_ident,
+                    getpid(), colorMap[level], loglevelMap[level], buf_fl, msg);
         else
-            fprintf(fp, "%s %s[%d] <%s> %s: %s\n", buf_tm, log->syslog_ident, getpid(), loglevelMap[level], buf_fl,
-                    msg);
+            fprintf(fp, "%s %s[%d] <%s> %s: %s\n", buf_tm, log->syslog_ident, getpid(),
+                    loglevelMap[level], buf_fl, msg);
     }
     fflush(fp);
 

@@ -85,10 +85,9 @@ int socks5AddrParse(char *addr_buf, int buf_len, int *atyp, char *host, int *hos
     if (addr_type == SOCKS5_ATYP_IPV4 || addr_type == SOCKS5_ATYP_IPV6) {
         int is_v6 = addr_type == SOCKS5_ATYP_IPV6;
         addr_len = !is_v6 ? sizeof(ipV4Addr) : sizeof(ipV6Addr);
-        if (buf_len < addr_len+2) return SOCKS5_ERR;
+        if (buf_len < addr_len + 2) return SOCKS5_ERR;
 
-        if (port)
-            *port = ntohs(*(uint16_t *)(addr_buf+addr_len));
+        if (port) *port = ntohs(*(uint16_t *)(addr_buf + addr_len));
 
         if (host) {
             assert(host_len);
@@ -101,7 +100,7 @@ int socks5AddrParse(char *addr_buf, int buf_len, int *atyp, char *host, int *hos
         real_buf_len += addr_len + 2;
     } else if (addr_type == SOCKS5_ATYP_DOMAIN) {
         addr_len = (uint8_t)*addr_buf++;
-        if (buf_len < 1+addr_len+2) return SOCKS5_ERR;
+        if (buf_len < 1 + addr_len + 2) return SOCKS5_ERR;
 
         if (host) {
             memcpy(host, addr_buf, addr_len);

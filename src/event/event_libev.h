@@ -64,6 +64,7 @@ static eventLoopContext *eventApiNewLoop(int size) {
 }
 
 static void eventApiFreeLoop(eventLoopContext *ctx) {
+    ev_loop_destroy(ctx->el);
     xs_free(ctx);
 }
 

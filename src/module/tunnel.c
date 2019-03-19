@@ -35,8 +35,8 @@ static void tunnelInit() {
     if (app->config->tunnel_addr == NULL) FATAL("Error tunnel address!");
 
     if (app->config->mode & MODE_UDP_ONLY)
-        s.us = udpServerNew(app->config->local_addr, app->config->local_port,
-                            CONN_TYPE_RAW, udpServerOnRead);
+        s.us = udpServerNew(app->config->local_addr, app->config->local_port, CONN_TYPE_RAW,
+                            udpServerOnRead);
 
     if (!s.us) exit(EXIT_ERR);
 }

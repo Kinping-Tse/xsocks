@@ -2,8 +2,8 @@
 #include "module_udp.h"
 #include "module.h"
 
-#include "../protocol/udp_shadowsocks.h"
 #include "../protocol/raw.h"
+#include "../protocol/udp_shadowsocks.h"
 
 static udpConn *udpConnNew(int type, udpConn *conn);
 
@@ -25,8 +25,8 @@ udpServer *udpServerNew(char *host, int port, int type, udpEventHandler onRead) 
         return NULL;
     }
 
-    if ((conn = udpCreate(err, app->el, host, port, app->config->ipv6_first,
-                          app->config->timeout, server)) == NULL) {
+    if ((conn = udpCreate(err, app->el, host, port, app->config->ipv6_first, app->config->timeout,
+                          server)) == NULL) {
         LOGW("UDP server create error: %s", err);
         udpServerFree(server);
         return NULL;

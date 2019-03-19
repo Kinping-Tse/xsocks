@@ -2,8 +2,8 @@
 #ifndef __PROTOCOL_TCP_SOCKS5_H
 #define __PROTOCOL_TCP_SOCKS5_H
 
-#include "tcp.h"
 #include "socks5.h"
+#include "tcp.h"
 
 enum {
     SOCKS5_STATE_INIT = 0,

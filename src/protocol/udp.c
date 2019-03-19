@@ -6,7 +6,8 @@ static udpConn *udpConnNew(int fd, int timeout, eventLoop *el, void *data);
 static void udpConnReadHandler(event *e);
 static void udpConnTimeoutHandler(event *e);
 
-udpConn *udpCreate(char *err, eventLoop *el, char *host, int port, int ipv6_first, int timeout, void *data) {
+udpConn *udpCreate(char *err, eventLoop *el, char *host, int port, int ipv6_first, int timeout,
+                   void *data) {
     int fd = ANET_ERR;
     udpConn *conn;
 

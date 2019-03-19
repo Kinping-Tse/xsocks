@@ -2,8 +2,8 @@
 #include "module.h"
 #include "module_tcp.h"
 
-#include "../protocol/tcp_socks5.h"
 #include "../protocol/tcp_shadowsocks.h"
+#include "../protocol/tcp_socks5.h"
 
 typedef struct server {
     module mod;
@@ -84,8 +84,8 @@ static void tcpClientOnRead(void *data) {
         int host_len = sizeof(host);
         int port;
 
-        socks5AddrParse(conn_client->addrbuf_dest, sdslen(conn_client->addrbuf_dest),
-                        NULL, host, &host_len, &port);
+        socks5AddrParse(conn_client->addrbuf_dest, sdslen(conn_client->addrbuf_dest), NULL, host,
+                        &host_len, &port);
         tcpShadowsocksConnInit((tcpShadowsocksConn *)remote->conn, host, port);
 
         LOGD("TCP client proxy dest addr: %s:%d", host, port);

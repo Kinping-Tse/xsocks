@@ -83,9 +83,11 @@ static int eventApiAddEvent(eventLoopContext *elCtx, eventContext *eCtx) {
     event *e = eCtx->e;
 
     if (e->type == EVENT_TYPE_IO) {
-        if (aeCreateFileEvent(elCtx->el, e->id, eCtx->mask, eventIoHandler, e) == AE_ERR) return EVENT_ERR;
+        if (aeCreateFileEvent(elCtx->el, e->id, eCtx->mask, eventIoHandler, e) == AE_ERR)
+            return EVENT_ERR;
     } else if (e->type == EVENT_TYPE_TIME) {
-        if ((eCtx->mask = aeCreateTimeEvent(elCtx->el, e->id, eventTimeHandler, e, NULL)) == AE_ERR) return EVENT_ERR;
+        if ((eCtx->mask = aeCreateTimeEvent(elCtx->el, e->id, eventTimeHandler, e, NULL)) == AE_ERR)
+            return EVENT_ERR;
     } else if (e->type == EVENT_TYPE_SIGNAL) {
         if (signals[e->id]) return EVENT_ERR;
 

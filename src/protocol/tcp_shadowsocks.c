@@ -131,7 +131,8 @@ static int tcpShadowsocksConnWrite(tcpConn *conn, char *buf, int buf_len) {
             goto error;
         }
         nwrite = tcpWrite(conn, c->addrbuf_dest->data, c->addrbuf_dest->len);
-        if (nwrite < 0) return nwrite;
+        if (nwrite < 0)
+            return nwrite;
         else if (nwrite != (int)c->addrbuf_dest->len) {
             xs_error(conn->errstr, "Write shadowsocks handshake buffer error");
             goto error;

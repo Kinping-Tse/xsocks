@@ -148,7 +148,8 @@ static void moduleUsage() {
     eprintf("       [-b <local_address>]       Local address to bind.\n");
     eprintf("\n");
     eprintf("       [-u]                       Enable UDP relay.\n");
-    if (module == MODULE_REDIR) eprintf("                                  TPROXY is required in redir mode.\n");
+    if (module == MODULE_REDIR)
+        eprintf("                                  TPROXY is required in redir mode.\n");
     eprintf("       [-U]                       Enable UDP relay and disable TCP relay.\n");
     eprintf("       [-6]                       Use IPv6 address first.\n");
     eprintf("\n");

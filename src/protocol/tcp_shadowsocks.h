@@ -2,8 +2,8 @@
 #ifndef __PROTOCOL_TCP_SHADOWSOCKS_H
 #define __PROTOCOL_TCP_SHADOWSOCKS_H
 
-#include "tcp.h"
 #include "shadowsocks.h"
+#include "tcp.h"
 
 enum {
     SHADOWSOCKS_STATE_INIT = 0,

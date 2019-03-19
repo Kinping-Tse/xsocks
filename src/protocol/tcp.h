@@ -71,8 +71,8 @@ typedef struct tcpConn {
     struct tcpConn *pipe;
 } tcpConn;
 
-tcpListener *tcpListen(char *err, eventLoop *el, char *host, int port,
-                       void *data, tcpEventHandler onAccept);
+tcpListener *tcpListen(char *err, eventLoop *el, char *host, int port, void *data,
+                       tcpEventHandler onAccept);
 
 tcpConn *tcpAccept(char *err, eventLoop *el, int fd, int timeout, void *data);
 tcpConn *tcpConnect(char *err, eventLoop *el, char *host, int port, int timeout, void *data);

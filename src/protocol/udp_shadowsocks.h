@@ -2,8 +2,8 @@
 #ifndef __PROTOCOL_UDP_SHADOWSOCKS_H
 #define __PROTOCOL_UDP_SHADOWSOCKS_H
 
-#include "udp.h"
 #include "shadowsocks.h"
+#include "udp.h"
 
 typedef struct udpShadowsocksConn {
     udpConn conn;

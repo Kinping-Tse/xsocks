@@ -129,7 +129,8 @@ static void tcpClientOnTimeout(void *data) {
     LOGI("TCP client %s read timeout", CONN_GET_ADDRINFO(client->conn));
 }
 
-tcpRemote *tcpRemoteNew(tcpClient *client, int type, char *host, int port, tcpConnectHandler onConnect) {
+tcpRemote *tcpRemoteNew(tcpClient *client, int type, char *host, int port,
+                        tcpConnectHandler onConnect) {
     tcpRemote *remote;
     tcpConn *conn;
     char err[XS_ERR_LEN];

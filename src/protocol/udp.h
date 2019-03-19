@@ -40,7 +40,8 @@ typedef struct udpConn {
     char errstr[XS_ERR_LEN];
 } udpConn;
 
-udpConn *udpCreate(char *err, eventLoop *el, char *host, int port, int ipv6_first, int timeout, void *data);
+udpConn *udpCreate(char *err, eventLoop *el, char *host, int port, int ipv6_first, int timeout,
+                   void *data);
 int udpSetTimeout(udpConn *c, int timeout);
 
 int udpInit(udpConn *c);

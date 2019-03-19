@@ -17,7 +17,8 @@ static void tcpConnReadHandler(event *e);
 static void tcpConnWriteHandler(event *e);
 static void tcpConnTimeoutHandler(event *e);
 
-tcpListener *tcpListen(char *err, eventLoop *el, char *host, int port, void *data, tcpEventHandler onAccept) {
+tcpListener *tcpListen(char *err, eventLoop *el, char *host, int port, void *data,
+                       tcpEventHandler onAccept) {
     int backlog = 256;
     int fd;
 

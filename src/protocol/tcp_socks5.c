@@ -15,6 +15,7 @@ tcpSocks5Conn *tcpSocks5ConnNew(tcpConn *conn) {
     conn = &c->conn;
 
     c->state = SOCKS5_STATE_INIT;
+    c->flags = SOCKS5_FLAG_SERVER;
 
     conn->read = tcpSocks5ConnRead;
     conn->write = tcpSocks5ConnWrite;
@@ -159,7 +160,9 @@ static int tcpSocks5ConnWrite(tcpConn *conn, char *buf, int buf_len) {
         char resp_buf[NET_IOBUF_LEN];
         memcpy(resp_buf, &resp, sizeof(resp));
         memcpy(resp_buf + sizeof(resp), &sock_addr.sin_addr, sizeof(sock_addr.sin_addr));
-        memcpy(resp_buf + sizeof(resp) + sizeof(sock_addr.sin_addr), &sock_addr.sin_port, sizeof(sock_addr.sin_port));
+        memcpy(resp_buf + sizeof(resp) + sizeof(sock_addr.sin_addr),
+               &sock_addr.sin_port,
+               sizeof(sock_addr.sin_port));
 
         int reply_size = sizeof(resp) + sizeof(sock_addr.sin_addr) + sizeof(sock_addr.sin_port);
 
