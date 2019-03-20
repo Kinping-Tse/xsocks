@@ -1,9 +1,10 @@
 
 #include "config.h"
 #include "common.h"
-#include "error.h"
 #include "net.h"
 #include "utils.h"
+#include "version.h"
+#include "../event/event.h"
 
 #include "json-parser/json.h"
 #include "redis/sds.h"
@@ -254,6 +255,16 @@ loaderr:
     FATAL(err);
 }
 
+static void printVersion() {
+    printf("xsocks maintained by XJP09_HK <jianping_xie@aliyun.com>\n\n");
+    printf("version: %s\n", XS_VERSION);
+    printf("malloc: %s\n", ZMALLOC_LIB);
+    printf("event: %s\n", eventGetApiName());
+    printf("bits: %d\n", sizeof(long) == 4 ? 32 : 64);
+
+    exit(EXIT_OK);
+}
+
 int configParse(xsocksConfig *config, int argc, char *argv[]) {
     struct option long_options[] = {
         { "help",        no_argument,       NULL, GETOPT_VAL_HELP        },
@@ -265,6 +276,7 @@ int configParse(xsocksConfig *config, int argc, char *argv[]) {
         { "no-delay",    no_argument,       NULL, GETOPT_VAL_NODELAY     },
         { "password",    required_argument, NULL, GETOPT_VAL_PASSWORD    },
         { "key",         required_argument, NULL, GETOPT_VAL_KEY         },
+        { "version",     no_argument,       NULL, 'V'                    },
         { NULL,          0,                 NULL, 0                      },
     };
 
@@ -293,7 +305,7 @@ int configParse(xsocksConfig *config, int argc, char *argv[]) {
     char *err = NULL;
     int c;
 
-    while ((c = getopt_long(argc, argv, "f:s:p:l:L:k:t:m:c:b:huUv6", long_options, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "f:s:p:l:L:k:t:m:c:b:huUvV6", long_options, NULL)) != -1) {
         switch (c) {
             case GETOPT_VAL_FAST_OPEN: fast_open = 1; break;
             case GETOPT_VAL_MTU: mtu = atoi(optarg); break;
@@ -327,6 +339,7 @@ int configParse(xsocksConfig *config, int argc, char *argv[]) {
             case 'u': mode = MODE_TCP_AND_UDP; break;
             case 'U': mode = MODE_UDP_ONLY; break;
             case 'v': loglevel = LOGLEVEL_DEBUG; break;
+            case 'V': printVersion(); break;
             case 'h':
             case GETOPT_VAL_HELP: help = 1; break;
             case '6': ipv6_first = 1; break;

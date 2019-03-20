@@ -100,7 +100,8 @@ static void parseOptions(int argc, char *argv[]) {
 }
 
 static void usage() {
-    printf("Usage: xs-benchmark-server\n\n"
+    printf("Usage: xs-benchmark-server [options]\n\n"
+           "Options:\n"
            " [-s <hostname>]      Server hostname (default 127.0.0.1)\n"
            " [-p <port>]          Server port (default 19999)\n"
            " [-t <timeout>]       Socket timeout (default 60)\n"

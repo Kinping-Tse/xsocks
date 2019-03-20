@@ -104,55 +104,50 @@ static void moduleExit() {
 static void moduleUsage() {
     int module = mod->type;
 
-    eprintf("xsocks %s\n", XS_VERSION);
-    eprintf("  maintained by XJP09_HK <jianping_xie@aliyun.com>\n\n");
-    eprintf("  usage:\n");
+    eprintf("Usage:");
 
     switch (module) {
-        case MODULE_LOCAL: eprintf("    xs-local\n"); break;
-        case MODULE_REMOTE: eprintf("    xs-server\n"); break;
-        case MODULE_TUNNEL: eprintf("    xs-tunnel\n"); break;
-        case MODULE_REDIR: eprintf("    xs-redir\n"); break;
+        case MODULE_LOCAL: eprintf(" xs-local"); break;
+        case MODULE_REMOTE: eprintf(" xs-server"); break;
+        case MODULE_TUNNEL: eprintf(" xs-tunnel"); break;
+        case MODULE_REDIR: eprintf(" xs-redir"); break;
         default: FATAL("Unknown module type!");
     }
-
-    eprintf("       -s <server_host>           Host name or IP address of your remote server.\n");
-    eprintf("       -p <server_port>           Port number of your remote server.\n");
-    eprintf("       -l <local_port>            Port number of your local server.\n");
-    eprintf("       -k <password>              Password of your remote server.\n");
-    eprintf("       -m <encrypt_method>        Encrypt method: rc4-md5,\n");
-    eprintf("                                  aes-128-gcm, aes-192-gcm, aes-256-gcm,\n");
-    eprintf("                                  aes-128-cfb, aes-192-cfb, aes-256-cfb,\n");
-    eprintf("                                  aes-128-ctr, aes-192-ctr, aes-256-ctr,\n");
-    eprintf("                                  camellia-128-cfb, camellia-192-cfb,\n");
-    eprintf("                                  camellia-256-cfb, bf-cfb,\n");
-    eprintf("                                  chacha20-ietf-poly1305,\n");
+    eprintf(" [options]\n\n");
+    eprintf("Options:\n");
+    eprintf("  -s <server_host>           Host name or IP address of your remote server (default 127.0.0.1)\n");
+    eprintf("  -p <server_port>           Port number of your remote server (default 8388)\n");
+    eprintf("  -l <local_port>            Port number of your local server (default 1080)\n");
+    eprintf("  -k <password>              Password of your remote server (default foobar)\n");
+    eprintf("  -m <encrypt_method>        Encrypt method: rc4-md5,\n");
+    eprintf("                             aes-128-gcm, aes-192-gcm, aes-256-gcm,\n");
+    eprintf("                             aes-128-cfb, aes-192-cfb, aes-256-cfb,\n");
+    eprintf("                             aes-128-ctr, aes-192-ctr, aes-256-ctr,\n");
+    eprintf("                             camellia-128-cfb, camellia-192-cfb, camellia-256-cfb,\n");
+    eprintf("                             bf-cfb, chacha20-ietf-poly1305,\n");
 #ifdef FS_HAVE_XCHACHA20IETF
-    eprintf("                                  xchacha20-ietf-poly1305,\n");
+    eprintf("                             xchacha20-ietf-poly1305,\n");
 #endif
-    eprintf("                                  salsa20, chacha20 and chacha20-ietf.\n");
-    eprintf("                                  The default cipher is aes-256-cfb.\n");
-    eprintf("\n");
+    eprintf("                             salsa20, chacha20 and chacha20-ietf.\n");
+    eprintf("                             (default aes-256-cfb)\n");
     if (module == MODULE_TUNNEL) {
-        eprintf("       -L <addr>:<port>           Destination server address and port\n"
-                "                                  for local port forwarding.\n");
+        eprintf("  -L <addr>:<port>           Destination server address and port\n"
+                "                             for local port forwarding. (default 8.8.8.8:53)\n");
     }
     // eprintf("       [-a <user>]                Run as another user.\n");
-    eprintf("       [-f <pid_file>]            The file path to store pid.\n");
-    eprintf("       [-t <timeout>]             Socket timeout in seconds.\n");
-    eprintf("       [-c <config_file>]         The path to config file.\n");
+    eprintf("  [-f <pid_file>]            The file path to store pid.\n");
+    eprintf("  [-t <timeout>]             Socket timeout in seconds (default 60)\n");
+    eprintf("  [-c <config_file>]         The path to config file.\n");
     // eprintf("       [-n <number>]              Max number of open files.\n");
 #ifndef MODULE_REDIR
     // eprintf("       [-i <interface>]           Network interface to bind.\n");
 #endif
-    eprintf("       [-b <local_address>]       Local address to bind.\n");
-    eprintf("\n");
-    eprintf("       [-u]                       Enable UDP relay.\n");
+    eprintf("  [-b <local_address>]       Local address to bind.\n");
+    eprintf("  [-u]                       Enable UDP relay.\n");
     if (module == MODULE_REDIR)
         eprintf("                                  TPROXY is required in redir mode.\n");
-    eprintf("       [-U]                       Enable UDP relay and disable TCP relay.\n");
-    eprintf("       [-6]                       Use IPv6 address first.\n");
-    eprintf("\n");
+    eprintf("  [-U]                       Enable UDP relay and disable TCP relay.\n");
+    eprintf("  [-6]                       Use IPv6 address first.\n");
     // if (module == MODULE_REMOTE)
     // eprintf(
     // "       [-d <addr>]                Name servers for internal DNS resolver.\n");
@@ -165,18 +160,17 @@ static void moduleUsage() {
 #if defined(MODULE_REMOTE) || defined(MODULE_LOCAL)
     // eprintf("       [--acl <acl_file>]         Path to ACL (Access Control List).\n");
 #endif
-    eprintf("       [--mtu <MTU>]              MTU of your network interface.\n");
+    // eprintf("  [--mtu <MTU>]              MTU of your network interface.\n");
 #ifdef __linux__
     // eprintf("       [--mptcp]                  Enable Multipath TCP on MPTCP Kernel.\n");
 #endif
     // eprintf("       [--no-delay]               Enable TCP_NODELAY.\n");
-    eprintf("       [--key <key_in_base64>]    Key of your remote server.\n");
-    eprintf("\n");
-    eprintf("       [--logfile <file>]         Log file.\n");
-    eprintf("       [--loglevel <level>]       Log level.\n");
-    eprintf("       [-v]                       Verbose mode.\n");
-    eprintf("       [-h, --help]               Print this message.\n");
-    eprintf("\n");
+    eprintf("  [--key <key_in_base64>]    Key of your remote server.\n");
+    eprintf("  [--logfile <file>]         Log file.\n");
+    eprintf("  [--loglevel <level>]       Log level (default info)\n");
+    eprintf("  [-v]                       Verbose mode.\n");
+    eprintf("  [-V, --version]            Print version info.\n");
+    eprintf("  [-h, --help]               Print this message.\n");
 }
 
 static void initLogger() {
