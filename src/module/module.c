@@ -1,3 +1,21 @@
+/*
+ * This file is part of xsocks, a lightweight proxy tool for science online.
+ *
+ * Copyright (C) 2019 XJP09_HK <jianping_xie@aliyun.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
 
 #include "module.h"
 #include "../core/version.h"
@@ -115,11 +133,11 @@ static void moduleUsage() {
     }
     eprintf(" [options]\n\n");
     eprintf("Options:\n");
-    eprintf("  -s <server_host>           Host name or IP address of your remote server (default 127.0.0.1)\n");
-    eprintf("  -p <server_port>           Port number of your remote server (default 8388)\n");
-    eprintf("  -l <local_port>            Port number of your local server (default 1080)\n");
-    eprintf("  -k <password>              Password of your remote server (default foobar)\n");
-    eprintf("  -m <encrypt_method>        Encrypt method: rc4-md5,\n");
+    eprintf("  [-s <server_host>]         Host name or IP address of your remote server (default 127.0.0.1)\n");
+    eprintf("  [-p <server_port>]         Port number of your remote server (default 8388)\n");
+    eprintf("  [-l <local_port>]          Port number of your local server (default 1080)\n");
+    eprintf("  [-k <password>]            Password of your remote server (default foobar)\n");
+    eprintf("  [-m <encrypt_method>]      Encrypt method: rc4-md5,\n");
     eprintf("                             aes-128-gcm, aes-192-gcm, aes-256-gcm,\n");
     eprintf("                             aes-128-cfb, aes-192-cfb, aes-256-cfb,\n");
     eprintf("                             aes-128-ctr, aes-192-ctr, aes-256-ctr,\n");
@@ -131,7 +149,7 @@ static void moduleUsage() {
     eprintf("                             salsa20, chacha20 and chacha20-ietf.\n");
     eprintf("                             (default aes-256-cfb)\n");
     if (module == MODULE_TUNNEL) {
-        eprintf("  -L <addr>:<port>           Destination server address and port\n"
+        eprintf("  [-L <addr>:<port>]           Destination server address and port\n"
                 "                             for local port forwarding. (default 8.8.8.8:53)\n");
     }
     // eprintf("       [-a <user>]                Run as another user.\n");
