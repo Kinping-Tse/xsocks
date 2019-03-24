@@ -146,26 +146,26 @@ static void moduleUsage() {
 #ifdef FS_HAVE_XCHACHA20IETF
     eprintf("                             xchacha20-ietf-poly1305,\n");
 #endif
-    eprintf("                             salsa20, chacha20 and chacha20-ietf.\n");
+    eprintf("                             salsa20, chacha20 and chacha20-ietf\n");
     eprintf("                             (default aes-256-cfb)\n");
     if (module == MODULE_TUNNEL) {
-        eprintf("  [-L <addr>:<port>]           Destination server address and port\n"
-                "                             for local port forwarding. (default 8.8.8.8:53)\n");
+        eprintf("  [-L <addr>:<port>]         Destination server address and port\n"
+                "                             for local port forwarding (default 8.8.8.8:53)\n");
     }
     // eprintf("       [-a <user>]                Run as another user.\n");
-    eprintf("  [-f <pid_file>]            The file path to store pid.\n");
+    eprintf("  [-f <pid_file>]            The file path to store pid\n");
     eprintf("  [-t <timeout>]             Socket timeout in seconds (default 60)\n");
-    eprintf("  [-c <config_file>]         The path to config file.\n");
+    eprintf("  [-c <config_file>]         The path to config file\n");
     // eprintf("       [-n <number>]              Max number of open files.\n");
 #ifndef MODULE_REDIR
     // eprintf("       [-i <interface>]           Network interface to bind.\n");
 #endif
-    eprintf("  [-b <local_address>]       Local address to bind.\n");
-    eprintf("  [-u]                       Enable UDP relay.\n");
+    eprintf("  [-b <local_address>]       Local address to bind\n");
+    eprintf("  [-u]                       Enable UDP relay\n");
     if (module == MODULE_REDIR)
-        eprintf("                                  TPROXY is required in redir mode.\n");
-    eprintf("  [-U]                       Enable UDP relay and disable TCP relay.\n");
-    eprintf("  [-6]                       Use IPv6 address first.\n");
+        eprintf("                                  TPROXY is required in redir mode\n");
+    eprintf("  [-U]                       Enable UDP relay and disable TCP relay\n");
+    eprintf("  [-6]                       Use IPv6 address first\n");
     // if (module == MODULE_REMOTE)
     // eprintf(
     // "       [-d <addr>]                Name servers for internal DNS resolver.\n");
@@ -183,12 +183,12 @@ static void moduleUsage() {
     // eprintf("       [--mptcp]                  Enable Multipath TCP on MPTCP Kernel.\n");
 #endif
     // eprintf("       [--no-delay]               Enable TCP_NODELAY.\n");
-    eprintf("  [--key <key_in_base64>]    Key of your remote server.\n");
-    eprintf("  [--logfile <file>]         Log file.\n");
+    eprintf("  [--key <key_in_base64>]    Key of your remote server\n");
+    eprintf("  [--logfile <file>]         Log file\n");
     eprintf("  [--loglevel <level>]       Log level (default info)\n");
-    eprintf("  [-v]                       Verbose mode.\n");
-    eprintf("  [-V, --version]            Print version info.\n");
-    eprintf("  [-h, --help]               Print this message.\n");
+    eprintf("  [-v]                       Verbose mode\n");
+    eprintf("  [-V, --version]            Print version info\n");
+    eprintf("  [-h, --help]               Print this message\n");
 }
 
 static void initLogger() {

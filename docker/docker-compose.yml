@@ -21,7 +21,7 @@ version: "3"
 
 services:
   xs-server:
-    image: xsocks:0.1.0-alpine
+    image: alucard5867/xsocks:latest
     deploy:
       resources:
         limits:

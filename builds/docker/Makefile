@@ -24,6 +24,6 @@ include $(ROOT)/builds/deps.mk
 default: docker
 
 docker:
-	cd $(ROOT) && docker build --force-rm --pull --no-cache -f docker/Dockerfile -t xsocks:$(VERSION)-alpine .
+	cd $(ROOT) && docker build --force-rm --pull --no-cache -f docker/Dockerfile -t alucard5867/xsocks:$(VERSION)-alpine -t alucard5867/xsocks:latest .
 
 .PHONY: default docker
