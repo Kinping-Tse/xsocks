@@ -17,36 +17,33 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __MODULE_TCP_H
-#define __MODULE_TCP_H
+#ifndef __MODULE_UDP_H
+#define __MODULE_UDP_H
 
-#include "../protocol/tcp.h"
+#include "lib/protocol/udp.h"
 
-typedef struct tcpServer {
-    tcpListener *ln;
-    int client_count;
+typedef struct udpServer {
+    udpConn *conn;
     int remote_count;
-} tcpServer;
+} udpServer;
 
-typedef struct tcpClient {
-    int type;
-    tcpConn *conn;
-    tcpServer *server;
-    struct tcpRemote *remote;
-} tcpClient;
+typedef struct udpClient {
+    udpServer *server;
+    struct udpRemote *remote;
+    sockAddrEx sa_client;
+    sockAddrEx sa_remote;
+} udpClient;
 
-typedef struct tcpRemote {
-    int type;
-    tcpConn *conn;
-    tcpClient *client;
-} tcpRemote;
+typedef struct udpRemote {
+    udpConn *conn;
+    udpClient *client;
+} udpRemote;
 
-tcpServer *tcpServerNew(char *host, int port, tcpEventHandler onAccept);
-void tcpServerFree(tcpServer *server);
+udpServer *udpServerNew(char *host, int port, int type, udpEventHandler onRead);
+void udpServerFree(udpServer *server);
 
-tcpClient *tcpClientNew(tcpServer *server, int type, tcpEventHandler onRead);
-tcpRemote *tcpRemoteNew(tcpClient *client, int type, char *host, int port,
-                        tcpConnectHandler onConnect);
-void tcpConnectionFree(tcpClient *client);
+udpClient *udpClientNew(udpServer *server);
+udpRemote *udpRemoteNew(udpClient *client, int type, char *host, int port);
+void udpConnectionFree(udpClient *client);
 
-#endif /* __MODULE_TCP_H */
+#endif /* __MODULE_UDP_H */

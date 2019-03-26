@@ -17,7 +17,9 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 #
 
-VERSION = $(shell grep XS_VERSION $(ROOT)/src/core/version.h | awk -F \" '{print $$2}')
+VERSION = $(shell grep XS_VERSION $(ROOT)/src/lib/core/version.h | awk -F \" '{print $$2}')
+
+DEPENDENCY_TARGETS = redis json-parser shadowsocks-libev
 
 MALLOC = libc
 ifeq ($(USE_TCMALLOC), yes)
@@ -28,6 +30,18 @@ ifeq ($(USE_TCMALLOC_MINIMAL), yes)
 endif
 ifeq ($(USE_JEMALLOC), yes)
 	MALLOC = jemalloc
+endif
+
+EVENT = libev
+ifeq ($(USE_AE), yes)
+	EVENT = ae
+endif
+ifeq ($(USE_LIBEV), yes)
+	EVENT = libev
+endif
+
+ifeq ($(EVENT), libev)
+	DEPENDENCY_TARGETS += libev
 endif
 
 PREFIX ?= $(ROOT)/tmp
@@ -49,10 +63,12 @@ REDIS_PATH = $(BUILD_DEPS_PATH)/redis
 SHADOWSOCKS_LIBEV_PATH = $(BUILD_DEPS_PATH)/shadowsocks-libev
 JSONPARSER_PATH = $(BUILD_DEPS_PATH)/json-parser
 MBEDTLS_PATH = $(DEPS_PATH)/mbedtls
+
 LIBBLOOM_PATH = $(BUILD_DEPS_PATH)/libbloom
+LIBBLOOM_SRC_PATH = $(DEPS_PATH)/libbloom
+
 LIBSODIUM_PATH = $(BUILD_DEPS_PATH)/libsodium/src/libsodium
 LIBSODIUM_SRC_PATH = $(DEPS_PATH)/libsodium
-
 LIBSODIUM_HEADER_CFLAGS = -I$(DEPS_PATH)/libsodium/src/libsodium/include \
 	-I$(DEPS_PATH)/libsodium/src/libsodium/include/sodium \
 	-I$(LIBSODIUM_PATH)/include

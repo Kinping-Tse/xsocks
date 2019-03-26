@@ -20,8 +20,8 @@
 #include "module_udp.h"
 #include "module.h"
 
-#include "../protocol/raw.h"
-#include "../protocol/udp_shadowsocks.h"
+#include "lib/protocol/raw.h"
+#include "lib/protocol/udp_shadowsocks.h"
 
 static udpConn *udpConnNew(int type, udpConn *conn);
 

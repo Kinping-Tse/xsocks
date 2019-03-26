@@ -21,12 +21,27 @@ ROOT = $(realpath ../../..)
 include $(ROOT)/builds/common.mk
 include $(ROOT)/builds/deps.mk
 
-VPATH = $(DEPS_PATH)/redis
+SRC_ROOT = $(ROOT)/src/lib
+VPATH = $(wildcard $(SRC_ROOT)/*)
 
-OBJS = anet.o zmalloc.o ae.o sds.o adlist.o
-LIBNAME = libredis
+SRCS = $(wildcard $(SRC_ROOT)/*/*.c)
+OBJS = $(notdir $(SRCS:.c=.o))
+LIBNAME = libxsocks
 
 include $(ROOT)/builds/lib.mk
+
+EXT_CFLAGS += -I$(DEPS_PATH) $(LIBSODIUM_HEADER_CFLAGS) -I$(MBEDTLS_PATH)/include
+EXT_LDFLAGS += -L$(REDIS_PATH) -L$(SHADOWSOCKS_LIBEV_PATH) -L$(JSONPARSER_PATH)
+EXT_LIBS += -lredis -lshadowsocks-libev -ljsonparser
+
+ifeq ($(EVENT), ae)
+	EXT_CFLAGS += -DUSE_AE
+endif
+ifeq ($(EVENT), libev)
+	EXT_CFLAGS += -DUSE_LIBEV -Wno-strict-aliasing
+	EXT_LDFLAGS += -L$(LIBEV_PATH)/.libs
+	EXT_LIBS += -lev
+endif
 
 ifeq ($(MALLOC), jemalloc)
 	EXT_CFLAGS += -DUSE_JEMALLOC -I$(JEMALLOC_PATH)/include

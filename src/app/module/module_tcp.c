@@ -20,9 +20,9 @@
 #include "module_tcp.h"
 #include "module.h"
 
-#include "../protocol/raw.h"
-#include "../protocol/tcp_shadowsocks.h"
-#include "../protocol/tcp_socks5.h"
+#include "lib/protocol/raw.h"
+#include "lib/protocol/tcp_shadowsocks.h"
+#include "lib/protocol/tcp_socks5.h"
 
 static tcpConn *tcpConnNew(int type, tcpConn *conn);
 

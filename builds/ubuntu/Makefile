@@ -21,7 +21,12 @@ ROOT = $(realpath ../..)
 include $(ROOT)/builds/common.mk
 include $(ROOT)/builds/deps.mk
 
-default:
-	docker run -it --rm -v $(ROOT):/tmp/xsocks -w /tmp/xsocks xsocks/builds/asuswrt-merlin.ng:$(VERSION) bash
+IMAGE = alucard5867/xsocks/builds/ubuntu
 
-.PHONY: default
+default: image
+	docker run -it --rm -v $(ROOT):/tmp/xsocks -w /tmp/xsocks $(IMAGE) bash
+
+image:
+	docker build --pull --force-rm -t $(IMAGE) .
+
+.PHONY: default image

@@ -18,6 +18,7 @@ xsocks is a lightweight proxy tool for science online. Just for academic researc
 ## Installation
 
 ```sh
+# You must install these tools first: make (gcc,g++)|clang autoconf automake libtool git
 $ git clone https://github.com/Kinping-Tse/xsocks.git
 $ cd xsocks
 $ make
@@ -62,12 +63,14 @@ $ make HOST="DEST_ARCH"
 $ make asuswrt-merlin.ng
 # Copy all the file in tmp directory to your router
 ```
-* 其他杂项
+* etc
 
 ```sh
 $ make OPTIMIZATION=-O3 # Change optimization level
 $ make DEBUG=  # No need debug info
 $ make V=1 # Visualization build
+$ make clean # Clean
+$ make distclean # Clean deeply, also include dependcy packages
 ```
 ### Build for developer
 
@@ -80,7 +83,9 @@ $ make valgrind
 
 ```sh
 $ make gcov
+$ builds/src/xs-local  # Run the test program
 $ make lcov
+$ # Open builds/src/lcov-html/index.html with browser
 ```
 * Docker
 
@@ -137,6 +142,22 @@ $ ./builds/src/xs-benchmark-client
 ```sh
 $ docker pull alucard5867/xsocks
 $ docker-compose -f docker/docker-compose.yml up -d
+```
+
+## Architecture of source code
+
+```
+  +---------------------+
+  |         app         |
+  +----------------+    +
+  |     module     |    |
+  +-----+----------+----+
+  |     |    protocol   |
+  |     |---------------+
+  | lib |     event     |
+  |     |---------------+
+  |     |     core      |
+  +-----+---------------+
 ```
 
 [readme_zh]: https://github.com/Kinping-Tse/xsocks/blob/master/README_zh.md

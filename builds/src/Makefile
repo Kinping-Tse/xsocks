@@ -22,23 +22,12 @@ include $(ROOT)/builds/common.mk
 include $(ROOT)/builds/deps.mk
 
 SRC_ROOT = $(ROOT)/src
-VPATH = $(wildcard $(SRC_ROOT)/*)
+APP_SRC_ROOT = $(SRC_ROOT)/app
+LIB_SRC_ROOT = $(SRC_ROOT)/lib
 
-include $(BUILD_ROOT)/common.mk
-
-SRCS = $(filter-out $(wildcard $(SRC_ROOT)/module/*c), $(wildcard $(SRC_ROOT)/*/*.c))
+VPATH = $(APP_SRC_ROOT) $(wildcard $(APP_SRC_ROOT)/*)
+SRCS = $(wildcard $(APP_SRC_ROOT)/*/*c)
 OBJS = $(notdir $(SRCS:.c=.o))
-MODULE_OBJS = $(OBJS) module.o module_tcp.o module_udp.o
-
-DEPENDENCY_TARGETS = redis json-parser shadowsocks-libev
-
-EVENT = libev
-ifeq ($(USE_AE), yes)
-	EVENT = ae
-endif
-ifeq ($(USE_LIBEV), yes)
-	EVENT = libev
-endif
 
 LINK_MODE = static
 ifeq ($(USE_SHARED), yes)
@@ -47,67 +36,67 @@ endif
 
 -include .make-settings
 
-EXT_CFLAGS = -I$(DEPS_PATH) $(LIBSODIUM_HEADER_CFLAGS) -I$(MBEDTLS_PATH)/include
-EXT_LDFLAGS =
-EXT_LIBS =
-
-ifeq ($(uname_S), Linux)
-	EXT_LIBS += -ldl
-endif
+EXT_CFLAGS = -I$(LIB_SRC_ROOT) -I$(DEPS_PATH) $(LIBSODIUM_HEADER_CFLAGS) -I$(MBEDTLS_PATH)/include
+EXT_LDFLAGS = -Llib -L$(REDIS_PATH) -L$(SHADOWSOCKS_LIBEV_PATH)
+EXT_LIBS = -lxsocks -lredis -lshadowsocks-libev
 
 ifeq ($(LINK_MODE), static)
-EXT_LIBS += $(REDIS_PATH)/libredis.a \
-	$(SHADOWSOCKS_LIBEV_PATH)/libshadowsocks-libev.a \
-	$(JSONPARSER_PATH)/libjsonparser.a \
-	$(LIBBLOOM_PATH)/libbloom.a \
-	$(MBEDTLS_PATH)/library/libmbedcrypto.a \
-	$(LIBSODIUM_PATH)/.libs/libsodium.a
+	EXT_LDFLAGS += -L$(LIBBLOOM_PATH) -L$(MBEDTLS_PATH)/library -L$(LIBSODIUM_PATH)/.libs -L$(JSONPARSER_PATH)
+	EXT_LIBS = -Wl,-static -lxsocks -lredis -lshadowsocks-libev -lbloom -lmbedcrypto -lsodium -ljsonparser
 	ifeq ($(MALLOC), jemalloc)
-		EXT_LIBS += $(JEMALLOC_PATH)/lib/libjemalloc.a
-		ifeq ($(uname_S), Linux)
-		EXT_LIBS += -pthread -lrt
-		endif
+		EXT_LDFLAGS += -L$(JEMALLOC_PATH)/lib
+		EXT_LIBS += -ljemalloc
 	endif
-endif
-ifeq ($(LINK_MODE), shared)
-EXT_LDFLAGS += -L$(REDIS_PATH) \
-	-L$(SHADOWSOCKS_LIBEV_PATH) \
-	-L$(JSONPARSER_PATH)
-	ifeq ($(uname_S), Linux)
-	EXT_LDFLAGS += -Wl,-rpath,$(INSTALL_LIB),-rpath,$(JEMALLOC_PATH)/lib,-rpath,$(LIBBLOOM_PATH),-rpath,$(MBEDTLS_PATH)/library,-rpath,$(LIBSODIUM_PATH)/.libs
-	endif
-EXT_LIBS += -lredis -ljsonparser -lshadowsocks-libev
-endif
-
-ifeq ($(EVENT), ae)
-	EXT_CFLAGS += -DUSE_AE
-endif
-ifeq ($(EVENT), libev)
-	EXT_CFLAGS += -DUSE_LIBEV -Wno-strict-aliasing
-	DEPENDENCY_TARGETS += libev
-	ifeq ($(LINK_MODE), static)
-		EXT_LIBS += $(LIBEV_PATH)/.libs/libev.a
-	endif
-	ifeq ($(LINK_MODE), shared)
+	ifeq ($(EVENT), libev)
 		EXT_LDFLAGS += -L$(LIBEV_PATH)/.libs
 		EXT_LIBS += -lev
 	endif
+
+	ifeq ($(uname_S), Linux)
+		EXT_LIBS += -Wl,-dy
+	endif
+	ifeq ($(uname_S), Darwin)
+		EXT_LIBS += -Wl,-dylib -Wl,-execute
+	endif
 endif
 
-EXT_LIBS += -lm
+# ifeq ($(uname_S), Linux)
+#   EXT_LIBS += -ldl
+# endif
+# EXT_LIBS += -lm
+
+# ifeq ($(LINK_MODE), static)
+#   ifeq ($(MALLOC), jemalloc)
+#       ifeq ($(uname_S), Linux)
+#       EXT_LIBS += -pthread -lrt
+#       endif
+#   endif
+# endif
+
+ifeq ($(LINK_MODE), shared)
+  ifeq ($(uname_S), Linux)
+  EXT_LDFLAGS += -Wl,-rpath,$(INSTALL_LIB),-rpath,$(BUILD_ROOT)/src/lib,-rpath,$(REDIS_PATH),-rpath,$(SHADOWSOCKS_LIBEV_PATH),-rpath,$(LIBBLOOM_PATH),-rpath,$(MBEDTLS_PATH)/library,-rpath,$(LIBSODIUM_PATH)/.libs
+  	ifeq ($(MALLOC), jemalloc)
+		EXT_LDFLAGS += -Wl,-rpath,$(JEMALLOC_PATH)/lib
+	endif
+	ifeq ($(EVENT), libev)
+		EXT_LDFLAGS += -Wl,-rpath,$(LIBEV_PATH)/.libs
+	endif
+  endif
+endif
 
 XSOCKS_SERVER_NAME = xs-server
-XSOCKS_SERVER_OBJ = server.o $(MODULE_OBJS)
+XSOCKS_SERVER_OBJ = server.o $(OBJS)
 XSOCKS_LOCAL_NAME = xs-local
-XSOCKS_LOCAL_OBJ = local.o $(MODULE_OBJS)
+XSOCKS_LOCAL_OBJ = local.o $(OBJS)
 XSOCKS_TUNNEL_NAME = xs-tunnel
-XSOCKS_TUNNEL_OBJ = tunnel.o $(MODULE_OBJS)
+XSOCKS_TUNNEL_OBJ = tunnel.o $(OBJS)
 XSOCKS_REDIR_NAME = xs-redir
-XSOCKS_REDIR_OBJ = redir.o $(MODULE_OBJS)
+XSOCKS_REDIR_OBJ = redir.o $(OBJS)
 XSOCKS_BENCHMAKR_SERVER_NAME = xs-benchmark-server
-XSOCKS_BENCHMAKR_SERVER_OBJ = benchmark_server.o $(OBJS)
+XSOCKS_BENCHMAKR_SERVER_OBJ = benchmark_server.o
 XSOCKS_BENCHMAKR_CLIENT_NAME = xs-benchmark-client
-XSOCKS_BENCHMAKR_CLIENT_OBJ = benchmark_client.o $(OBJS)
+XSOCKS_BENCHMAKR_CLIENT_OBJ = benchmark_client.o
 
 XSOCKS_MODULE_EXE = $(XSOCKS_SERVER_NAME) $(XSOCKS_LOCAL_NAME) $(XSOCKS_TUNNEL_NAME)
 XSOCKS_BENCHMAKR_EXE = $(XSOCKS_BENCHMAKR_SERVER_NAME) $(XSOCKS_BENCHMAKR_CLIENT_NAME)
@@ -121,6 +110,9 @@ all: $(XSOCKS_MODULE_EXE)
 ifeq (0, $(words $(findstring $(MAKECMDGOALS), "clean distclean")))
 -include Makefile.dep
 endif
+
+lib: .make-prerequisites
+	$(MAKE) -C $@ $(MFLAGS)
 
 Makefile.dep:
 	$(COMMON_CC) -MM $(SRC_ROOT)/*/*.c > Makefile.dep 2> /dev/null
@@ -175,7 +167,7 @@ $(XSOCKS_BENCHMAKR_CLIENT_NAME): $(XSOCKS_BENCHMAKR_CLIENT_OBJ)
 $(XSOCKS_BENCHMAKR_SERVER_NAME): $(XSOCKS_BENCHMAKR_SERVER_OBJ)
 	$(XSOCKS_MODULE_EXE_LD)
 
-%.o: %.c .make-prerequisites
+%.o: %.c lib
 	$(COMMON_CC) -c $<
 
 install: all install-lib
@@ -192,6 +184,7 @@ install-lib:
 ifeq ($(LINK_MODE), shared)
 install-lib:
 	@mkdir -p $(INSTALL_LIB)
+	$(MAKE) -C lib install-shared PREFIX="$(PREFIX)"
 	$(MAKE) -C $(BUILD_DEPS_PATH) install-shared PREFIX="$(PREFIX)"
 ifeq ($(USE_STRIP), yes)
 	$(STRIP) $(INSTALL_LIB)/*
@@ -200,6 +193,7 @@ endif
 
 clean:
 	rm -rf $(XSOCKS_MODULE_EXE) $(BUILD_TMP_FILES) *.info lcov-html Makefile.dep $(XSOCKS_BENCHMAKR_EXE)
+	$(MAKE) -C lib clean
 
 distclean: clean
 	$(MAKE) -C $(BUILD_DEPS_PATH) distclean
@@ -208,7 +202,7 @@ distclean: clean
 bench: $(XSOCKS_BENCHMAKR_EXE)
 
 gcov:
-	$(MAKE) $(MFLAGS) all bench CFLAGS="-fprofile-arcs -ftest-coverage" LDFLAGS="-fprofile-arcs -ftest-coverage"
+	$(MAKE) $(MFLAGS) all bench CFLAGS="--coverage" LDFLAGS="--coverage"
 
 lcov:
 	$(MAKE) $(MFLAGS) gcov
@@ -218,4 +212,4 @@ lcov:
 valgrind:
 	$(MAKE) $(MFLAGS) OPTIMIZATION="-O0" MALLOC="libc"
 
-.PHONY: all install install-lib clean distclean persist-settings bench gcov lcov valgrind
+.PHONY: all lib install install-lib clean distclean persist-settings bench gcov lcov valgrind

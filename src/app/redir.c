@@ -17,20 +17,20 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "module.h"
-#include "module_tcp.h"
+#include "module/module.h"
+#include "module/module_tcp.h"
 
-#include "../protocol/tcp_shadowsocks.h"
-#include "../protocol/tcp_socks5.h"
+#include "lib/protocol/tcp_shadowsocks.h"
+#include "lib/protocol/tcp_socks5.h"
 
 typedef struct server {
     module mod;
     tcpServer *ts;
 } server;
 
-static void localInit();
-static void localRun();
-static void localExit();
+static void redirInit();
+static void redirRun();
+static void redirExit();
 
 static void tcpServerOnAccept(void *data);
 static void tcpClientOnRead(void *data);
@@ -41,19 +41,19 @@ module *app = (module *)&s;
 
 int main(int argc, char *argv[]) {
     moduleHook hook = {
-        .init = localInit,
-        .run = localRun,
-        .exit = localExit,
+        .init = redirInit,
+        .run = redirRun,
+        .exit = redirExit,
     };
 
-    return moduleMain(MODULE_LOCAL, hook, app, argc, argv);
+    return moduleMain(MODULE_REDIR, hook, app, argc, argv);
 }
 
-static void localInit() {
-    getLogger()->syslog_ident = "xs-local";
+static void redirInit() {
+    getLogger()->syslog_ident = "xs-redir";
 }
 
-static void localRun() {
+static void redirRun() {
     if (app->config->mode & MODE_TCP_ONLY)
         s.ts = tcpServerNew(app->config->local_addr, app->config->local_port, tcpServerOnAccept);
 
@@ -66,50 +66,53 @@ static void localRun() {
     if (s.ts) LOGN("TCP server listen at: %s", s.ts->ln->addrinfo);
 }
 
-static void localExit() {
+static void redirExit() {
     tcpServerFree(s.ts);
 }
 
 static void tcpServerOnAccept(void *data) {
     tcpServer *server = data;
-    tcpClient *client = tcpClientNew(server, CONN_TYPE_SOCKS5, tcpClientOnRead);
-    if (client) {
-        LOGD("TCP server accepted client %s", CONN_GET_ADDRINFO(client->conn));
-        LOGD("TCP client current count: %d", ++server->client_count);
+    tcpClient *client;
+    tcpRemote *remote;
+
+    if ((client = tcpClientNew(server, CONN_TYPE_RAW, tcpClientOnRead)) == NULL) return;
+
+    LOGD("TCP server accepted client %s", CONN_GET_ADDRINFO(client->conn));
+    LOGD("TCP client current count: %d", ++server->client_count);
+
+    remote = tcpRemoteNew(client, CONN_TYPE_SHADOWSOCKS, app->config->remote_addr,
+                          app->config->remote_port, tcpRemoteOnConnect);
+    if (!remote) goto error;
+
+    char host[HOSTNAME_MAX_LEN];
+    int host_len = sizeof(host);
+    int port;
+    char err[NET_ERR_LEN];
+    sockAddrEx sa;
+
+    if (netTcpGetDestSockAddr(err, client->conn->fd, app->config->ipv6_first, &sa) == NET_ERR) {
+        LOGW("TCP client get dest sockaddr error: %s", err);
+        goto error;
     }
+    if (netIpPresentBySockAddr(err, host, host_len, &port, &sa) == NET_ERR) {
+        LOGW("TCP client get dest addr error: %s", err);
+        goto error;
+    }
+    LOGD("TCP client proxy dest addr: %s:%d", host, port);
+
+    tcpShadowsocksConnInit((tcpShadowsocksConn *)remote->conn, host, port);
+
+    return;
+
+error:
+    tcpConnectionFree(client);
 }
 
 static void tcpClientOnRead(void *data) {
     tcpClient *client = data;
     tcpRemote *remote = client->remote;
-    tcpSocks5Conn *conn_client = (tcpSocks5Conn *)client->conn;
 
-    if (conn_client->state != SOCKS5_STATE_STREAM) {
-        int nread = TCP_READ(client->conn, client->conn->rbuf, client->conn->rbuf_len);
-        if (nread > 0) TCP_WRITE(client->conn, client->conn->rbuf, nread);
-        return;
-    }
-
-    if (!remote) {
-        remote = tcpRemoteNew(client, CONN_TYPE_SHADOWSOCKS, app->config->remote_addr,
-                              app->config->remote_port, tcpRemoteOnConnect);
-        if (!remote) {
-            tcpConnectionFree(client);
-            return;
-        }
-
-        char host[HOSTNAME_MAX_LEN];
-        int host_len = sizeof(host);
-        int port;
-
-        socks5AddrParse(conn_client->addrbuf_dest, sdslen(conn_client->addrbuf_dest), NULL, host,
-                        &host_len, &port);
-        tcpShadowsocksConnInit((tcpShadowsocksConn *)remote->conn, host, port);
-
-        LOGD("TCP client proxy dest addr: %s:%d", host, port);
-    } else {
-        tcpPipe(client->conn, remote->conn);
-    }
+    tcpPipe(client->conn, remote->conn);
 }
 
 static void tcpRemoteOnConnect(void *data, int status) {

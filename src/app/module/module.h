@@ -20,12 +20,12 @@
 #ifndef __MODULE_H
 #define __MODULE_H
 
-#include "../core/common.h"
+#include "lib/core/common.h"
 
-#include "../core/config.h"
-#include "../core/time.h"
-#include "../core/utils.h"
-#include "../event/event.h"
+#include "lib/core/config.h"
+#include "lib/core/time.h"
+#include "lib/core/utils.h"
+#include "lib/event/event.h"
 
 #include "redis/adlist.h"
 #include "shadowsocks-libev/crypto.h"

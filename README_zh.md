@@ -18,6 +18,7 @@
 ## 安装方法
 
 ```sh
+# 需要预先安装以下工具: make (gcc,g++)|clang autoconf automake libtool git
 $ git clone https://github.com/Kinping-Tse/xsocks.git
 $ cd xsocks
 $ make
@@ -68,6 +69,8 @@ $ make asuswrt-merlin.ng
 $ make OPTIMIZATION=-O3 # 优化等级
 $ make DEBUG=  # 不需要编译调试选项
 $ make V=1 # 编译可视化
+$ make clean # 清理
+$ make distclean # 深度清理, 依赖包也会被清理
 ```
 ### 供开发者使用的安装
 
@@ -80,7 +83,9 @@ $ make valgrind
 
 ```sh
 $ make gcov
+$ builds/src/xs-local  # 运行想要测试的程序
 $ make lcov
+$ # 通过浏览器打开 builds/src/lcov-html/index.html 即可查看
 ```
 * docker
 
@@ -136,6 +141,22 @@ $ ./builds/src/xs-benchmark-client
 ```sh
 $ docker pull alucard5867/xsocks
 $ docker-compose -f docker/docker-compose.yml up -d
+```
+
+## 代码架构
+
+```
+  +---------------------+
+  |         app         |
+  +----------------+    +
+  |     module     |    |
+  +-----+----------+----+
+  |     |    protocol   |
+  |     |---------------+
+  | lib |     event     |
+  |     |---------------+
+  |     |     core      |
+  +-----+---------------+
 ```
 
 [readme_en]: https://github.com/Kinping-Tse/xsocks/blob/master/README_en.md

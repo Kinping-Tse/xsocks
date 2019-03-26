@@ -17,10 +17,10 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "module.h"
-#include "module_udp.h"
+#include "module/module.h"
+#include "module/module_udp.h"
 
-#include "../protocol/udp_shadowsocks.h"
+#include "lib/protocol/udp_shadowsocks.h"
 
 typedef struct server {
     module mod;

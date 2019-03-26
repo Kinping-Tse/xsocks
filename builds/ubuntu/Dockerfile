@@ -17,14 +17,10 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 #
 
-language: c
-compiler:
-  - gcc
-  - clang
-os:
-  - linux
-  - osx
-script: make
-branches:
-  only:
-    - master
+FROM ubuntu:16.04
+
+MAINTAINER XJP09_HK <jianping_xie@aliyun.com>
+
+RUN set -xe \
+    && apt-get update \
+    && apt-get install -y make gcc g++ autoconf automake libtool git

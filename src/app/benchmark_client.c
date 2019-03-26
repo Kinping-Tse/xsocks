@@ -17,8 +17,8 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "../protocol/raw.h"
-#include "../protocol/tcp_shadowsocks.h"
+#include "lib/protocol/raw.h"
+#include "lib/protocol/tcp_shadowsocks.h"
 
 #include <getopt.h>
 

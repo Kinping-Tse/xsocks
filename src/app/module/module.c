@@ -18,8 +18,9 @@
  */
 
 #include "module.h"
-#include "../core/version.h"
-#include "../protocol/proxy.h"
+
+#include "lib/core/version.h"
+#include "lib/protocol/proxy.h"
 
 #include "shadowsocks-libev/ppbloom.h"
 

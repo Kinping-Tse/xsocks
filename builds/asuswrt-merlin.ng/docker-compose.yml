@@ -22,7 +22,7 @@ version: "3"
 services:
   xsocks:
     build: .
-    image: xsocks/builds/asuswrt-merlin.ng:${XSOCKS_VERSION}
+    image: alucard5867/xsocks/builds/asuswrt-merlin.ng
     deploy:
       restart_policy:
         max_attempts: 0
