@@ -57,10 +57,19 @@ $ make install USE_STRIP=yes
 ```sh
 $ make HOST="DEST_ARCH"
 ```
-* ASUS router build (only support asuswrt-merlin.ng device now)
+* Ubuntu build
 
 ```sh
-$ make asuswrt-merlin.ng
+$ make ubuntu
+$ make && make install
+$ exit
+# Copy all the file in tmp directory to your ubuntu host
+```
+* ASUS router build (only support asuswrt-merlin.ng device now), [AM_TOOLCHAINS][]
+
+```sh
+# Make sure ubuntu build image is done, if not you can hit `make ubuntu` first
+$ make asuswrt-merlin.ng AM_TOOLCHAINS_PATH="Your_AM_TOOLCHAINS_PATH"
 # Copy all the file in tmp directory to your router
 ```
 * etc
@@ -163,3 +172,4 @@ $ docker-compose -f docker/docker-compose.yml up -d
 [readme_zh]: https://github.com/Kinping-Tse/xsocks/blob/master/README_zh.md
 [XJP]: https://github.com/Kinping-Tse "XJP09_HK"
 [shadowsocks-libev]: https://github.com/shadowsocks/shadowsocks-libev "shadowsocks-libev"
+[AM_TOOLCHAINS]: https://github.com/RMerl/am-toolchains

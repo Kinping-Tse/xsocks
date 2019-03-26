@@ -57,10 +57,19 @@ $ make install USE_STRIP=yes
 ```sh
 $ make HOST="目标平台"
 ```
-* 华硕路由器安装方式 (仅支持asuswrt-merlin.ng的设备)
+* ubuntu环境编译
 
 ```sh
-$ make asuswrt-merlin.ng
+$ make ubuntu
+$ make && make install
+$ exit
+# 把tmp目录的所有文件拷贝到你的ubuntu环境中, 即可运行
+```
+* 华硕路由器安装方式 (仅支持asuswrt-merlin.ng的设备), [华硕编译环境][AM_TOOLCHAINS]
+
+```sh
+# 先保证生成ubuntu镜像, 如果没有先输入`make ubuntu`
+$ make asuswrt-merlin.ng AM_TOOLCHAINS_PATH="你的华硕编译环境"
 # 把tmp目录的所有文件拷贝到你的路由器当中, 即可运行
 ```
 * 其他杂项
@@ -162,3 +171,4 @@ $ docker-compose -f docker/docker-compose.yml up -d
 [readme_en]: https://github.com/Kinping-Tse/xsocks/blob/master/README_en.md
 [XJP]: https://github.com/Kinping-Tse "XJP09_HK"
 [shadowsocks-libev]: https://github.com/shadowsocks/shadowsocks-libev "shadowsocks-libev"
+[AM_TOOLCHAINS]: https://github.com/RMerl/am-toolchains

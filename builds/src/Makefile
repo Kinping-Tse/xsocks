@@ -35,8 +35,8 @@ endif
 
 -include .make-settings
 
-EXT_CFLAGS = -I$(SRC_ROOT) -I$(DEPS_PATH) $(LIBSODIUM_HEADER_CFLAGS) -I$(MBEDTLS_PATH)/include
-EXT_LDFLAGS = -Llib -L$(REDIS_PATH) -L$(SHADOWSOCKS_LIBEV_PATH)
+EXT_CFLAGS += -I$(SRC_ROOT) -I$(DEPS_PATH) $(LIBSODIUM_HEADER_CFLAGS) -I$(MBEDTLS_PATH)/include
+EXT_LDFLAGS += -Llib -L$(REDIS_PATH) -L$(SHADOWSOCKS_LIBEV_PATH)
 EXT_LIBS = -lxsocks -lredis -lshadowsocks-libev
 
 ifeq ($(LINK_MODE), static)
@@ -192,7 +192,7 @@ distclean: clean
 bench: $(XSOCKS_BENCHMAKR_EXE)
 
 gcov:
-	$(MAKE) $(MFLAGS) all bench CFLAGS="--coverage" LDFLAGS="--coverage"
+	$(MAKE) $(MFLAGS) all bench XS_CFLAGS="--coverage" XS_LDFLAGS="--coverage"
 
 lcov:
 	$(MAKE) $(MFLAGS) gcov
