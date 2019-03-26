@@ -23,7 +23,6 @@ include $(ROOT)/builds/deps.mk
 
 SRC_ROOT = $(ROOT)/src
 APP_SRC_ROOT = $(SRC_ROOT)/app
-LIB_SRC_ROOT = $(SRC_ROOT)/lib
 
 VPATH = $(APP_SRC_ROOT) $(wildcard $(APP_SRC_ROOT)/*)
 SRCS = $(wildcard $(APP_SRC_ROOT)/*/*c)
@@ -36,7 +35,7 @@ endif
 
 -include .make-settings
 
-EXT_CFLAGS = -I$(LIB_SRC_ROOT) -I$(DEPS_PATH) $(LIBSODIUM_HEADER_CFLAGS) -I$(MBEDTLS_PATH)/include
+EXT_CFLAGS = -I$(SRC_ROOT) -I$(DEPS_PATH) $(LIBSODIUM_HEADER_CFLAGS) -I$(MBEDTLS_PATH)/include
 EXT_LDFLAGS = -Llib -L$(REDIS_PATH) -L$(SHADOWSOCKS_LIBEV_PATH)
 EXT_LIBS = -lxsocks -lredis -lshadowsocks-libev
 
@@ -45,7 +44,7 @@ ifeq ($(LINK_MODE), static)
 	EXT_LIBS = -Wl,-static -lxsocks -lredis -lshadowsocks-libev -lbloom -lmbedcrypto -lsodium -ljsonparser
 	ifeq ($(MALLOC), jemalloc)
 		EXT_LDFLAGS += -L$(JEMALLOC_PATH)/lib
-		EXT_LIBS += -ljemalloc
+		EXT_LIBS += -ljemalloc -pthread
 	endif
 	ifeq ($(EVENT), libev)
 		EXT_LDFLAGS += -L$(LIBEV_PATH)/.libs
@@ -53,36 +52,27 @@ ifeq ($(LINK_MODE), static)
 	endif
 
 	ifeq ($(uname_S), Linux)
-		EXT_LIBS += -Wl,-dy
+		EXT_LIBS += -Wl,-dy -lm
 	endif
 	ifeq ($(uname_S), Darwin)
 		EXT_LIBS += -Wl,-dylib -Wl,-execute
 	endif
 endif
 
-# ifeq ($(uname_S), Linux)
-#   EXT_LIBS += -ldl
-# endif
-# EXT_LIBS += -lm
-
-# ifeq ($(LINK_MODE), static)
-#   ifeq ($(MALLOC), jemalloc)
-#       ifeq ($(uname_S), Linux)
-#       EXT_LIBS += -pthread -lrt
-#       endif
-#   endif
-# endif
-
 ifeq ($(LINK_MODE), shared)
-  ifeq ($(uname_S), Linux)
-  EXT_LDFLAGS += -Wl,-rpath,$(INSTALL_LIB),-rpath,$(BUILD_ROOT)/src/lib,-rpath,$(REDIS_PATH),-rpath,$(SHADOWSOCKS_LIBEV_PATH),-rpath,$(LIBBLOOM_PATH),-rpath,$(MBEDTLS_PATH)/library,-rpath,$(LIBSODIUM_PATH)/.libs
-  	ifeq ($(MALLOC), jemalloc)
-		EXT_LDFLAGS += -Wl,-rpath,$(JEMALLOC_PATH)/lib
+	ifeq ($(uname_S), Linux)
+		EXT_LDFLAGS += -Wl,-rpath,$(INSTALL_LIB),-rpath,$(BUILD_ROOT)/src/lib,-rpath,$(REDIS_PATH),-rpath,$(SHADOWSOCKS_LIBEV_PATH),-rpath,$(JSONPARSER_PATH),-rpath,$(LIBBLOOM_PATH),-rpath,$(MBEDTLS_PATH)/library,-rpath,$(LIBSODIUM_PATH)/.libs
+		ifeq ($(MALLOC), jemalloc)
+			EXT_LDFLAGS += -Wl,-rpath,$(JEMALLOC_PATH)/lib
+		endif
+		ifeq ($(EVENT), libev)
+			EXT_LDFLAGS += -Wl,-rpath,$(LIBEV_PATH)/.libs
+		endif
 	endif
-	ifeq ($(EVENT), libev)
-		EXT_LDFLAGS += -Wl,-rpath,$(LIBEV_PATH)/.libs
-	endif
-  endif
+endif
+
+ifeq ($(uname_S), Linux)
+	EXT_LIBS += -ldl
 endif
 
 XSOCKS_SERVER_NAME = xs-server

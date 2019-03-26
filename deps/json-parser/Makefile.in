@@ -32,6 +32,7 @@ libjsonparser.a: $(OBJS)
 
 libjsonparser.so: $(OBJS)
 	$(CC) -shared -Wl,-soname,$(SO_NAME) -o libjsonparser.so $^ $(LDFLAGS)
+	ln -sf libjsonparser.so $(SO_NAME)
 
 libjsonparser.dylib: $(OBJS)
 	$(CC) -dynamiclib json.o -o libjsonparser.dylib $(LDFLAGS)
@@ -70,4 +71,3 @@ install: install-shared install-static
 	@echo Linker flags: -L$(libdir) -ljsonparser
 
 .PHONY: all clean distclean install install-shared install-static
-
