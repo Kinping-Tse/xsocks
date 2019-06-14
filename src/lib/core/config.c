@@ -67,7 +67,7 @@ enum {
     GETOPT_VAL_LOGFILE,
     GETOPT_VAL_FAST_OPEN,
     GETOPT_VAL_NODELAY,
-    // GETOPT_VAL_ACL,
+    GETOPT_VAL_ACL,
     // GETOPT_VAL_MPTCP,
     GETOPT_VAL_PASSWORD,
     GETOPT_VAL_KEY,
@@ -98,6 +98,7 @@ xsocksConfig *configNew() {
     config->ipv6_first = 0;
     config->ipv6_only = 1;
     config->no_delay = 0;
+    config->acl = NULL;
 
     return config;
 }
@@ -256,6 +257,8 @@ void configLoad(xsocksConfig *config, char *filename) {
         } else if (strcmp(name, "no_delay") == 0) {
             check_json_value_type(value, json_boolean, "invalid config file: option 'no_delay' must be a boolean");
             config->no_delay = to_integer(value);
+        } else if (strcmp(name, "acl") == 0) {
+            config->acl = to_string(value);
         } else {
             err = sdscatprintf(sdsempty(), "Bad directive: %s", name);
             goto loaderr;
@@ -294,6 +297,7 @@ int configParse(xsocksConfig *config, int argc, char *argv[]) {
         { "no-delay",    no_argument,       NULL, GETOPT_VAL_NODELAY     },
         { "password",    required_argument, NULL, GETOPT_VAL_PASSWORD    },
         { "key",         required_argument, NULL, GETOPT_VAL_KEY         },
+        { "acl",         required_argument, NULL, GETOPT_VAL_ACL         },
         { "version",     no_argument,       NULL, 'V'                    },
         { NULL,          0,                 NULL, 0                      },
     };
@@ -307,6 +311,7 @@ int configParse(xsocksConfig *config, int argc, char *argv[]) {
     char *password = NULL;
     char *pidfile = NULL;
     char *method = NULL;
+    char *acl = NULL;
     int fast_open = -1;
     int mtu = -1;
     int no_delay = -1;
@@ -330,6 +335,7 @@ int configParse(xsocksConfig *config, int argc, char *argv[]) {
             case GETOPT_VAL_NODELAY: no_delay = 1; break;
             case GETOPT_VAL_KEY: key = optarg; break;
             case GETOPT_VAL_REUSE_PORT: reuse_port = 1; break;
+            case GETOPT_VAL_ACL: acl = optarg; break;
             case GETOPT_VAL_LOGLEVEL:
                 loglevel = configEnumGetValue(loglevel_enum, optarg);
                 if (loglevel == INT_MIN)
@@ -378,6 +384,7 @@ int configParse(xsocksConfig *config, int argc, char *argv[]) {
     configStringDup(config->password, password);
     configStringDup(config->pidfile, pidfile);
     configStringDup(config->method, method);
+    configStringDup(config->acl, acl);
     configIntDup(config->loglevel, loglevel);
     configIntDup(config->remote_port, remote_port);
     configIntDup(config->local_port, local_port);

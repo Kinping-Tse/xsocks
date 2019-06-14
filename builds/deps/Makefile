@@ -27,7 +27,7 @@ ifeq ($(MALLOC), jemalloc)
 	REDIS_DEPS += jemalloc
 endif
 
-GIT_SUBMODULE_DEPS = jemalloc libbloom libsodium mbedtls libev
+GIT_SUBMODULE_DEPS = jemalloc libbloom libsodium mbedtls libev libcork
 GIT_SUBMODULE_INIT_FILE = .submodule.lock
 
 default:
@@ -73,14 +73,11 @@ json-parser:
 	cd $@ && $(DEPS_PATH)/$@/configure --host=$(HOST) --prefix=$(PREFIX)
 	cd $@ && $(MAKE) $(MFLAGS) LDFLAGS='$(JSONPARSER_LDFLAGS)'
 
-shadowsocks-libev: libsodium mbedtls libbloom
+shadowsocks-libev: libev libsodium mbedtls libbloom libipset
 	$(QUIET_MAKE)
 	cd $@ && $(MAKE) $(MFLAGS)
 
 LIBBLOOM_LDFLAGS = $(LDFLAGS)
-ifeq ($(uname_S), Linux)
-LIBBLOOM_LDFLAGS += -Wl,-rpath,$(INSTALL_LIB)
-endif
 ifeq ($(uname_S), Darwin)
 LIBBLOOM_LDFLAGS += -Wl,-install_name,$(INSTALL_LIB)/libbloom.dylib
 endif
@@ -107,6 +104,17 @@ libsodium:
 	cd $@ && $(DEPS_PATH)/$@/configure --host=$(HOST) --prefix=$(PREFIX)
 	cd $@ && $(MAKE) $(MFLAGS)
 
+libcork:
+	$(QUIET_MAKE)
+	@mkdir -p $@
+	cd $(DEPS_PATH)/$@ && autoreconf -i
+	cd $@ && $(DEPS_PATH)/$@/configure --host=$(HOST) --prefix=$(PREFIX)
+	cd $@ && $(MAKE) $(MFLAGS)
+
+libipset: libcork
+	$(QUIET_MAKE)
+	cd $@ && $(MAKE) $(MFLAGS)
+
 clean:
 	-($(MAKE) -C libev maintainer-clean)
 	-($(MAKE) -C jemalloc relclean)
@@ -116,27 +124,29 @@ clean:
 	-($(MAKE) -C $(DEPS_PATH)/libbloom clean BUILD=$(LIBBLOOM_PATH))
 	-($(MAKE) -C $(DEPS_PATH)/mbedtls clean)
 	-($(MAKE) -C libsodium maintainer-clean)
-
-LIBSODIUM_CONFIG_FILE = m4/argz.m4 m4/libtool.m4 m4/ltoptions.m4 m4/ltsugar.m4 m4/ltversion.m4 m4/lt~obsolete.m4 configure aclocal.m4 build-aux autom4te.cache
+	-($(MAKE) -C libcork maintainer-clean)
+	$(MAKE) -C libipset clean
 
 distclean: clean
 	rm -rf $(GIT_SUBMODULE_INIT_FILE) $(GIT_SUBMODULE_DEPS) json-parser
 	rm -rf .make-*
-	rm -rf $(JEMALLOC_SRC_PATH)/configure
-	cd $(LIBSODIUM_SRC_PATH) && rm -rf $(LIBSODIUM_CONFIG_FILE) \
-		&& find . -type f -name "Makefile.in" -exec rm -f {} \;
+	cd $(JEMALLOC_SRC_PATH) && git clean -xf
+	cd $(LIBSODIUM_SRC_PATH) && git clean -xf
+	cd $(LIBCORK_SRC_PATH) && git clean -xf
 
 install: install-shared
 install-shared:
 	-($(MAKE) -C jemalloc install_lib_shared)
-	-($(MAKE) -C libev install-libLTLIBRARIES)
+	$(MAKE) -C libev install-libLTLIBRARIES
 	$(MAKE) -C json-parser install-shared
 	$(MAKE) -C redis install-shared
 	$(MAKE) -C shadowsocks-libev install-shared
+	$(MAKE) -C libcork install-libLTLIBRARIES
+	$(MAKE) -C libipset install-shared
 	$(MAKE) -C libsodium install-exec
 	$(MAKE) -C $(DEPS_PATH)/mbedtls install CC=$(CC) DESTDIR=$(PREFIX) PREFIX=mbedtls_
 	$(COMMON_INSTALL) $(LIBBLOOM_PATH)/libbloom.$(DYLIB_SUFFIX) $(INSTALL_LIB)
 	rm -rf $(INSTALL_LIB)/*.a $(INSTALL_LIB)/*.la $(INSTALL_INC) $(INSTALL_DATA)
 	rm -rf $(INSTALL_BIN)/mbedtls_* $(INSTALL_LIB)/libmbedx509* $(INSTALL_LIB)/libmbedtls*
 
-.PHONY: default deps-init clean distclean install install-shared redis json-parser shadowsocks-libev $(GIT_SUBMODULE_DEPS)
+.PHONY: default deps-init clean distclean install install-shared redis json-parser shadowsocks-libev libipset $(GIT_SUBMODULE_DEPS)

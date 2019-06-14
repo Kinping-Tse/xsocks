@@ -35,13 +35,13 @@ endif
 
 -include .make-settings
 
-EXT_CFLAGS += -I$(SRC_ROOT) -I$(DEPS_PATH) $(LIBSODIUM_HEADER_CFLAGS) -I$(MBEDTLS_PATH)/include
-EXT_LDFLAGS += -Llib -L$(REDIS_PATH) -L$(SHADOWSOCKS_LIBEV_PATH)
+EXT_CFLAGS = -I$(SRC_ROOT) -I$(DEPS_PATH) $(LIBSODIUM_HEADER_CFLAGS) -I$(MBEDTLS_PATH)/include
+EXT_LDFLAGS = -Llib -L$(REDIS_PATH) -L$(SHADOWSOCKS_LIBEV_PATH)
 EXT_LIBS = -lxsocks -lredis -lshadowsocks-libev
 
 ifeq ($(LINK_MODE), static)
-	EXT_LDFLAGS += -L$(LIBBLOOM_PATH) -L$(MBEDTLS_PATH)/library -L$(LIBSODIUM_PATH)/.libs -L$(JSONPARSER_PATH)
-	EXT_LIBS = -Wl,-static -lxsocks -lredis -lshadowsocks-libev -lbloom -lmbedcrypto -lsodium -ljsonparser
+	EXT_LDFLAGS += -L$(LIBBLOOM_PATH) -L$(MBEDTLS_PATH)/library -L$(LIBSODIUM_PATH)/.libs $(LIBCORK_LIB_LDFLAGS) -L$(LIBIPSET_PATH) -L$(JSONPARSER_PATH)
+	EXT_LIBS = -Wl,-static -lxsocks -lredis -lshadowsocks-libev -lbloom -lmbedcrypto -lsodium -lcork -lipset -lpcre -ljsonparser
 	ifeq ($(MALLOC), jemalloc)
 		EXT_LDFLAGS += -L$(JEMALLOC_PATH)/lib
 		EXT_LIBS += -ljemalloc -pthread
@@ -160,7 +160,7 @@ $(XSOCKS_BENCHMAKR_SERVER_NAME): $(XSOCKS_BENCHMAKR_SERVER_OBJ)
 %.o: %.c lib
 	$(COMMON_CC) -c $<
 
-install: all install-lib
+install: all install-lib install-data
 	@mkdir -p $(INSTALL_BIN) $(INSTALL_ETC)
 	$(COMMON_INSTALL) $(XSOCKS_MODULE_EXE) $(INSTALL_BIN)
 	$(COMMON_INSTALL) $(ROOT)/config.json $(INSTALL_ETC)
@@ -180,6 +180,10 @@ ifeq ($(USE_STRIP), yes)
 	$(STRIP) $(INSTALL_LIB)/*
 endif
 endif
+
+install-data:
+	@mkdir -p $(INSTALL_DATA)
+	cp -a $(ROOT)/share/* $(INSTALL_DATA)
 
 clean:
 	rm -rf $(XSOCKS_MODULE_EXE) $(BUILD_TMP_FILES) *.info lcov-html Makefile.dep $(XSOCKS_BENCHMAKR_EXE)

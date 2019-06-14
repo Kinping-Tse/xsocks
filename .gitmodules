@@ -32,3 +32,6 @@
 [submodule "deps/mbedtls"]
 	path = deps/mbedtls
 	url = https://github.com/ARMmbed/mbedtls.git
+[submodule "deps/libcork"]
+	path = deps/libcork
+	url = https://github.com/dcreager/libcork.git

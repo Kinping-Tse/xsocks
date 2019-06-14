@@ -45,6 +45,4 @@ endif
 
 ifeq ($(MALLOC), jemalloc)
 	EXT_CFLAGS += -DUSE_JEMALLOC -I$(JEMALLOC_PATH)/include
-	EXT_LDFLAGS += -L$(JEMALLOC_PATH)/lib
-	EXT_LIBS += -ljemalloc
 endif

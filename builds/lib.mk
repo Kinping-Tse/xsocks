@@ -22,8 +22,9 @@
 DYLIBNAME = $(LIBNAME).$(DYLIB_SUFFIX)
 STLIBNAME = $(LIBNAME).$(STLIB_SUFFIX)
 
-EXT_CFLAGS += -fPIC
-EXT_LDFLAGS += -shared
+EXT_CFLAGS = -fPIC
+EXT_LDFLAGS = -shared
+EXT_LIBS =
 ARFLAGS =
 EXT_ARFLAGS = -rcs
 
@@ -32,11 +33,7 @@ ifeq ($(uname_S), Darwin)
 DYLIB_MAKE_CMD = $(COMMON_LD) -Wl,-install_name,$(PREFIX)/lib/$(DYLIBNAME)
 endif
 
-all: static
-ifeq ($(USE_SHARED), yes)
 all: dynamic static
-endif
-
 dynamic: $(DYLIBNAME)
 static: $(STLIBNAME)
 

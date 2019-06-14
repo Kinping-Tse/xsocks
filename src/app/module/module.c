@@ -23,6 +23,7 @@
 #include "lib/protocol/proxy.h"
 
 #include "shadowsocks-libev/ppbloom.h"
+#include "shadowsocks-libev/acl.h"
 
 #include <signal.h>
 
@@ -81,6 +82,8 @@ static void moduleInit(int type, moduleHook hook, module *m, int argc, char *arg
     mod->crypto = crypto_init(mod->config->password, mod->config->key, mod->config->method);
     if (!mod->crypto) FATAL("Failed to initialize ciphers");
 
+    if (config->acl && init_acl(config->acl) < 0) FATAL("Failed to initialize acl");
+
     if (mod->hook.init) mod->hook.init();
 }
 
@@ -97,6 +100,7 @@ static void moduleRun() {
     if (config->ipv6_first) LOGI("Use IPv6 address first");
     // if (config->ipv6_only) LOGI("Use IPv6 address only");
     if (config->timeout) LOGI("Use timeout: %ds", config->timeout);
+    if (config->acl) LOGI("Use acl file: %s", config->acl);
     LOGI("Use local addr: %s:%d", config->local_addr, config->local_port);
     LOGI("Use remote addr: %s:%d", config->remote_addr, config->remote_port);
     LOGI("Start event loop with: %s", eventGetApiName());
@@ -113,6 +117,7 @@ static void moduleExit() {
     if (mod->hook.exit) mod->hook.exit();
 
     if (mod->config->pidfile) unlink(mod->config->pidfile);
+    if (mod->config->acl) free_acl();
     freeCrypto(mod->crypto);
     listRelease(mod->sigexit_events);
     eventLoopFree(mod->el);
@@ -176,9 +181,8 @@ static void moduleUsage() {
     // eprintf("       [--fast-open]              Enable TCP fast open.\n");
     // eprintf("                                  with Linux kernel > 3.7.0.\n");
 #endif
-#if defined(MODULE_REMOTE) || defined(MODULE_LOCAL)
-    // eprintf("       [--acl <acl_file>]         Path to ACL (Access Control List).\n");
-#endif
+if (module == MODULE_REDIR || module == MODULE_LOCAL)
+    eprintf("  [--acl <acl_file>]         Path to Access Control List\n");
     // eprintf("  [--mtu <MTU>]              MTU of your network interface.\n");
 #ifdef __linux__
     // eprintf("       [--mptcp]                  Enable Multipath TCP on MPTCP Kernel.\n");

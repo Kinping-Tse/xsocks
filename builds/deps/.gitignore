@@ -3,4 +3,5 @@ libev/
 json-parser/
 libbloom/
 libsodium/
+libcork/
 *.lock

@@ -36,6 +36,8 @@ static void tcpServerOnAccept(void *data);
 static void tcpClientOnRead(void *data);
 static void tcpRemoteOnConnect(void *data, int status);
 
+static int isBypass(char *ip);
+
 static server s;
 module *app = (module *)&s;
 
@@ -80,10 +82,6 @@ static void tcpServerOnAccept(void *data) {
     LOGD("TCP server accepted client %s", CONN_GET_ADDRINFO(client->conn));
     LOGD("TCP client current count: %d", ++server->client_count);
 
-    remote = tcpRemoteNew(client, CONN_TYPE_SHADOWSOCKS, app->config->remote_addr,
-                          app->config->remote_port, tcpRemoteOnConnect);
-    if (!remote) goto error;
-
     char host[HOSTNAME_MAX_LEN];
     int host_len = sizeof(host);
     int port;
@@ -98,9 +96,22 @@ static void tcpServerOnAccept(void *data) {
         LOGW("TCP client get dest addr error: %s", err);
         goto error;
     }
-    LOGD("TCP client proxy dest addr: %s:%d", host, port);
 
-    tcpShadowsocksConnInit((tcpShadowsocksConn *)remote->conn, host, port);
+    int bypass = isBypass(host);
+
+    if (bypass) {
+        if ((remote = tcpRemoteNew(client, CONN_TYPE_RAW, host, port, tcpRemoteOnConnect)) == NULL)
+            goto error;
+
+        LOGD("TCP client bypass dest addr: %s:%d", host, port);
+    } else {
+        if ((remote = tcpRemoteNew(client, CONN_TYPE_SHADOWSOCKS, app->config->remote_addr,
+                                   app->config->remote_port, tcpRemoteOnConnect)) == NULL)
+            goto error;
+
+        tcpShadowsocksConnInit((tcpShadowsocksConn *)remote->conn, host, port);
+        LOGD("TCP client proxy dest addr: %s:%d", host, port);
+    }
 
     return;
 
@@ -129,4 +140,21 @@ static void tcpRemoteOnConnect(void *data, int status) {
     // Prepare pipe
     ADD_EVENT_READ(remote->conn);
     ADD_EVENT_READ(client->conn);
+}
+
+static int isBypass(char *ip) {
+    int bypass = 0;
+    int ip_match = acl_match_host(ip);
+
+    switch (get_acl_mode()) {
+        case BLACK_LIST:
+            if (ip_match > 0) bypass = 1;
+            break;
+        case WHITE_LIST:
+            bypass = 1;
+            if (ip_match < 0) bypass = 0;
+            break;
+    }
+
+    return bypass;
 }

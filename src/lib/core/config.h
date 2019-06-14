@@ -73,6 +73,7 @@ typedef struct xsocksConfig {
     int ipv6_first;
     int ipv6_only;
     int no_delay;
+    char *acl;
     //
     // int max_clients;
 } xsocksConfig;

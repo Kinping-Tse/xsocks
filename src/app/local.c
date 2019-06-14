@@ -23,6 +23,8 @@
 #include "lib/protocol/tcp_shadowsocks.h"
 #include "lib/protocol/tcp_socks5.h"
 
+#include "shadowsocks-libev/acl.h"
+
 typedef struct server {
     module mod;
     tcpServer *ts;
@@ -35,6 +37,8 @@ static void localExit();
 static void tcpServerOnAccept(void *data);
 static void tcpClientOnRead(void *data);
 static void tcpRemoteOnConnect(void *data, int status);
+
+static int isBypass(char *ip);
 
 static server s;
 module *app = (module *)&s;
@@ -91,22 +95,56 @@ static void tcpClientOnRead(void *data) {
     }
 
     if (!remote) {
-        remote = tcpRemoteNew(client, CONN_TYPE_SHADOWSOCKS, app->config->remote_addr,
-                              app->config->remote_port, tcpRemoteOnConnect);
+        int bypass = 0;
+        int host_match = 0;
+
+        char host[HOSTNAME_MAX_LEN];
+        int host_len = sizeof(host);
+        char ip[NET_IP_MAX_STR_LEN];
+        int ip_len = sizeof(ip);
+        int port;
+        int atyp;
+
+        socks5AddrParse(conn_client->addrbuf_dest, sdslen(conn_client->addrbuf_dest), &atyp, host,
+                        &host_len, &port);
+
+        if (app->config->acl) {
+            if (atyp == SOCKS5_ATYP_DOMAIN) host_match = acl_match_host(host);
+
+            if (host_match > 0) bypass = 1;
+            else if (host_match < 0) bypass = 0;
+            else {
+                int resolved = 0;
+
+                if (atyp == SOCKS5_ATYP_DOMAIN && anetResolve(NULL, host, ip, ip_len) == ANET_OK)
+                    resolved = 1;
+                if (atyp != SOCKS5_ATYP_DOMAIN) {
+                    memcpy(ip, host, ip_len);
+                    resolved = 1;
+                }
+
+                if (resolved) bypass = isBypass(ip);
+            }
+        }
+
+        if (bypass) {
+            remote = tcpRemoteNew(client, CONN_TYPE_RAW, host, port, tcpRemoteOnConnect);
+
+            if (remote) LOGD("TCP client bypass dest addr: %s:%d", host, port);
+        } else {
+            remote = tcpRemoteNew(client, CONN_TYPE_SHADOWSOCKS, app->config->remote_addr,
+                                  app->config->remote_port, tcpRemoteOnConnect);
+
+            if (remote) {
+                tcpShadowsocksConnInit((tcpShadowsocksConn *)remote->conn, host, port);
+                LOGD("TCP client proxy dest addr: %s:%d", host, port);
+            }
+        }
+
         if (!remote) {
             tcpConnectionFree(client);
             return;
         }
-
-        char host[HOSTNAME_MAX_LEN];
-        int host_len = sizeof(host);
-        int port;
-
-        socks5AddrParse(conn_client->addrbuf_dest, sdslen(conn_client->addrbuf_dest), NULL, host,
-                        &host_len, &port);
-        tcpShadowsocksConnInit((tcpShadowsocksConn *)remote->conn, host, port);
-
-        LOGD("TCP client proxy dest addr: %s:%d", host, port);
     } else {
         tcpPipe(client->conn, remote->conn);
     }
@@ -126,4 +164,21 @@ static void tcpRemoteOnConnect(void *data, int status) {
     // Prepare pipe
     ADD_EVENT_READ(remote->conn);
     ADD_EVENT_READ(client->conn);
+}
+
+static int isBypass(char *ip) {
+    int bypass = 0;
+    int ip_match = acl_match_host(ip);
+
+    switch (get_acl_mode()) {
+        case BLACK_LIST:
+            if (ip_match > 0) bypass = 1;
+            break;
+        case WHITE_LIST:
+            bypass = 1;
+            if (ip_match < 0) bypass = 0;
+            break;
+    }
+
+    return bypass;
 }

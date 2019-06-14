@@ -40,10 +40,6 @@ ifeq ($(USE_LIBEV), yes)
 	EVENT = libev
 endif
 
-ifeq ($(EVENT), libev)
-	DEPENDENCY_TARGETS += libev
-endif
-
 PREFIX ?= $(ROOT)/tmp
 LIBRARY_PATH ?= lib
 INSTALL_BIN = $(PREFIX)/bin
@@ -58,6 +54,7 @@ BUILD_DEPS_PATH = $(BUILD_ROOT)/deps
 
 JEMALLOC_PATH = $(BUILD_DEPS_PATH)/jemalloc
 JEMALLOC_SRC_PATH = $(DEPS_PATH)/jemalloc
+
 LIBEV_PATH = $(BUILD_DEPS_PATH)/libev
 REDIS_PATH = $(BUILD_DEPS_PATH)/redis
 SHADOWSOCKS_LIBEV_PATH = $(BUILD_DEPS_PATH)/shadowsocks-libev
@@ -69,6 +66,15 @@ LIBBLOOM_SRC_PATH = $(DEPS_PATH)/libbloom
 
 LIBSODIUM_PATH = $(BUILD_DEPS_PATH)/libsodium/src/libsodium
 LIBSODIUM_SRC_PATH = $(DEPS_PATH)/libsodium
-LIBSODIUM_HEADER_CFLAGS = -I$(DEPS_PATH)/libsodium/src/libsodium/include \
-	-I$(DEPS_PATH)/libsodium/src/libsodium/include/sodium \
+LIBSODIUM_HEADER_CFLAGS = -I$(LIBSODIUM_SRC_PATH)/src/libsodium/include \
+	-I$(LIBSODIUM_SRC_PATH)/src/libsodium/include/sodium \
 	-I$(LIBSODIUM_PATH)/include
+
+LIBCORK_PATH = $(BUILD_DEPS_PATH)/libcork
+LIBCORK_SRC_PATH = $(DEPS_PATH)/libcork
+LIBCORK_HEADER_CFLAGS = -I$(LIBCORK_SRC_PATH)/include -I$(LIBCORK_PATH)/include
+LIBCORK_LIB_LDFLAGS = -L$(LIBCORK_PATH)/.libs
+
+LIBIPSET_PATH = $(BUILD_DEPS_PATH)/libipset
+LIBIPSET_SRC_PATH = $(DEPS_PATH)/libipset
+LIBIPSET_HEADER_CFLAGS = -I$(LIBIPSET_SRC_PATH)/include
