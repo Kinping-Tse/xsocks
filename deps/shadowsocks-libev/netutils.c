@@ -131,71 +131,72 @@ get_sockaddr(char *host, char *port,
              struct sockaddr_storage *storage, int block,
              int ipv6first)
 {
-    struct cork_ip ip;
-    if (cork_ip_init(&ip, host) != -1) {
-        if (ip.version == 4) {
-            struct sockaddr_in *addr = (struct sockaddr_in *)storage;
-            addr->sin_family = AF_INET;
-            inet_pton(AF_INET, host, &(addr->sin_addr));
-            if (port != NULL) {
-                addr->sin_port = htons(atoi(port));
-            }
-        } else if (ip.version == 6) {
-            struct sockaddr_in6 *addr = (struct sockaddr_in6 *)storage;
-            addr->sin6_family = AF_INET6;
-            inet_pton(AF_INET6, host, &(addr->sin6_addr));
-            if (port != NULL) {
-                addr->sin6_port = htons(atoi(port));
-            }
-        }
-        return 0;
-    } else {
-#ifdef __ANDROID__
-        extern int vpn;
-        assert(!vpn);   // protecting DNS packets isn't supported yet
-#endif
-        struct addrinfo hints;
-        struct addrinfo *result, *rp;
+//     struct cork_ip ip;
+//     if (cork_ip_init(&ip, host) != -1) {
+//         if (ip.version == 4) {
+//             struct sockaddr_in *addr = (struct sockaddr_in *)storage;
+//             addr->sin_family = AF_INET;
+//             inet_pton(AF_INET, host, &(addr->sin_addr));
+//             if (port != NULL) {
+//                 addr->sin_port = htons(atoi(port));
+//             }
+//         } else if (ip.version == 6) {
+//             struct sockaddr_in6 *addr = (struct sockaddr_in6 *)storage;
+//             addr->sin6_family = AF_INET6;
+//             inet_pton(AF_INET6, host, &(addr->sin6_addr));
+//             if (port != NULL) {
+//                 addr->sin6_port = htons(atoi(port));
+//             }
+//         }
+//         return 0;
+//     } else {
+// #ifdef __ANDROID__
+//         extern int vpn;
+//         assert(!vpn);   // protecting DNS packets isn't supported yet
+// #endif
+//         struct addrinfo hints;
+//         struct addrinfo *result, *rp;
 
-        memset(&hints, 0, sizeof(struct addrinfo));
-        hints.ai_family   = AF_UNSPEC;   /* Return IPv4 and IPv6 choices */
-        hints.ai_socktype = SOCK_STREAM; /* We want a TCP socket */
+//         memset(&hints, 0, sizeof(struct addrinfo));
+//         hints.ai_family   = AF_UNSPEC;   /* Return IPv4 and IPv6 choices */
+//         hints.ai_socktype = SOCK_STREAM; /* We want a TCP socket */
 
-        int err = getaddrinfo(host, port, &hints, &result);
+//         int err = getaddrinfo(host, port, &hints, &result);
 
-        if (err != 0) {
-            LOGE("getaddrinfo: %s", gai_strerror(err));
-            return -1;
-        }
+//         if (err != 0) {
+//             LOGE("getaddrinfo: %s", gai_strerror(err));
+//             return -1;
+//         }
 
-        int prefer_af = ipv6first ? AF_INET6 : AF_INET;
-        for (rp = result; rp != NULL; rp = rp->ai_next)
-            if (rp->ai_family == prefer_af) {
-                if (rp->ai_family == AF_INET)
-                    memcpy(storage, rp->ai_addr, sizeof(struct sockaddr_in));
-                else if (rp->ai_family == AF_INET6)
-                    memcpy(storage, rp->ai_addr, sizeof(struct sockaddr_in6));
-                break;
-            }
+//         int prefer_af = ipv6first ? AF_INET6 : AF_INET;
+//         for (rp = result; rp != NULL; rp = rp->ai_next)
+//             if (rp->ai_family == prefer_af) {
+//                 if (rp->ai_family == AF_INET)
+//                     memcpy(storage, rp->ai_addr, sizeof(struct sockaddr_in));
+//                 else if (rp->ai_family == AF_INET6)
+//                     memcpy(storage, rp->ai_addr, sizeof(struct sockaddr_in6));
+//                 break;
+//             }
 
-        if (rp == NULL) {
-            for (rp = result; rp != NULL; rp = rp->ai_next) {
-                if (rp->ai_family == AF_INET)
-                    memcpy(storage, rp->ai_addr, sizeof(struct sockaddr_in));
-                else if (rp->ai_family == AF_INET6)
-                    memcpy(storage, rp->ai_addr, sizeof(struct sockaddr_in6));
-                break;
-            }
-        }
+//         if (rp == NULL) {
+//             for (rp = result; rp != NULL; rp = rp->ai_next) {
+//                 if (rp->ai_family == AF_INET)
+//                     memcpy(storage, rp->ai_addr, sizeof(struct sockaddr_in));
+//                 else if (rp->ai_family == AF_INET6)
+//                     memcpy(storage, rp->ai_addr, sizeof(struct sockaddr_in6));
+//                 break;
+//             }
+//         }
 
-        if (rp == NULL) {
-            LOGE("failed to resolve remote addr");
-            return -1;
-        }
+//         if (rp == NULL) {
+//             LOGE("failed to resolve remote addr");
+//             return -1;
+//         }
 
-        freeaddrinfo(result);
-        return 0;
-    }
+//         freeaddrinfo(result);
+//         return 0;
+//     }
+
 
     return -1;
 }
