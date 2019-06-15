@@ -27,7 +27,7 @@ ifeq ($(MALLOC), jemalloc)
 	REDIS_DEPS += jemalloc
 endif
 
-GIT_SUBMODULE_DEPS = jemalloc libbloom libsodium mbedtls libev libcork
+GIT_SUBMODULE_DEPS = jemalloc libbloom libsodium mbedtls libev libcork pcre
 GIT_SUBMODULE_INIT_FILE = .submodule.lock
 
 default:
@@ -73,7 +73,7 @@ json-parser:
 	cd $@ && $(DEPS_PATH)/$@/configure --host=$(HOST) --prefix=$(PREFIX)
 	cd $@ && $(MAKE) $(MFLAGS) LDFLAGS='$(JSONPARSER_LDFLAGS)'
 
-shadowsocks-libev: libev libsodium mbedtls libbloom libipset
+shadowsocks-libev: libev libsodium mbedtls libbloom libipset pcre
 	$(QUIET_MAKE)
 	cd $@ && $(MAKE) $(MFLAGS)
 
@@ -115,6 +115,12 @@ libipset: libcork
 	$(QUIET_MAKE)
 	cd $@ && $(MAKE) $(MFLAGS)
 
+pcre:
+	@mkdir -p $@
+	cd $(DEPS_PATH)/$@ && sh autogen.sh
+	cd $@ && $(DEPS_PATH)/$@/configure --host=$(HOST) --prefix=$(PREFIX)
+	cd $@ && $(MAKE) $(MFLAGS)
+
 clean:
 	-($(MAKE) -C libev maintainer-clean)
 	-($(MAKE) -C jemalloc relclean)
@@ -126,13 +132,15 @@ clean:
 	-($(MAKE) -C libsodium maintainer-clean)
 	-($(MAKE) -C libcork maintainer-clean)
 	$(MAKE) -C libipset clean
+	-($(MAKE) -C pcre maintainer-clean)
 
 distclean: clean
 	rm -rf $(GIT_SUBMODULE_INIT_FILE) $(GIT_SUBMODULE_DEPS) json-parser
 	rm -rf .make-*
-	cd $(JEMALLOC_SRC_PATH) && git clean -xf
-	cd $(LIBSODIUM_SRC_PATH) && git clean -xf
-	cd $(LIBCORK_SRC_PATH) && git clean -xf
+	cd $(JEMALLOC_SRC_PATH) && git clean -xfd
+	cd $(LIBSODIUM_SRC_PATH) && git clean -xfd
+	cd $(LIBCORK_SRC_PATH) && git clean -xfd
+	cd $(PCRE_SRC_PATH) && git clean -xfd
 
 install: install-shared
 install-shared:
@@ -141,6 +149,7 @@ install-shared:
 	$(MAKE) -C json-parser install-shared
 	$(MAKE) -C redis install-shared
 	$(MAKE) -C shadowsocks-libev install-shared
+	$(MAKE) -C pcre install-libLTLIBRARIES
 	$(MAKE) -C libcork install-libLTLIBRARIES
 	$(MAKE) -C libipset install-shared
 	$(MAKE) -C libsodium install-exec

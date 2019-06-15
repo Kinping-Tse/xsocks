@@ -30,6 +30,6 @@ LIBNAME = libshadowsocks-libev
 include $(ROOT)/builds/lib.mk
 
 WARN = -Wall -Wextra -Wno-sign-compare -Wno-unused-parameter
-EXT_CFLAGS += -I$(DEPS_PATH)/libev -I$(DEPS_PATH)/libbloom -I$(MBEDTLS_PATH)/include $(LIBSODIUM_HEADER_CFLAGS) $(LIBCORK_HEADER_CFLAGS) $(LIBIPSET_HEADER_CFLAGS) -DHAVE_PCRE_H
-EXT_LDFLAGS += -L$(LIBEV_PATH)/.libs -L$(LIBBLOOM_PATH) -L$(MBEDTLS_PATH)/library -L$(LIBSODIUM_PATH)/.libs $(LIBCORK_LIB_LDFLAGS) -L$(LIBIPSET_PATH)
+EXT_CFLAGS += -I$(DEPS_PATH)/libev -I$(DEPS_PATH)/libbloom -I$(MBEDTLS_PATH)/include $(LIBSODIUM_HEADER_CFLAGS) $(LIBCORK_HEADER_CFLAGS) $(LIBIPSET_HEADER_CFLAGS) -DHAVE_PCRE_H -I$(PCRE_PATH)
+EXT_LDFLAGS += -L$(LIBEV_PATH)/.libs -L$(LIBBLOOM_PATH) -L$(MBEDTLS_PATH)/library -L$(LIBSODIUM_PATH)/.libs $(LIBCORK_LIB_LDFLAGS) -L$(LIBIPSET_PATH) -L$(PCRE_LIB_PATH)
 EXT_LIBS += -lev -lbloom -lmbedcrypto -lsodium -lipset -lcork -lpcre

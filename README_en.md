@@ -18,7 +18,7 @@ xsocks is a lightweight proxy tool for science online. Just for academic researc
 ## Installation
 
 ```sh
-# You must install these tools first: make (gcc,g++)|clang autoconf automake libtool git
+# You must install these tools first: make (gcc,g++)|clang autoconf automake libtool git pkg-config
 $ git clone https://github.com/Kinping-Tse/xsocks.git
 $ cd xsocks
 $ make
@@ -68,8 +68,9 @@ $ exit
 * ASUS router build (only support asuswrt-merlin.ng device now), [AM_TOOLCHAINS][]
 
 ```sh
-# Make sure ubuntu build image is done, if not you can hit `make ubuntu` first
 $ make asuswrt-merlin.ng AM_TOOLCHAINS_PATH="Your_AM_TOOLCHAINS_PATH"
+$ ./build.sh
+$ exit
 # Copy all the file in tmp directory to your router
 ```
 * etc
@@ -131,6 +132,7 @@ Options:
   [-u]                       Enable UDP relay
   [-U]                       Enable UDP relay and disable TCP relay
   [-6]                       Use IPv6 address first
+  [--acl <acl_file>]         Path to Access Control List
   [--key <key_in_base64>]    Key of your remote server
   [--logfile <file>]         Log file
   [--loglevel <level>]       Log level (default info)

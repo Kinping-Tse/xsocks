@@ -18,7 +18,7 @@
 ## 安装方法
 
 ```sh
-# 需要预先安装以下工具: make (gcc,g++)|clang autoconf automake libtool git
+# 需要预先安装以下工具: make (gcc,g++)|clang autoconf automake libtool git pkg-config
 $ git clone https://github.com/Kinping-Tse/xsocks.git
 $ cd xsocks
 $ make
@@ -68,8 +68,9 @@ $ exit
 * 华硕路由器安装方式 (仅支持asuswrt-merlin.ng的设备), [华硕编译环境][AM_TOOLCHAINS]
 
 ```sh
-# 先保证生成ubuntu镜像, 如果没有先输入`make ubuntu`
 $ make asuswrt-merlin.ng AM_TOOLCHAINS_PATH="你的华硕编译环境"
+$ ./build.sh
+$ exit
 # 把tmp目录的所有文件拷贝到你的路由器当中, 即可运行
 ```
 * 其他杂项
@@ -130,6 +131,7 @@ $ xs-[local|server|redir|tunnel] [选项]
   [-u]                       开启UDP代理模式
   [-U]                       开启UDP, 并同时关闭TCP
   [-6]                       优先使用ipv6地址
+  [--acl <acl_file>]         ACL访问控制列表文件路径
   [--key <key_in_base64>]    远端服务器的Key
   [--logfile <file>]         日志文件
   [--loglevel <level>]       日志记录级别 (默认 info)

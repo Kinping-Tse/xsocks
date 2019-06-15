@@ -35,3 +35,6 @@
 [submodule "deps/libcork"]
 	path = deps/libcork
 	url = https://github.com/dcreager/libcork.git
+[submodule "deps/pcre"]
+	path = deps/pcre
+	url = https://github.com/svn2github/pcre.git

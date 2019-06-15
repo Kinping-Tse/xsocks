@@ -24,10 +24,21 @@ include $(ROOT)/builds/deps.mk
 HOST ?= aarch64-linux
 AM_TOOLCHAINS_PATH ?= /usr/local/src/github.com/RMerl/am-toolchains
 
+IMAGE = alucard5867/xsocks/builds/asuswrt-merlin.ng:$(VERSION)
+
 default: docker
 
-docker:
+docker: image
 	@printf "\n%b: Please check %b correct: %b\n\n" $(COLOR_WARN)WARNING$(ENDCOLOR) $(COLOR_WARN)AM_TOOLCHAINS_PATH$(ENDCOLOR) $(COLOR_INFO)$(AM_TOOLCHAINS_PATH)$(ENDCOLOR)
-	ROOT=$(ROOT) HOST=$(HOST) AM_TOOLCHAINS_PATH=$(AM_TOOLCHAINS_PATH) docker-compose up --build
 
-.PHONY: default docker
+	# We don't use docker-compose yet, it's so slow!
+	# ROOT=$(ROOT) HOST=$(HOST) AM_TOOLCHAINS_PATH=$(AM_TOOLCHAINS_PATH) docker-compose up --build
+	docker run -it --rm \
+		-e ROOT=/tmp/xsocks -e HOST=$(HOST) \
+		-v $(ROOT):/tmp/xsocks -v $(AM_TOOLCHAINS_PATH):/tmp/am-toolchains \
+		-w /tmp/xsocks/builds/asuswrt-merlin.ng $(IMAGE) bash
+
+image:
+	docker build --pull --force-rm -t $(IMAGE) .
+
+.PHONY: default docker image

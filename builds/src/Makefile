@@ -40,7 +40,7 @@ EXT_LDFLAGS = -Llib -L$(REDIS_PATH) -L$(SHADOWSOCKS_LIBEV_PATH)
 EXT_LIBS = -lxsocks -lredis -lshadowsocks-libev
 
 ifeq ($(LINK_MODE), static)
-	EXT_LDFLAGS += -L$(LIBBLOOM_PATH) -L$(MBEDTLS_PATH)/library -L$(LIBSODIUM_PATH)/.libs $(LIBCORK_LIB_LDFLAGS) -L$(LIBIPSET_PATH) -L$(JSONPARSER_PATH)
+	EXT_LDFLAGS += -L$(LIBBLOOM_PATH) -L$(MBEDTLS_PATH)/library -L$(LIBSODIUM_PATH)/.libs $(LIBCORK_LIB_LDFLAGS) -L$(LIBIPSET_PATH) -L$(PCRE_LIB_PATH) -L$(JSONPARSER_PATH)
 	EXT_LIBS = -Wl,-static -lxsocks -lredis -lshadowsocks-libev -lbloom -lmbedcrypto -lsodium -lipset -lcork -lpcre -ljsonparser
 	ifeq ($(MALLOC), jemalloc)
 		EXT_LDFLAGS += -L$(JEMALLOC_PATH)/lib
@@ -61,7 +61,7 @@ endif
 
 ifeq ($(LINK_MODE), shared)
 	ifeq ($(uname_S), Linux)
-		EXT_LDFLAGS += -Wl,-rpath,$(INSTALL_LIB),-rpath,$(BUILD_ROOT)/src/lib,-rpath,$(REDIS_PATH),-rpath,$(SHADOWSOCKS_LIBEV_PATH),-rpath,$(JSONPARSER_PATH),-rpath,$(LIBBLOOM_PATH),-rpath,$(MBEDTLS_PATH)/library,-rpath,$(LIBSODIUM_PATH)/.libs,-rpath,$(LIBEV_PATH)/.libs,-rpath,$(LIBCORK_PATH)/.libs,-rpath,$(LIBIPSET_PATH)
+		EXT_LDFLAGS += -Wl,-rpath,$(INSTALL_LIB),-rpath,$(BUILD_ROOT)/src/lib,-rpath,$(REDIS_PATH),-rpath,$(SHADOWSOCKS_LIBEV_PATH),-rpath,$(JSONPARSER_PATH),-rpath,$(LIBBLOOM_PATH),-rpath,$(MBEDTLS_PATH)/library,-rpath,$(LIBSODIUM_PATH)/.libs,-rpath,$(LIBEV_PATH)/.libs,-rpath,$(LIBCORK_PATH)/.libs,-rpath,$(LIBIPSET_PATH),-rpath,$(PCRE_LIB_PATH)
 		ifeq ($(MALLOC), jemalloc)
 			EXT_LDFLAGS += -Wl,-rpath,$(JEMALLOC_PATH)/lib
 		endif

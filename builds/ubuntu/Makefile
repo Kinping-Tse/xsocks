@@ -21,7 +21,7 @@ ROOT = $(realpath ../..)
 include $(ROOT)/builds/common.mk
 include $(ROOT)/builds/deps.mk
 
-IMAGE = alucard5867/xsocks/builds/ubuntu
+IMAGE = alucard5867/xsocks/builds/ubuntu:$(VERSION)
 
 default: image
 	docker run -it --rm -v $(ROOT):/tmp/xsocks -w /tmp/xsocks $(IMAGE) bash
