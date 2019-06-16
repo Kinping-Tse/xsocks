@@ -116,7 +116,7 @@ static void tcpClientOnRead(void *data) {
             } else if (anetResolve(NULL, host, ip, ip_len) == ANET_OK)
                 resolved = 1;
 
-            if (outbound_block_match_host(ip)) {
+            if (resolved && outbound_block_match_host(ip)) {
                 LOGW("Outbound blocked %s", ip);
                 tcpConnectionFree(client);
                 return;
