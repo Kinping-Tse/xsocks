@@ -97,12 +97,31 @@ static void tcpClientOnRead(void *data) {
 
         char host[HOSTNAME_MAX_LEN];
         int host_len = sizeof(host);
+        char ip[NET_IP_MAX_STR_LEN];
+        int ip_len = sizeof(ip);
         int port;
+        int atyp;
 
-        socks5AddrParse(conn_client->addrbuf_dest->data, conn_client->addrbuf_dest->len, NULL, host,
+        socks5AddrParse(conn_client->addrbuf_dest->data, conn_client->addrbuf_dest->len, &atyp, host,
                         &host_len, &port);
 
         LOGD("TCP client proxy dest addr: %s:%d", host, port);
+
+        if (app->config->acl) {
+            int resolved = 0;
+
+            if (atyp != SOCKS5_ATYP_DOMAIN) {
+                memcpy(ip, host, ip_len);
+                resolved = 1;
+            } else if (anetResolve(NULL, host, ip, ip_len) == ANET_OK)
+                resolved = 1;
+
+            if (outbound_block_match_host(ip)) {
+                LOGW("Outbound blocked %s", ip);
+                tcpConnectionFree(client);
+                return;
+            }
+        }
 
         client->remote = tcpRemoteNew(client, CONN_TYPE_RAW, host, port, tcpRemoteOnConnect);
         if (!client->remote) {

@@ -23,7 +23,6 @@
 #include "lib/protocol/proxy.h"
 
 #include "shadowsocks-libev/ppbloom.h"
-#include "shadowsocks-libev/acl.h"
 
 #include <signal.h>
 

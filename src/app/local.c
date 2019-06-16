@@ -23,8 +23,6 @@
 #include "lib/protocol/tcp_shadowsocks.h"
 #include "lib/protocol/tcp_socks5.h"
 
-#include "shadowsocks-libev/acl.h"
-
 typedef struct server {
     module mod;
     tcpServer *ts;
@@ -116,12 +114,11 @@ static void tcpClientOnRead(void *data) {
             else {
                 int resolved = 0;
 
-                if (atyp == SOCKS5_ATYP_DOMAIN && anetResolve(NULL, host, ip, ip_len) == ANET_OK)
-                    resolved = 1;
                 if (atyp != SOCKS5_ATYP_DOMAIN) {
                     memcpy(ip, host, ip_len);
                     resolved = 1;
-                }
+                } else if (anetResolve(NULL, host, ip, ip_len) == ANET_OK)
+                    resolved = 1;
 
                 if (resolved) bypass = isBypass(ip);
             }

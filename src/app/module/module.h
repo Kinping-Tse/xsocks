@@ -29,6 +29,7 @@
 
 #include "redis/adlist.h"
 #include "shadowsocks-libev/crypto.h"
+#include "shadowsocks-libev/acl.h"
 
 typedef struct moduleHook {
     void (*init)();

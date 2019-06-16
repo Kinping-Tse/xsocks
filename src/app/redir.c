@@ -23,8 +23,6 @@
 #include "lib/protocol/tcp_shadowsocks.h"
 #include "lib/protocol/tcp_socks5.h"
 
-#include "shadowsocks-libev/acl.h"
-
 typedef struct server {
     module mod;
     tcpServer *ts;
