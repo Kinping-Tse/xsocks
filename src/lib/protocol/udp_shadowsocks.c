@@ -82,6 +82,7 @@ static int udpShadowsocksConnRead(udpConn *conn, char *buf, int buf_len, sockAdd
         xs_error(conn->errstr, "Decrypt UDP shadowsocks buffer error");
         goto error;
     }
+    nread = tmp_buf.len;
 
     char host[HOSTNAME_MAX_LEN];
     int host_len = sizeof(host);

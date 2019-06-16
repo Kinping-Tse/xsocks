@@ -118,7 +118,7 @@ libipset: libcork
 pcre:
 	@mkdir -p $@
 	cd $(DEPS_PATH)/$@ && sh autogen.sh
-	cd $@ && $(DEPS_PATH)/$@/configure --host=$(HOST) --prefix=$(PREFIX)
+	cd $@ && $(DEPS_PATH)/$@/configure --host=$(HOST) --prefix=$(PREFIX) --disable-cpp
 	cd $@ && $(MAKE) $(MFLAGS)
 
 clean:
